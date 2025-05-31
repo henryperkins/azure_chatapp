@@ -28,8 +28,6 @@ export function createChatUIEnhancements(deps = {}) {
   if (!modalManager) throw new Error('Missing modalManager');
 
   const state = {
-    initialized: false,
-    initializing: null,
     typingIndicatorVisible: false,
     messageContainer: null,
     activeTab: null,
@@ -52,10 +50,7 @@ export function createChatUIEnhancements(deps = {}) {
    * @param {string} [options.projectId] - Optional project ID for project-specific chat
    * @returns {Promise<void>} A promise that resolves when initialization is complete or fails.
    */
-  function initialize(options = {}) {
-    if (state.initialized) return Promise.resolve();
-    if (state.initializing) return state.initializing;
-
+  async function initialize(options = {}) {
     // Store project ID if provided
     if (options.projectId) {
       state.projectId = options.projectId;
@@ -69,66 +64,58 @@ export function createChatUIEnhancements(deps = {}) {
     ];
     const context = `${MODULE_CONTEXT}::initialize`;
 
-    state.initializing = (async () => {
-      try {
-        await waitForElements({
-          domSelectors: CHAT_SELECTORS,
-          timeout: 8000,
-          context
-        });
-      } catch (err) {
-        logger.error('[chatUIEnhancements] Error during chat UI initialization', err, { context });
-        logger.warn('[chatUIEnhancements] Chat UI not yet in DOM – will retry later', err, { context });
-        state.initializing = null;
-        return;
-      }
-
-      const chatInput = domAPI.getElementById('chatInput');
-      const sendBtn = domAPI.getElementById('chatSendBtn');
-      const chatContainer = domAPI.getElementById('chatMessages');
-      const doc = domAPI.getDocument();
-
-      // Cache default container
-      state.messageContainer = chatContainer;
-
-      // Add event listeners to default UI
-      const listeners = [
-        [chatInput, 'keypress', handleInputKeypress, 'inputKeypress', 'Chat input keypress handler'],
-        [doc, 'chatNewMessage', handleNewMessage, 'chatNewMessage', 'New message handler'],
-        [sendBtn, 'click', () => logger.info('[chatUIEnhancements] Default send button clicked', { context: MODULE_CONTEXT }), 'defaultSendButtonClick', 'Default send button click handler']
-      ];
-
-      listeners.forEach(([element, event, handler, handlerName, description]) => {
-        if (element) {
-          eventHandlers.trackListener(element, event, safeHandler(handler, handlerName), { context: MODULE_CONTEXT, description });
-        }
+    try {
+      await waitForElements({
+        domSelectors: CHAT_SELECTORS,
+        timeout: 8000,
+        context
       });
+    } catch (err) {
+      logger.error('[chatUIEnhancements] Error during chat UI initialization', err, { context });
+      logger.warn('[chatUIEnhancements] Chat UI not yet in DOM – will retry later', err, { context });
+      return;
+    }
 
-      // Setup chat header collapse functionality
-      setupChatHeaderCollapse();
+    const chatInput = domAPI.getElementById('chatInput');
+    const sendBtn = domAPI.getElementById('chatSendBtn');
+    const chatContainer = domAPI.getElementById('chatMessages');
+    const doc = domAPI.getDocument();
 
-      // Setup mobile-specific enhancements
-      if (state.isMobile) {
-        setupMobileEnhancements();
+    // Cache default container
+    state.messageContainer = chatContainer;
+
+    // Add event listeners to default UI
+    const listeners = [
+      [chatInput, 'keypress', handleInputKeypress, 'inputKeypress', 'Chat input keypress handler'],
+      [doc, 'chatNewMessage', handleNewMessage, 'chatNewMessage', 'New message handler'],
+      [sendBtn, 'click', () => logger.info('[chatUIEnhancements] Default send button clicked', { context: MODULE_CONTEXT }), 'defaultSendButtonClick', 'Default send button click handler']
+    ];
+
+    listeners.forEach(([element, event, handler, handlerName, description]) => {
+      if (element) {
+        eventHandlers.trackListener(element, event, safeHandler(handler, handlerName), { context: MODULE_CONTEXT, description });
       }
+    });
 
-      // Setup project-specific enhancements if in project context
-      if (state.projectId) {
-        setupProjectChatEnhancements();
-      }
+    // Setup chat header collapse functionality
+    setupChatHeaderCollapse();
 
-      state.initialized = true;
-      state.initializing = null;
+    // Setup mobile-specific enhancements
+    if (state.isMobile) {
+      setupMobileEnhancements();
+    }
 
-      logger.info(`[${MODULE_CONTEXT}] Chat UI enhancements initialized`, {
-        context,
-        projectId: state.projectId || 'global'
-      });
+    // Setup project-specific enhancements if in project context
+    if (state.projectId) {
+      setupProjectChatEnhancements();
+    }
 
-      return Promise.resolve();
-    })();
+    logger.info(`[${MODULE_CONTEXT}] Chat UI enhancements initialized`, {
+      context,
+      projectId: state.projectId || 'global'
+    });
 
-    return state.initializing;
+    return;
   }
 
   /**
@@ -957,8 +944,6 @@ export function createChatUIEnhancements(deps = {}) {
     eventHandlers.cleanupListeners({ context: MODULE_CONTEXT });
 
     // Reset state
-    state.initialized = false;
-    state.initializing = null;
     state.typingIndicatorVisible = false;
     state.messageContainer = null;
 
