@@ -18,11 +18,14 @@ import { createElement } from './utils/globalUtils.js';
 
 export function createChatUIEnhancements(deps = {}) {
   // Validate required dependencies
-  const required = ['domAPI', 'eventHandlers', 'browserService', 'domReadinessService', 'logger', 'sanitizer', 'DependencySystem'];
+  const required = ['domAPI', 'eventHandlers', 'browserService', 'domReadinessService', 'logger', 'sanitizer', 'DependencySystem', 'chatManager', 'modalManager'];
   required.forEach(dep => { if (!deps[dep]) throw new Error(`Missing ${dep}`); });
 
   const { domAPI, eventHandlers, browserService, domReadinessService, logger, sanitizer, chatManager, modalManager, DependencySystem } = deps;
   const MODULE_CONTEXT = 'chatUIEnhancements';
+
+  if (!chatManager)  throw new Error('Missing chatManager');
+  if (!modalManager) throw new Error('Missing modalManager');
 
   const state = {
     initialized: false,

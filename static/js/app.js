@@ -26,7 +26,7 @@ import { isValidProjectId } from './projectManager.js';
 import { createApiEndpoints } from './utils/apiEndpoints.js';
 import { createApiClient } from './utils/apiClient.js';
 import { createHtmlTemplateLoader } from './utils/htmlTemplateLoader.js';
-import MODAL_MAPPINGS from './modalConstants.js';
+import { MODAL_MAPPINGS } from './modalConstants.js';
 import { createFileUploadComponent } from './FileUploadComponent.js';
 import { createAccessibilityEnhancements } from './accessibility-utils.js';
 import { createNavigationService } from './navigationService.js';

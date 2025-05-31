@@ -21,10 +21,12 @@ const MODULE = "KnowledgeBaseSearchHandler";
  */
 export async function createKnowledgeBaseSearchHandler(ctx) {
   // App readiness guard—wait for dependencies before wiring up
-  if (!ctx.DependencySystem) throw new Error(`[${MODULE}] DependencySystem missing for app readiness check`);
-  await ctx.DependencySystem.waitFor?.([
-    "app", "projectManager", "eventHandlers", "domAPI"
-  ]);
+  if (!ctx.domReadinessService)
+    throw new Error(`[${MODULE}] domReadinessService missing for readiness check`);
+  await ctx.domReadinessService.dependenciesAndElements({
+    deps: ['app', 'projectManager', 'eventHandlers', 'domAPI'],
+    context: MODULE + ':init'
+  });
 
 
   /**
