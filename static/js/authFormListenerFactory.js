@@ -10,7 +10,7 @@
  * - No local attachedListeners array: rely solely on context-based cleanup.
  */
 
-export function createAuthFormListenerFactory(deps) {
+export default function createAuthFormListenerFactory(deps) {
   if (!deps || typeof deps !== "object") throw new Error("[AuthFormListenerFactory] DI object required.");
   const requiredDeps = [
     "eventHandlers", "domAPI", "domReadinessService", "browserService",
@@ -151,5 +151,3 @@ export function createAuthFormListenerFactory(deps) {
     cleanup
   };
 }
-
-export default createAuthFormListenerFactory;
