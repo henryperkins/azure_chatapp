@@ -1115,7 +1115,5 @@ export function createAuth(deps) {   // ← canonical name for “auth.js”
 }
 
 /* guard-rail: default factory export */
-function createAuthModule(deps) { return createAuth(deps); }
-
-// Back-compat alias (internal, **NOT** exported)
 export default createAuth;
+export { createAuth as createAuthModule };

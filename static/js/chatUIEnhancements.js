@@ -981,4 +981,3 @@ export function createChatUIEnhancements(deps = {}) {
 }
 
 export default createChatUIEnhancements;
-export { createChatUIEnhancements };

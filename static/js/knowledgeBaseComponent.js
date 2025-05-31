@@ -741,4 +741,3 @@ return {
 }
 
 export default createKnowledgeBaseComponent;
-export { createKnowledgeBaseComponent };
