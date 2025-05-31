@@ -89,6 +89,8 @@ export function createChatManager(deps = {}) {
   // --- Live Token Estimation Logic ---
   // (patch instance after construction, see after ChatManager)
 
+  // (Removed legacy _updateURLWithConversationId and _removeConversationIdFromURL helpers)
+
 
   function createDefaultDomAPI() {
     throw new Error("[ChatManager] No domAPI provided. All DOM operations must be injected.");
