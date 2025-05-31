@@ -1,6 +1,9 @@
 /*
 // VENDOR-EXEMPT-SIZE: Core module pending refactor in Q3-25
 */
+/*
+// VENDOR-EXEMPT-SIZE: Core module pending refactor in Q3-25
+*/
 const MODULE_CONTEXT = "ProjectDetailsComponent";
 
 export function createProjectDetailsComponent({
