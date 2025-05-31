@@ -751,7 +751,7 @@ export function createKnowledgeBaseManager(ctx) {
    */
   async function _handleDeleteKnowledgeBaseFile(projectId, fileId, filename) {
     logger.info(`[${MODULE}][_handleDeleteKnowledgeBaseFile] Initiating delete for file: ${filename} (ID: ${fileId}) in project ${projectId}.`, { context: MODULE });
-    await appReadyPromise;
+    await waitForAppReady();
     logger.debug(`[${MODULE}][_handleDeleteKnowledgeBaseFile] App is ready. Proceeding.`, { context: MODULE });
 
     const confirmed = await ctx.modalManager.confirmAction({ // Pass as object
