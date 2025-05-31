@@ -1,3 +1,4 @@
+import { getSafeHandler } from './utils/getSafeHandler.js';
 
 /**
  * @typedef {Object} DomAPI
@@ -83,13 +84,7 @@ export function createChatManager(deps = {}) {
 
 
   // Use canonical safeHandler from DI, normalize for both direct function or object with .safeHandler (early bootstrap)
-  const safeHandlerRaw = DependencySystem.modules.get('safeHandler');
-  const safeHandler =
-    typeof safeHandlerRaw === 'function'
-      ? safeHandlerRaw
-      : (typeof safeHandlerRaw?.safeHandler === 'function'
-        ? safeHandlerRaw.safeHandler
-        : (fn) => fn); // graceful fallback
+  const safeHandler = getSafeHandler(DependencySystem);
 
   // --- Live Token Estimation Logic ---
   // (patch instance after construction, see after ChatManager)
@@ -368,30 +363,6 @@ export function createChatManager(deps = {}) {
         logger.info(`[ChatManager][initialize] Initializing for project ${this.projectId}. Loading history.`, { context: "chatManager.initialize" });
         await this._loadConversationHistory();
 
-        // Setup "New Conversation" button
-        const newConversationBtn = this.domAPI.getElementById("newConversationBtn"); // Assuming global button for now
-        if (newConversationBtn) { // This button might be project-specific or global
-          newConversationBtn.classList.remove("hidden");
-          // Ensure listener is only added once or managed correctly if this init is called multiple times
-          this.eventHandlers.cleanupListeners?.({ context: 'chatManagerNewConvoBtn' });
-          this.eventHandlers.trackListener(
-            newConversationBtn,
-            "click",
-            safeHandler(async () => {
-              logger.debug(`[ChatManager] "New Conversation" button clicked. Current project: ${this.projectId}`, { context: "chatManager" });
-              try {
-                await this.createNewConversation(); // Uses this.projectId
-              } catch (err) {
-                logger.error("[ChatManager][New Conversation Button Click]", { error: err, context: "chatManager" });
-                const chatUIEnh = DependencySystem.modules.get('chatUIEnhancements');
-                chatUIEnh.appendMessage("system", "Failed to start new chat: " + (err?.message || "Unknown error"));
-              }
-            }, "NewConversationButtonClick"),
-            { description: "New Conversation Button", context: "chatManagerNewConvoBtn" }
-          );
-        } else {
-          logger.debug("[ChatManager][initialize] New Conversation button not found.", { context: "chatManager.initialize" });
-        }
 
         this.chatBus?.dispatchEvent(new CustomEvent('chatManagerReady', { detail: { projectId: this.projectId } }));
         logger.info(`[ChatManager][initialize] Initialization successful for project ${this.projectId}. Duration: ${clock.now() - _initStart}ms`, { context: "chatManager.initialize" });
@@ -543,7 +514,6 @@ export function createChatManager(deps = {}) {
       logger.info(`[ChatManager][cleanup] Cleaning up ChatManager for project ${this.projectId}.`, { context: "chatManager" });
       this.eventHandlers.cleanupListeners?.({ context: "chatManager:UI" });
       this.eventHandlers.cleanupListeners?.({ context: "chatManager" }); // General listeners for this manager instance
-      this.eventHandlers.cleanupListeners?.({ context: "chatManagerNewConvoBtn" });
       this.eventHandlers.cleanupListeners?.({ context: 'chatManagerAuthRetryListener' });
       // Enforce full context cleanup as per codebase event pattern rule:
       this.eventHandlers.cleanupListeners?.({ context: "chatManagerAppEvents" }); // Clean global app/auth listeners
