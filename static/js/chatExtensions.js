@@ -33,7 +33,6 @@ export function createChatExtensions(options) {
     logger
   } = options;
 
-  var trackListener = eventHandlers.trackListener.bind(eventHandlers);
   var MODULE_CONTEXT = "chatExtensions";
 
   async function init() {

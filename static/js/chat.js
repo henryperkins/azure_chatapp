@@ -213,17 +213,6 @@ export function createChatManager(deps = {}) {
       this._appEventListenersAttached = false; // Flag to ensure app/auth listeners are attached once
     }
 
-    /**
-     * Ensures UI utilities and methods are attached to the ChatManager instance.
-     * @private
-     */
-    _ensureUIAttached() {
-      if (!this._uiAttached) {
-        logger.info("[ChatManager][_ensureUIAttached] Attaching UI utilities", { context: "chatManager" });
-        // No-op: chatUIUtils is no longer used
-        this._uiAttached = true;
-      }
-    }
 
     _setupAppEventListeners() {
       if (this._appEventListenersAttached) return;
@@ -273,7 +262,6 @@ export function createChatManager(deps = {}) {
       });
       const auth = app?.DependencySystem?.modules?.get('auth') || null;
 
-      this._ensureUIAttached(); // Ensure UI methods are available early
       this._setupAppEventListeners(); // Setup global event listeners if not already
 
       this.containerSelector = options.containerSelector || this.containerSelector;
@@ -1139,16 +1127,7 @@ export function createChatManager(deps = {}) {
         const response = await this._api(apiEndpoints.MESSAGES(this.projectId, conversationId), { method: 'GET' });
         const messages = response?.messages || response?.data?.messages || response || [];
 
-        this._clearMessages();
-        messages.forEach(message => {
-          chatUIEnh.appendMessage(
-            message.role,
-            message.content,
-            message.id,
-            message.thinking,
-            message.redacted_thinking
-          );
-        });
+        this._renderMessages(messages);
         if (this.messageContainer) {
           this.messageContainer.scrollTop = this.messageContainer.scrollHeight;
         }
@@ -1292,6 +1271,8 @@ export function createChatManager(deps = {}) {
       }
 
       this.domAPI.removeClass(this.container, "hidden");
+
+      this._uiAttached = true;   // UI ready
 
       return true;
     }
