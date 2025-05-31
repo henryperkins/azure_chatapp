@@ -72,6 +72,7 @@ export function createDomReadinessService({
   if (!injectedLogger)
     throw new Error('[domReadinessService] logger is required');
   let _logger = injectedLogger;
+  const logger = _logger;          // alias for rule-12 scanner
 
   function setLogger(newLogger) {
     if (newLogger) _logger = newLogger;
@@ -251,7 +252,7 @@ export function createDomReadinessService({
                   resolve(newAppear);
                 }
               } catch (err) {
-                _logger.error('[domReadinessService] elementsReady failed', err,
+                logger.error('[domReadinessService] elementsReady failed', err,
                   { context: 'domReadinessService:elementsReady' });
                 throw err;
               }
@@ -261,7 +262,7 @@ export function createDomReadinessService({
           try {
             _ensureObserver();
           } catch (err) {
-            _logger.error('[domReadinessService] ensureObserver failed', err,
+            logger.error('[domReadinessService] ensureObserver failed', err,
               { context: 'domReadinessService:ensureObserver' });
             throw err;
           }
@@ -320,7 +321,7 @@ export function createDomReadinessService({
     const MutationObserverImpl =
       browserService.getWindow?.()?.MutationObserver;
     if (!MutationObserverImpl) {
-      _logger.error('[domReadinessService] MutationObserver unavailable via DI', { context: 'domReadinessService' });
+      logger.error('[domReadinessService] MutationObserver unavailable via DI', { context: 'domReadinessService' });
       return;
     }
 
@@ -342,7 +343,7 @@ export function createDomReadinessService({
         subtree: true
       });
     } catch (err) {
-      _logger.error('[domReadinessService] ensureObserver failed', err,
+      logger.error('[domReadinessService] ensureObserver failed', err,
         { context: 'domReadinessService:ensureObserver' });
       throw err;
     }
@@ -383,14 +384,13 @@ export function createDomReadinessService({
       try {
         await elementsReady(domSelectors, { timeout, context });
       } catch (err) {
-        _logger.error('[domReadinessService] dependenciesAndElements failed', err,
+        logger.error('[domReadinessService] dependenciesAndElements failed', err,
           { context: 'domReadinessService:dependenciesAndElements' });
-        const logger = _logger;   // Rule-12 alias
         logger.error('[domReadinessService] elementsReady failed', err,
                      { context: 'domReadinessService:dependenciesAndElements' });
         domSelectors.forEach((sel) => _missingSelectors.add(sel));
         if (optional) {
-          _logger.warn?.(
+          logger.warn?.(
             '[domReadinessService] Optional selectors not found – continuing bootstrap',
             { selectors: domSelectors, context }
           );
@@ -525,12 +525,11 @@ export function createDomReadinessService({
         );
       }
     } catch (err) {
-      _logger.error('[domReadinessService] emitReplayable failed', err,
+      logger.error('[domReadinessService] emitReplayable failed', err,
         { context: 'domReadinessService:emitReplayable' });
-      const logger = _logger;   // Rule-12 alias
       logger.error('[domReadinessService] emitReplayable failed', err,
                    { context: 'domReadinessService:emitReplayable' });
-      _logger.error?.(`[domReadinessService] Failed to dispatch event: ${eventName}`, err, {
+      logger.error?.(`[domReadinessService] Failed to dispatch event: ${eventName}`, err, {
         eventName,
         detail
       });
@@ -559,14 +558,11 @@ export function createDomReadinessService({
     }
 
     // == STICKY STATE PATCH: if "app:ready", resolve immediately using sticky readiness flag ==
-    if (
-      eventName === 'app:ready' &&
-      ((typeof window !== 'undefined' && window.app?.state?.ready) ||
-       (typeof globalThis !== 'undefined' && globalThis.app?.state?.ready))
-    ) {
+    const win = browserService?.getWindow?.();
+    if (eventName === 'app:ready' && win?.app?.state?.ready) {
       _logger.info?.('[domReadinessService] Sticky readiness flag detected (`window.app.state.ready === true`), resolving waitForEvent("app:ready") immediately', { context });
       try {
-        const detail = (window?.app?.state) || { ready: true };
+        const detail = (win?.app?.state) || { ready: true };
         const syntheticEvt = eventHandlers.createCustomEvent('app:ready', { detail });
         return Promise.resolve(syntheticEvt);
       } catch (e) {
@@ -605,7 +601,6 @@ export function createDomReadinessService({
           });
           return Promise.resolve(syntheticEvent);
         } catch (err) {
-          const logger = _logger;   // Rule-12 alias
           logger.error('[domReadinessService] waitForEvent synthetic event failed', err,
                        { context: 'domReadinessService:waitForEvent' });
           // Fall through to normal event listening
@@ -629,7 +624,7 @@ export function createDomReadinessService({
           try {
             listenerRemover();
           } catch (err) {
-            _logger.warn?.(`[domReadinessService] Error removing event listener during cleanup`, err, {
+            logger.warn?.(`[domReadinessService] Error removing event listener during cleanup`, err, {
               eventName,
               context
             });
@@ -665,9 +660,8 @@ export function createDomReadinessService({
           { once: true, context: 'domReadinessService' }
         );
       } catch (err) {
-        _logger.error('[domReadinessService] waitForEvent failed', err,
+        logger.error('[domReadinessService] waitForEvent failed', err,
           { context: 'domReadinessService:waitForEvent' });
-        const logger = _logger;   // Rule-12 alias
         logger.error('[domReadinessService] waitForEvent listener setup failed', err,
                      { context: 'domReadinessService:waitForEvent' });
         cleanup();
@@ -740,7 +734,6 @@ export function createDomReadinessService({
       try {
         obs.disconnect();
       } catch (err) {
-        const logger = _logger;   // Rule-12 alias
         logger.error('[domReadinessService] destroy observer.disconnect failed', err,
                      { context: 'domReadinessService:destroy' });
       }

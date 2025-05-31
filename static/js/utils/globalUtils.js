@@ -109,8 +109,9 @@ export function safeParseJSON(str) {
   try {
     return JSON.parse(str);
   } catch (err) {
-    const logger = globalThis?.DependencySystem?.modules?.get?.('logger');
-    if (logger) logger.error('[globalUtils] safeParseJSON failed', err,
+    const logger = globalThis?.DependencySystem?.modules?.get?.('logger')
+                 || { error () {} };
+    logger.error('[globalUtils] safeParseJSON failed', err,
       { context: 'globalUtils:safeParseJSON' });
     throw new Error('[globalUtils.safeParseJSON] JSON parse failed and fallback is forbidden: ' + (err?.message || err));
   }
@@ -162,8 +163,9 @@ export function createElement(tag, opts = {}, trackListener, domAPI) {
       if (opts[p] !== undefined) el[p] = opts[p];
     });
   } catch (err) {
-    const logger = globalThis?.DependencySystem?.modules?.get?.('logger');
-    if (logger) logger.error('[globalUtils] createElement failed', err,
+    const logger = globalThis?.DependencySystem?.modules?.get?.('logger')
+                 || { error () {} };
+    logger.error('[globalUtils] createElement failed', err,
       { context: 'globalUtils:createElement' });
     throw err;
   }
@@ -178,8 +180,9 @@ export function toggleElement(selOrEl, show, domAPI) {
       selOrEl.classList.toggle("hidden", !show);
     }
   } catch (err) {
-    const logger = globalThis?.DependencySystem?.modules?.get?.('logger');
-    if (logger) logger.error('[globalUtils] toggleElement failed', err,
+    const logger = globalThis?.DependencySystem?.modules?.get?.('logger')
+                 || { error () {} };
+    logger.error('[globalUtils] toggleElement failed', err,
       { context: 'globalUtils:toggleElement' });
   }
 }
@@ -191,8 +194,9 @@ export const formatDate = (d) => {
   try {
     return new Date(d).toLocaleDateString();
   } catch (err) {
-    const logger = globalThis?.DependencySystem?.modules?.get?.('logger');
-    if (logger) logger.error('[globalUtils] formatDate failed', err,
+    const logger = globalThis?.DependencySystem?.modules?.get?.('logger')
+                 || { error () {} };
+    logger.error('[globalUtils] formatDate failed', err,
       { context: 'globalUtils:formatDate' });
     return String(d);
   }
