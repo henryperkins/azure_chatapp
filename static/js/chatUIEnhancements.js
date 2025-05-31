@@ -15,6 +15,8 @@
 
 import { createDomWaitHelper } from './utils/initHelpers.js';
 import { createElement } from './utils/globalUtils.js';
+import { createPullToRefresh } from './utils/pullToRefresh.js';
+import { getSafeHandler } from './utils/getSafeHandler.js';
 
 export function createChatUIEnhancements(deps = {}) {
   // Validate required dependencies
@@ -35,7 +37,7 @@ export function createChatUIEnhancements(deps = {}) {
     isMobile: browserService?.isMobile || false
   };
 
-  const safeHandler = DependencySystem.modules.get('safeHandler');
+  const safeHandler = getSafeHandler(DependencySystem);
   const chatUIBus = new EventTarget();
   DependencySystem.modules.register('chatUIBus', chatUIBus);
 
@@ -165,93 +167,14 @@ export function createChatUIEnhancements(deps = {}) {
     }
 
     // Setup pull-to-refresh for chat messages
-    setupPullToRefresh();
+    createPullToRefresh({
+      element        : domAPI.getElementById('chatMessages'),
+      onRefresh      : ()=> chatManager.loadConversation(chatManager.currentConversationId),
+      eventHandlers, domAPI, browserService,
+      ctx            : MODULE_CONTEXT
+    });
   }
 
-  /**
-   * Setup pull-to-refresh functionality for chat messages
-   */
-  function setupPullToRefresh() {
-    try {
-      const chatMessages = domAPI.getElementById('chatMessages');
-      if (!chatMessages) return;
-      if (chatMessages.dataset.ptrBound === '1') return;
-      chatMessages.dataset.ptrBound = '1';
-
-      let startY = 0;
-      let isPulling = false;
-      let refreshTriggered = false;
-
-      // Create pull indicator if it doesn't exist
-      let pullIndicator = domAPI.getElementById('chatPullToRefreshIndicator');
-      if (!pullIndicator) {
-        pullIndicator = createElement('div', {
-          id: 'chatPullToRefreshIndicator',
-          className: 'pull-to-refresh-indicator',
-          innerHTML: '<svg class="animate-spin -ml-1 mr-2 h-5 w-5 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><span>Refreshing...</span>'
-        }, eventHandlers.trackListener, domAPI);
-
-        const styles = {
-          position: 'absolute', top: '0', left: '0', right: '0', display: 'flex',
-          'justify-content': 'center', 'align-items': 'center', padding: '10px',
-          background: 'var(--color-base-200)', transform: 'translateY(-50px)',
-          transition: 'transform 0.3s ease', 'z-index': '10'
-        };
-        Object.entries(styles).forEach(([prop, value]) => domAPI.setStyle(pullIndicator, prop, value));
-
-        const container = domAPI.querySelector('.chat-container');
-        if (container) domAPI.appendChild(container, pullIndicator);
-      }
-
-      const resetPullIndicator = () => {
-        domAPI.setStyle(pullIndicator, 'transform', 'translateY(-50px)');
-        domAPI.removeClass(pullIndicator, 'visible');
-        isPulling = false;
-        refreshTriggered = false;
-      };
-
-      // Touch event handlers
-      const touchHandlers = {
-        touchstart: (e) => {
-          if (chatMessages.scrollTop === 0) {
-            startY = e.touches[0].clientY;
-            isPulling = true;
-          }
-        },
-        touchmove: (e) => {
-          if (!isPulling) return;
-          const diff = e.touches[0].clientY - startY;
-          if (diff > 0 && diff < 100) {
-            domAPI.setStyle(pullIndicator, 'transform', `translateY(${diff - 50}px)`);
-            if (diff > 70 && !refreshTriggered) domAPI.addClass(pullIndicator, 'visible');
-          }
-        },
-        touchend: () => {
-          if (!isPulling) return;
-          const pullDistance = parseInt(pullIndicator.style.transform.replace('translateY(', '').replace('px)', '')) + 50;
-          if (pullDistance > 20) {
-            refreshTriggered = true;
-            domAPI.setStyle(pullIndicator, 'transform', 'translateY(0)');
-            if (state.projectId && chatManager?.currentConversationId) {
-              chatManager.loadConversation(chatManager.currentConversationId)
-                .finally(() => browserService.setTimeout(resetPullIndicator, 1000));
-            } else {
-              resetPullIndicator();
-            }
-          } else {
-            resetPullIndicator();
-          }
-        }
-      };
-
-      // Attach touch event listeners
-      Object.entries(touchHandlers).forEach(([event, handler]) => {
-        eventHandlers.trackListener(chatMessages, event, handler, { context: MODULE_CONTEXT });
-      });
-    } catch (error) {
-      logger.error('[setupPullToRefresh]', error, { context: MODULE_CONTEXT });
-    }
-  }
 
   /**
    * Setup project-specific chat enhancements

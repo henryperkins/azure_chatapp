@@ -5,6 +5,8 @@
  */
 
 import { SELECTORS } from "./utils/selectorConstants.js";
+import { createPullToRefresh } from "./utils/pullToRefresh.js";
+import { getSafeHandler } from './utils/getSafeHandler.js';
 
 export function createProjectDetailsEnhancements({
   domAPI,
@@ -24,13 +26,7 @@ export function createProjectDetailsEnhancements({
   if (!sanitizer) throw new Error('[createProjectDetailsEnhancements] Missing dependency: sanitizer');
   if (!DependencySystem) throw new Error('Missing DependencySystem');
   // Use canonical safeHandler from DI, normalize for both direct function or object with .safeHandler (early bootstrap)
-  const safeHandlerRaw = DependencySystem.modules.get('safeHandler');
-  const safeHandler =
-    typeof safeHandlerRaw === 'function'
-      ? safeHandlerRaw
-      : (typeof safeHandlerRaw?.safeHandler === 'function'
-        ? safeHandlerRaw.safeHandler
-        : (fn) => fn); // graceful fallback
+  const safeHandler = getSafeHandler(DependencySystem);
   if (!safeHandler) throw new Error('safeHandler missing from DependencySystem');
 
   // State management
@@ -392,160 +388,6 @@ export function createProjectDetailsEnhancements({
     }
   }
 
-  /**
-   * Add mobile-specific pull-to-refresh for the conversation list
-   */
-  function setupPullToRefresh() {
-    const CONTEXT = 'project-details:pull-to-refresh';
-    try {
-      // Only apply on mobile devices
-      if (!browserService || !browserService.isMobile) return;
-
-      const conversationsList = domAPI.getElementById('conversationsList');
-      if (!conversationsList) return;
-      if (conversationsList.dataset.ptrBound === '1') return;
-      conversationsList.dataset.ptrBound = '1';
-
-      // Create pull indicator element
-      const pullIndicator = domAPI.createElement('div');
-      pullIndicator.className = 'pull-indicator';
-      domAPI.setInnerHTML(pullIndicator, sanitizer.sanitize(`
-        <div class="mobile-loading-indicator"></div>
-        <span class="ml-2">Pull to refresh</span>
-      `));
-
-      // Add to DOM
-      const container = conversationsList.parentElement;
-      if (container) {
-        domAPI.insertBefore(container, pullIndicator, container.firstChild);
-      }
-
-      // Track pull state
-      let startY = 0;
-      let currentY = 0;
-      let isPulling = false;
-      let refreshTriggered = false;
-
-      // Touch start handler
-      const handleTouchStart = (e) => {
-        // Only enable pull if at the top of the list
-        if (conversationsList.scrollTop <= 0) {
-          startY = e.touches[0].clientY;
-          isPulling = true;
-        }
-      };
-
-      // Touch move handler
-      const handleTouchMove = (e) => {
-        if (!isPulling) return;
-
-        currentY = e.touches[0].clientY;
-        const pullDistance = currentY - startY;
-
-        // Only allow pulling down
-        if (pullDistance > 0) {
-          // Calculate pull percentage (max 100px pull)
-          const pullPercent = Math.min(pullDistance / 100, 1);
-
-          // Transform the indicator
-          domAPI.setStyle(pullIndicator, 'transform', `translateY(${pullDistance / 2}px)`);
-
-          // Show indicator when pulling
-          if (pullDistance > 20) {
-            domAPI.addClass(pullIndicator, 'visible');
-          }
-
-          // Change text when pulled enough to refresh
-          if (pullDistance > 70 && !refreshTriggered) {
-            domAPI.setInnerHTML(pullIndicator, sanitizer.sanitize(`
-              <div class="mobile-loading-indicator"></div>
-              <span class="ml-2">Release to refresh</span>
-            `));
-          }
-
-          // Prevent default scrolling
-          e.preventDefault();
-        }
-      };
-
-      // Touch end handler
-      const handleTouchEnd = (e) => {
-        if (!isPulling) return;
-
-        const pullDistance = currentY - startY;
-
-        // If pulled far enough, trigger refresh
-        if (pullDistance > 70) {
-          refreshTriggered = true;
-
-          // Show loading state
-          domAPI.setInnerHTML(pullIndicator, sanitizer.sanitize(`
-            <div class="mobile-loading-indicator animate-spin"></div>
-            <span class="ml-2">Refreshing...</span>
-          `));
-
-          // Reload conversation list data
-          const projectIdEl = domAPI.querySelector('[data-project-id]');
-          const DependencySystem = eventHandlers.DependencySystem;
-          if (projectIdEl && DependencySystem?.modules?.get('projectManager')) {
-            const projectId = domAPI.getDataAttribute(projectIdEl, 'projectId');
-            const projectManager = DependencySystem.modules.get('projectManager');
-            // Refresh conversations
-            projectManager.loadProjectConversations(projectId)
-              .finally(() => {
-                browserService.setTimeout(() => {
-                  domAPI.setStyle(pullIndicator, 'transform', 'translateY(-50px)');
-                  domAPI.removeClass(pullIndicator, 'visible');
-                  isPulling = false;
-                  refreshTriggered = false;
-                }, 1000);
-              });
-          } else {
-            // If we can't find the project manager, just reset
-            browserService.setTimeout(() => {
-              domAPI.setStyle(pullIndicator, 'transform', 'translateY(-50px)');
-              domAPI.removeClass(pullIndicator, 'visible');
-              isPulling = false;
-              refreshTriggered = false;
-            }, 1000);
-          }
-        } else {
-          // Reset if not pulled far enough
-          domAPI.setStyle(pullIndicator, 'transform', 'translateY(-50px)');
-          domAPI.removeClass(pullIndicator, 'visible');
-          isPulling = false;
-        }
-      };
-
-      // Add event listeners
-      eventHandlers.trackListener(
-        conversationsList,
-        'touchstart',
-        safeHandler(handleTouchStart, 'pullToRefreshStart'),
-        { context: CONTEXT }
-      );
-
-      eventHandlers.trackListener(
-        conversationsList,
-        'touchmove',
-        safeHandler(handleTouchMove, 'pullToRefreshMove'),
-        { context: CONTEXT }
-      );
-
-      eventHandlers.trackListener(
-        conversationsList,
-        'touchend',
-        safeHandler(handleTouchEnd, 'pullToRefreshEnd'),
-        { context: CONTEXT }
-      );
-
-      logger.info('[setupPullToRefresh] Pull-to-refresh initialized for conversations list', {
-        context: CONTEXT
-      });
-    } catch (error) {
-      logger.error('[setupPullToRefresh]', error, { context: CONTEXT });
-    }
-  }
 
   /**
    * Initialize project list enhancements
@@ -738,7 +580,15 @@ export function createProjectDetailsEnhancements({
 
         // Mobile-specific enhancements
         if (browserService && browserService.isMobile) {
-          setupPullToRefresh();
+          createPullToRefresh({
+            element        : domAPI.getElementById('conversationsList'),
+            onRefresh      : () => {
+              const pm = DependencySystem.modules.get('projectManager');
+              return pm?.loadProjectConversations?.(state.currentProjectId);
+            },
+            eventHandlers, domAPI, browserService,
+            ctx            : 'project-details:pull-to-refresh'
+          });
 
           // Improve touch target sizes for mobile
           domAPI.querySelectorAll('.btn, button').forEach(btn => {
