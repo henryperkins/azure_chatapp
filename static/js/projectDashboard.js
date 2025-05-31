@@ -1104,9 +1104,28 @@ export function createProjectDashboard({
           context: 'ProjectDashboard::listTplContainer'
         })
           .then(loadListTemplate)
-          .catch(err => { logger.error('[ProjectDashboard][listTemplateLoader]', err, { context: 'projectDashboard' }); loadListTemplate(); });      // fallback – still attempt
+          .catch(err => {
+            logger.error('[ProjectDashboard][listTemplateLoader]', err, { context: 'projectDashboard' });
+            // Do NOT attempt to load the template until the container actually exists.
+            // Prevents race condition where htmlTemplateLoader emits a failure event
+            // leading to cascading timeouts in ProjectListComponent.initialize().
+            // The template will be loaded automatically when elementsReady resolves.
+          });
       } else {
-        loadListTemplate().catch(err => { logger.error('[ProjectDashboard][listTemplateLoader]', err, { context: 'projectDashboard' }); });
+        // When domReadinessService.elementsReady is unavailable (unlikely but possible in
+        // early-bootstrap scenarios), guard against loading the template before the
+        // container actually exists to avoid emitting a failed event that blocks
+        // ProjectListComponent.initialize().
+        const containerExists =
+          typeof document !== 'undefined' &&
+          document.querySelector('#projectListView');
+        if (containerExists) {
+          loadListTemplate().catch(err => {
+            logger.error('[ProjectDashboard][listTemplateLoader]', err, { context: 'projectDashboard' });
+          });
+        } else {
+          logger.warn('[ProjectDashboard][listTemplateLoader] #projectListView not found; deferring template load until container is present.', { context: 'projectDashboard' });
+        }
       }
     }
   } catch (err) {

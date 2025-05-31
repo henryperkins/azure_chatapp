@@ -1,4 +1,4 @@
-import { createAuthFormListenerFactory } from './authFormListenerFactory.js';
+import createAuthFormListenerFactory from './authFormListenerFactory.js';
 
 /**
  * Creates and returns a centralized authentication module with dependency injection.
@@ -87,16 +87,13 @@ export function createAuth(deps) {   // ← canonical name for “auth.js”
     return appModuleRef.state;
   }
 
-  function readCookie(name) {
+function readCookie(name) {
     const doc = domAPI.getDocument?.();
     if (!doc || typeof doc.cookie !== 'string') return null;
-    const cookieStr = doc.cookie;
-    if (!cookieStr) return null;
-    const m = cookieStr.match(
-      new RegExp('(?:^|;\\s*)' + name + '\\s*=\\s*([^;]+)')
-    );
-    return m ? decodeURIComponent(m[1]) : null;
-  }
+    const cookies = doc.cookie.split('; ');
+    const pair = cookies.map(c => c.split('=')).find(([k]) => k === name);
+    return pair ? decodeURIComponent(pair[1]) : null;
+}
 
   function validateUsername(username) {
     return typeof username === 'string' && /^[a-zA-Z0-9_.-]{3,32}$/.test(username);
@@ -944,7 +941,16 @@ export function createAuth(deps) {   // ← canonical name for “auth.js”
       if (appModuleRef?.setAppLifecycleState) {
         appModuleRef.setAppLifecycleState({ isReady: true });
       }
-      logger.info('[AuthModule][init] Auth module is now ready.', { context: 'init' });
+      // Sticky readiness flag (idempotent for late listeners)
+      if (window.app && window.app.state) {
+        window.app.state.ready = true;
+      } else if (typeof window !== "undefined") {
+        // Defensive polyfill
+        window.app = window.app || {};
+        window.app.state = window.app.state || {};
+        window.app.state.ready = true;
+      }
+      logger.info('[AuthModule][init] Auth module is now ready (sticky flag set window.app.state.ready = true)', { context: 'init' });
 
       // Dispatch authReady event
       const finalState = getAppState();

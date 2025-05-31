@@ -1,4 +1,4 @@
- // VENDOR-EXEMPT-SIZE: Core module pending refactor in Q3-25
+// VENDOR-EXEMPT-SIZE: Core module pending refactor in Q3-25
 /**
  * ProjectListComponent – guarded factory
  * Handles rendering and interaction with the project list UI.
@@ -94,10 +94,15 @@ export function createProjectListComponent(deps) {
     async function initialize() {
         try {
             // Wait for template load event before waiting for children
-            await domReadinessService.waitForEvent('projectListHtmlLoaded', {
-                timeout: APP_CONFIG?.TIMEOUTS?.PROJECT_LIST_TEMPLATE ?? 15000,
-                context: MODULE_CONTEXT + '_template'
-            });
+            try {
+                await domReadinessService.waitForEvent('projectListHtmlLoaded', {
+                    timeout: APP_CONFIG?.TIMEOUTS?.PROJECT_LIST_TEMPLATE ?? 15000,
+                    context: MODULE_CONTEXT + '_template'
+                });
+            } catch (templateErr) {
+                logger.warn('[ProjectListComponent][initialize] Template load event timeout/failed, attempting to continue', templateErr, { context: MODULE_CONTEXT });
+                // Avoid throwing - attempt to continue
+            }
 
             // CRITICAL: Wait for DOM to fully update after template injection
             await _waitForDOMUpdate();
@@ -133,7 +138,7 @@ export function createProjectListComponent(deps) {
 
         // Find or create grid element with better fallback logic
         gridElement = domAPI.querySelector('.mobile-grid', element) ||
-                     domAPI.getElementById('projectCardsPanel');
+            domAPI.getElementById('projectCardsPanel');
 
         if (!gridElement) {
             // Create the grid if it doesn't exist
@@ -172,7 +177,8 @@ export function createProjectListComponent(deps) {
     }
 
     function _safeSetInnerHTML(el, rawHtml) {
-        domAPI.setInnerHTML(el, rawHtml);
+        const safe = htmlSanitizer.sanitize(rawHtml);
+        domAPI.setInnerHTML(el, safe);
     }
     function _clearElement(el) {
         el.textContent = "";
@@ -423,15 +429,44 @@ export function createProjectListComponent(deps) {
             element.style.display = "";
         }
     }
+    /**
+     * Extract an array of project objects from an arbitrary API
+     * response using the single-source helper exposed by
+     * ProjectManager.  Falls back to the legacy extraction logic
+     * for maximum backward compatibility.
+     *
+     * @param {*} data – raw API response
+     * @returns {Array<Object>} array of project objects (possibly empty)
+     */
     function _extractProjects(data) {
+        /* ------------------------------------------------------------------
+         * 1️⃣  Preferred single-source method (ProjectManager helper)
+         * ------------------------------------------------------------------ */
+        if (projectManager && typeof projectManager.extractResourceList === 'function') {
+            try {
+                /** projectManager.extractResourceList will normalise the
+                 *   result to an array (or empty array) based on the keys
+                 *   that we pass in.                                                */
+                const list = projectManager.extractResourceList(data, ['projects']);
+                if (Array.isArray(list)) {
+                    return list;
+                }
+            } catch (err) {
+                logger?.warn?.('[ProjectListComponent] extractResourceList failed – falling back to legacy logic', err, { context: MODULE_CONTEXT });
+            }
+        }
+
+        /* ------------------------------------------------------------------
+         * 2️⃣  Legacy fallback – retained for robustness with older servers
+         * ------------------------------------------------------------------ */
         if (Array.isArray(data)) return data;
-        const paths = ["projects", "data.projects", "data"];
-        for (let path of paths) {
-            const segments = path.split(".");
+        const paths = ['projects', 'data.projects', 'data'];
+        for (const path of paths) {
+            const segments = path.split('.');
             let result = data;
             let valid = true;
-            for (let seg of segments) {
-                if (result && typeof result === "object" && seg in result) {
+            for (const seg of segments) {
+                if (result && typeof result === 'object' && seg in result) {
                     result = result[seg];
                 } else {
                     valid = false;
@@ -439,7 +474,7 @@ export function createProjectListComponent(deps) {
                 }
             }
             if (valid && Array.isArray(result)) return result;
-            if (valid && result && typeof result === "object" && result.id) {
+            if (valid && result && typeof result === 'object' && result.id) {
                 return [result];
             }
         }
@@ -458,7 +493,7 @@ export function createProjectListComponent(deps) {
         // IMPROVED: Better element availability check with fallback creation
         if (!gridElement) {
             gridElement = domAPI.querySelector('.mobile-grid', element) ||
-                         domAPI.getElementById('projectCardsPanel');
+                domAPI.getElementById('projectCardsPanel');
 
             if (!gridElement) {
                 logger.warn('[ProjectListComponent][show] Creating missing grid element', { context: MODULE_CONTEXT });
@@ -475,7 +510,9 @@ export function createProjectListComponent(deps) {
         // The elements should already be ready from initialize()
 
         // CONSOLIDATED: Check authentication state before showing content
-        const isAuthenticated = app?.state?.isAuthenticated ?? false;
+        const isAuthenticated = typeof projectManager?.isAuthenticated === 'function'
+            ? projectManager.isAuthenticated()
+            : (app?.state?.isAuthenticated ?? false);
 
         logger.debug('[ProjectListComponent][show] Checking auth state before showing content', {
             isAuthenticated,
@@ -507,7 +544,9 @@ export function createProjectListComponent(deps) {
             });
 
             // CONSOLIDATED: Check authentication state before loading projects
-            const isAuthenticated = app?.state?.isAuthenticated ?? false;
+            const isAuthenticated = typeof projectManager?.isAuthenticated === 'function'
+                ? projectManager.isAuthenticated()
+                : (app?.state?.isAuthenticated ?? false);
 
             if (!isAuthenticated) {
                 logger.debug('[ProjectListComponent][_loadProjects] User not authenticated, showing login required', { context: MODULE_CONTEXT });
@@ -962,27 +1001,33 @@ export function createProjectListComponent(deps) {
     }
     // --- Navigation callback can be overridden after creation ---
     function onViewProject(projectObjOrId) {
-        const projectId = (typeof projectObjOrId === "object" && projectObjOrId.id) ? projectObjOrId.id : projectObjOrId;
-        // --- Set project context before navigation ---
-        if (app && typeof app.setCurrentProject === "function") {
-            // Already have project object
-            if (typeof projectObjOrId === "object" && projectObjOrId.id) {
+        const projectId =
+            typeof projectObjOrId === 'object' && projectObjOrId.id
+                ? projectObjOrId.id
+                : projectObjOrId;
+        // --- Set project context before navigation using single-source helper ---
+        if (projectManager && typeof projectManager.setCurrentProject === 'function') {
+            if (typeof projectObjOrId === 'object' && projectObjOrId.id) {
+                projectManager.setCurrentProject(projectObjOrId);
+            } else if (projectId) {
+                // Attempt to find full object from current state before falling back
+                const projectObj =
+                    state.projects.find((p) => {
+                        const pid = p?.uuid ?? p?.id ?? p?.project_id ?? p?.ID ?? null;
+                        return String(pid) === String(projectId);
+                    }) || { id: projectId };
+                projectManager.setCurrentProject(projectObj);
+            }
+        } else if (app && typeof app.setCurrentProject === 'function') {
+            // Fallback for legacy code paths (should be removed once all modules use projectManager)
+            if (typeof projectObjOrId === 'object' && projectObjOrId.id) {
                 app.setCurrentProject(projectObjOrId);
             } else if (projectId) {
-                // Try to locate project object in state
-                const projectObj = state.projects.find(p => {
-                    const pid = p?.uuid ?? p?.id ?? p?.project_id ?? p?.ID ?? null;
-                    return String(pid) === String(projectId);
-                });
-                if (projectObj) {
-                    app.setCurrentProject(projectObj);
-                } else {
-                    app.setCurrentProject({ id: projectId });
-                }
+                app.setCurrentProject({ id: projectId });
             }
         }
         const navigationService = DependencySystem?.modules?.get?.('navigationService');
-        if (navigationService && typeof navigationService.navigateToProject === "function") {
+        if (navigationService && typeof navigationService.navigateToProject === 'function') {
             navigationService.navigateToProject(projectId);
         }
     }

@@ -85,13 +85,13 @@ export function createApiClient({
       if (isLogDelivery && auth.setLogDeliveryContext) {
         auth.setLogDeliveryContext(true);
       }
-      
+
       const csrf = auth.getCSRFToken();
-      
+
       if (isLogDelivery && auth.setLogDeliveryContext) {
         auth.setLogDeliveryContext(false);
       }
-      
+
       if (csrf) {
         restOpts.headers["X-CSRF-Token"] = csrf;
       } else if (!isLogDelivery && auth?.logger && typeof auth.logger.warn === "function") {
@@ -131,6 +131,31 @@ export function createApiClient({
       try {
         if (!browserService?.fetch) throw new Error('[apiClient] browserService.fetch unavailable');
         resp = await browserService.fetch(normUrl, restOpts);
+
+        /* --------------------------------------------------------
+         *  Binary / file download handling
+         * --------------------------------------------------------
+         *  A caller can force binary mode by passing
+         *     { responseType: 'blob' }   or  'arrayBuffer'
+         *  OR the code auto-detects when the server sets
+         *  `Content-Disposition: attachment`.
+         * ------------------------------------------------------ */
+        const wantsBlob =
+          restOpts.responseType === 'blob' ||
+          resp.headers.get('content-disposition')?.includes('attachment');
+
+        const wantsArrayBuffer = restOpts.responseType === 'arrayBuffer';
+
+        if (wantsBlob || wantsArrayBuffer) {
+          const data = wantsArrayBuffer ? await resp.arrayBuffer() : await resp.blob();
+          if (!resp.ok) {
+            const err = new Error(`HTTP ${resp.status}`);
+            err.status = resp.status;
+            err.data = data;
+            throw err;
+          }
+          return data;
+        }
 
         // ---------- NEW unified response handling ----------
         contentType = resp.headers.get('content-type') || '';
@@ -173,12 +198,12 @@ export function createApiClient({
         const err = new Error(humanMsg);
         err.status = resp.status;
         err.data = payload;
-        
+
         // Prevent recursive logger/apiClient loop for logger delivery
         if (!/\/api\/logs\b/.test(normUrl)) {
           logger.error('[apiClient] API response not OK', err, { context: 'apiClient:apiError', url: normUrl, status: resp.status, payload });
         }
-        
+
         throw err;
       } catch (outerErr) {
         // Prevent recursive logger/apiClient loop for logger delivery

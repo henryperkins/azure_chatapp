@@ -96,43 +96,45 @@ export function createProjectDetailsComponent({
 
 class ProjectDetailsComponent {
   constructor(deps) {
-    this.domAPI = deps.domAPI;
-    this.htmlTemplateLoader = deps.htmlTemplateLoader;
-    this.domReadinessService = deps.domReadinessService;
-    this.eventHandlers = deps.eventHandlers;
-    this.navigationService = deps.navigationService;
-    this.sanitizer = deps.sanitizer;
-    this.logger = deps.logger;
-    this.projectManager = deps.projectManager;
-    this.APP_CONFIG = deps.APP_CONFIG || {};
-    this.modalManager = deps.modalManager;
-    this.FileUploadComponentClass = deps.FileUploadComponentClass;
-    this.knowledgeBaseComponent = deps.knowledgeBaseComponent;
-    this.app = deps.app || this.eventHandlers.DependencySystem?.modules?.get('appModule');
-    this.modelConfig = deps.modelConfig;
-    this.chatManager = deps.chatManager;
-    this.apiClient = deps.apiClient;
-    this.containerId = "projectDetailsView";
-    this.templatePath = "/static/html/project_details.html";
-    this.state = {
-      initialized: false,
-      templateLoaded: false,
-      loading: false,
-      activeTab: "chat",
-      projectDataLoaded: false
-    };
-    this.projectId = null;
-    this.projectData = null;
-    this.listenersContext = MODULE_CONTEXT + "_listeners";
-    this.bus = new EventTarget();
-    this.fileUploadComponent = null;
-    this.elements = {};
-    this.auth = this.eventHandlers.DependencySystem?.modules?.get("auth");
-    // Canonical safeHandler injected via DI, fallback is error.
-    this.safeHandler = this.eventHandlers?.DependencySystem?.modules?.get?.('safeHandler');
-    if (typeof this.safeHandler !== 'function') {
-      throw new Error(`[${MODULE_CONTEXT}] Missing required dependency: safeHandler`);
-    }
+      this.domAPI = deps.domAPI;
+      this.htmlTemplateLoader = deps.htmlTemplateLoader;
+      this.domReadinessService = deps.domReadinessService;
+      this.eventHandlers = deps.eventHandlers;
+      this.navigationService = deps.navigationService;
+      this.sanitizer = deps.sanitizer;
+      this.logger = deps.logger;
+      this.projectManager = deps.projectManager;
+      this.APP_CONFIG = deps.APP_CONFIG || {};
+      this.modalManager = deps.modalManager;
+      this.FileUploadComponentClass = deps.FileUploadComponentClass;
+      this.knowledgeBaseComponent = deps.knowledgeBaseComponent;
+      this.app = deps.app || this.eventHandlers.DependencySystem?.modules?.get('appModule');
+      this.modelConfig = deps.modelConfig;
+      this.chatManager = deps.chatManager;
+      this.apiClient = deps.apiClient;
+      this.containerId = "projectDetailsView";
+      this.templatePath = "/static/html/project_details.html";
+      this.state = {
+          initialized: false,
+          templateLoaded: false,
+          loading: false,
+          activeTab: "chat",
+          projectDataLoaded: false
+      };
+      this.projectId = null;
+      this.projectData = null;
+      this.listenersContext = MODULE_CONTEXT + "_listeners";
+      this.bus = new EventTarget();
+      this.fileUploadComponent = null;
+      this.elements = {};
+      this.auth = this.eventHandlers.DependencySystem?.modules?.get("auth");
+      // Canonical safeHandler injected via DI, fallback is error.
+      this.safeHandler = this.eventHandlers?.DependencySystem?.modules?.get?.('safeHandler');
+      if (typeof this.safeHandler !== 'function') {
+          throw new Error(`[${MODULE_CONTEXT}] Missing required dependency: safeHandler`);
+      }
+      // Track single KBC bootstrap log/noise
+      this._kbcFirstWarned = false;
   }
 
   setProjectManager(pm) {
@@ -1050,14 +1052,21 @@ class ProjectDetailsComponent {
   getEventBus() { return this.bus; }
 
   setKnowledgeBaseComponent(kbcInstance) {
-    this.knowledgeBaseComponent = kbcInstance;
-    this._logInfo("KnowledgeBaseComponent instance received and set.", { kbcInstance: !!kbcInstance });
-    if (this.state.activeTab === "knowledge" && this.knowledgeBaseComponent && typeof this.knowledgeBaseComponent.initialize === "function" && this.projectId) {
-      const kbData = this.projectData?.knowledge_base;
-      this.knowledgeBaseComponent.initialize(true, kbData, this.projectId)
-        .catch(e => this._logError("Error re-initializing knowledge base component after set", e));
-    } else if (this.state.activeTab === "knowledge" && this.projectId) {
-      this._logWarn("KnowledgeBaseComponent not ready after set - skipping re-initialization");
-    }
+      this.knowledgeBaseComponent = kbcInstance;
+      this._logInfo("KnowledgeBaseComponent instance received and set.", { kbcInstance: !!kbcInstance });
+      if (this.state.activeTab === "knowledge") {
+          if (!this.knowledgeBaseComponent || typeof this.knowledgeBaseComponent.initialize !== "function") {
+              if (!this._kbcFirstWarned) {
+                  this._logWarn("KnowledgeBaseComponent instance missing or invalid after set - skipping re-initialization");
+                  this._kbcFirstWarned = true;
+              }
+          } else if (!this.projectId) {
+              this._logWarn("KnowledgeBaseComponent not initialized because projectId is not yet set (project not loaded)");
+          } else {
+              const kbData = this.projectData?.knowledge_base;
+              this.knowledgeBaseComponent.initialize(true, kbData, this.projectId)
+                  .catch(e => this._logError("Error re-initializing knowledge base component after set", e));
+          }
+      }
   }
 }

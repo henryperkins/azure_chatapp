@@ -1,49 +1,50 @@
-/**
- * @module NavigationService
- * Provides centralized navigation management to prevent conflicts,
- * race conditions, and ensure consistent navigation behavior.
- */
-
-const MODULE = "NavigationService";
-const MODULE_CONTEXT = "navigationService";
-
 export function createNavigationService({
   domAPI,
   browserService,
   DependencySystem,
   eventHandlers,
-  logger: providedLogger            // NEW
+  logger: providedLogger
 } = {}) {
-  // === Dependency Validation ===
+  /**
+   * Dependency/Guard checks
+   */
   if (!domAPI) throw new Error('[NavigationService] domAPI is required');
   if (!browserService) throw new Error('[NavigationService] browserService is required');
   if (!DependencySystem) throw new Error('[NavigationService] DependencySystem is required');
   if (!eventHandlers) throw new Error('[NavigationService] eventHandlers is required');
-  if (!providedLogger)
-    throw new Error('[NavigationService] logger is required');
+  if (!providedLogger) throw new Error('[NavigationService] logger is required');
+
   const logger = providedLogger;
+  const MODULE = 'NavigationService';
+  const MODULE_CONTEXT = 'navigationService';
+
+  // Resolve safeHandler at factory time
+  const safeHandlerRaw = DependencySystem.modules.get('safeHandler');
+  const safeHandler =
+    typeof safeHandlerRaw === 'function'
+      ? safeHandlerRaw
+      : (typeof safeHandlerRaw?.safeHandler === 'function'
+        ? safeHandlerRaw.safeHandler
+        : (fn) => fn /* fallback */);
 
   // === Navigation State ===
   const state = {
-    currentView: null,            // 'projectList', 'projectDetails', etc.
+    currentView: null,
     currentProjectId: null,
     currentConversationId: null,
     previousView: null,
     navigationInProgress: false,
-    navigationStack: [],          // History of navigation states
-    registeredViews: new Map(),   // Map of view IDs to handler functions
-    transitionListeners: [],      // Navigation lifecycle listeners
-    viewParams: new Map()         // Additional params for each view
+    navigationStack: [],
+    registeredViews: new Map(),
+    transitionListeners: [],
+    viewParams: new Map()
   };
 
-  // === Navigation Lifecycle Events ===
   /**
    * Emit a navigation lifecycle event
-   * @param {string} eventName - Name of the lifecycle event
-   * @param {Object} detail - Event details
    */
   function emitNavigationEvent(eventName, detail = {}) {
-    const CustomEventCtor = browserService.getWindow?.()?.CustomEvent;
+    const CustomEventCtor = browserService.getWindow()?.CustomEvent;
     if (!CustomEventCtor) return;
     const event = new CustomEventCtor(`navigation:${eventName}`, {
       detail: {
@@ -53,12 +54,9 @@ export function createNavigationService({
       }
     });
 
-    // Emit on document for global subscribers
-    if (domAPI && typeof domAPI.dispatchEvent === 'function') {
-      const doc = domAPI.getDocument();
-      if (doc) {
-        domAPI.dispatchEvent(doc, event);
-      }
+    const doc = domAPI.getDocument();
+    if (doc) {
+      domAPI.dispatchEvent(doc, event);
     }
 
     // Call registered transition listeners
@@ -67,12 +65,9 @@ export function createNavigationService({
         try {
           listener[eventName](detail);
         } catch (err) {
-          logger.error(
-            '[NavigationService] transition listener failed',
-            err,
-            { context: 'navigationService:transitionListener' }
-          );
-          return false;
+          logger.error('[NavigationService] transition listener failed', err, {
+            context: 'navigationService:transitionListener'
+          });
         }
       }
     });
@@ -80,8 +75,6 @@ export function createNavigationService({
 
   /**
    * Register navigation lifecycle listeners
-   * @param {Object} listener - Object with lifecycle methods
-   * @returns {Function} Unsubscribe function
    */
   function addTransitionListener(listener) {
     state.transitionListeners.push(listener);
@@ -94,165 +87,126 @@ export function createNavigationService({
   }
 
   // === URL Management ===
-  /**
-   * Get current URL parameters
-   * @returns {Object} Parameter object
-   */
   function getUrlParams() {
     const searchParams = new browserService.URLSearchParams(
       browserService.getLocation().search
     );
     const params = {};
-
-    // Convert searchParams to plain object
     for (const [key, value] of searchParams.entries()) {
       params[key] = value;
     }
-
     return params;
   }
 
-  /**
-   * Update URL without triggering navigation
-   * @param {Object} params - URL parameters to set
-   * @param {boolean} replace - Whether to replace current history entry
-   */
   function updateUrlParams(params = {}, replace = false) {
-    // delegate to the central implementation to keep behaviour consistent
     try {
       const newUrl = browserService.buildUrl(params);
       replace
         ? browserService.replaceState({}, '', newUrl)
-        : browserService.pushState   ({}, '', newUrl);
+        : browserService.pushState({}, '', newUrl);
     } catch (err) {
-      logger.error('[NavigationService] updateUrlParams failed',
-                   err, { context: MODULE_CONTEXT });
-      return;
+      logger.error('[NavigationService] updateUrlParams failed', err, {
+        context: MODULE_CONTEXT
+      });
     }
   }
 
-  // ——— Centralized location helpers (used by ChatManager & others) ———
-  function getLocationSearch()   { return browserService.getLocation().search; }
-  function getCurrentHref()      { return browserService.getLocation().href; }
-  function getCurrentPathname()  { return browserService.getLocation().pathname; }
-  function pushState (url, title = '')    { browserService.pushState   ({}, title, url); }
-  function replaceState(url, title = '')  { browserService.replaceState({}, title, url); }
+  function getLocationSearch() {
+    return browserService.getLocation().search;
+  }
+  function getCurrentHref() {
+    return browserService.getLocation().href;
+  }
+  function getCurrentPathname() {
+    return browserService.getLocation().pathname;
+  }
+  function pushState(url, title = '') {
+    browserService.pushState({}, title, url);
+  }
+  function replaceState(url, title = '') {
+    browserService.replaceState({}, title, url);
+  }
 
-  //  Legacy-compat “navAPI” shim expected by createChatManager
   const navAPI = {
-    getSearch   : getLocationSearch,
-    getHref     : getCurrentHref,
-    getPathname : getCurrentPathname,
+    getSearch: getLocationSearch,
+    getHref: getCurrentHref,
+    getPathname: getCurrentPathname,
     pushState,
-    replaceState        // ← NEW
+    replaceState
   };
 
   // === View Management ===
-  /**
-   * Register a view with the navigation service
-   * @param {string} viewId - Unique identifier for the view
-   * @param {Object} handlers - View handler functions (show, hide, etc.)
-   */
   function registerView(viewId, handlers = {}) {
     if (!viewId) {
       logger.error('[NavigationService] registerView validation failed',
-                   new Error('Missing viewId'), { context: MODULE_CONTEXT });
+        new Error('Missing viewId'), { context: MODULE_CONTEXT });
       return false;
     }
 
     const requiredHandlers = ['show', 'hide'];
     const missingHandlers = requiredHandlers.filter(h => typeof handlers[h] !== 'function');
-
     if (missingHandlers.length > 0) {
       logger.error('[NavigationService] registerView validation failed',
-                   new Error('Missing handlers: ' + missingHandlers.join(',')), { context: MODULE_CONTEXT });
+        new Error('Missing handlers: ' + missingHandlers.join(',')), { context: MODULE_CONTEXT });
       return false;
     }
-
     state.registeredViews.set(viewId, handlers);
+    return true;
   }
 
-  function hasView(viewId){ return state.registeredViews.has(viewId); }
+  function hasView(viewId) {
+    return state.registeredViews.has(viewId);
+  }
 
-  /**
-   * Activate a registered view and deactivate others
-   * @param {string} viewId - View to activate
-   * @param {Object} params - View parameters
-   * @returns {Promise<boolean>} Success indicator
-   */
   async function activateView(viewId, params = {}) {
     if (!state.registeredViews.has(viewId)) {
       return false;
     }
-
     const viewHandlers = state.registeredViews.get(viewId);
     const previousViewId = state.currentView;
-
     try {
-      // First, ensure login message is hidden and main content is visible
-      const domAPI = DependencySystem?.modules?.get('domAPI');
-      if (domAPI) {
-        const loginMessage = domAPI.getElementById('loginRequiredMessage');
-        const mainContent = domAPI.getElementById('mainContent');
+      // Hide #loginRequiredMessage, show #mainContent if present
+      const loginMessage = domAPI.getElementById('loginRequiredMessage');
+      const mainContent = domAPI.getElementById('mainContent');
+      if (loginMessage) domAPI.addClass(loginMessage, 'hidden');
+      if (mainContent) domAPI.removeClass(mainContent, 'hidden');
 
-        if (loginMessage) domAPI.addClass(loginMessage, 'hidden');
-        if (mainContent) domAPI.removeClass(mainContent, 'hidden');
-      }
-
-      // Hide previous view if different
+      // Hide previous view
       if (previousViewId && previousViewId !== viewId) {
         const prevHandlers = state.registeredViews.get(previousViewId);
-        if (prevHandlers && typeof prevHandlers.hide === 'function') {
+        if (prevHandlers?.hide) {
           await prevHandlers.hide();
         }
       }
 
-      // Store params for the view
+      // Store params
       state.viewParams.set(viewId, params);
 
-      // Show the new view
+      // Show new view
       await viewHandlers.show(params);
 
-      // Update state
       state.previousView = previousViewId;
       state.currentView = viewId;
-
       return true;
     } catch (error) {
-      logger.error(
-        '[NavigationService] activateView failed',
-        error,
-        { context: 'navigationService:activateView' }
-      );
+      logger.error('[NavigationService] activateView failed', error, {
+        context: 'navigationService:activateView'
+      });
       return false;
     }
   }
 
   // === Core Navigation Functions ===
-  /**
-   * Navigate to a specific view with parameters
-   * @param {string} viewId - Target view ID
-   * @param {Object} params - Navigation parameters
-   * @param {Object} options - Navigation options
-   * @returns {Promise<boolean>} Success indicator
-   */
   async function navigateTo(viewId, params = {}, options = {}) {
-    const {
-      updateUrl = true,
-      addToHistory = true,
-      replace = false
-    } = options;
+    const { updateUrl = true, addToHistory = true, replace = false } = options;
 
-    // Prevent navigation during another navigation
     if (state.navigationInProgress) {
       return false;
     }
-
     state.navigationInProgress = true;
     const navId = Date.now();
 
     try {
-      // Fire beforeNavigate event
       emitNavigationEvent('beforeNavigate', {
         from: state.currentView,
         to: viewId,
@@ -260,36 +214,27 @@ export function createNavigationService({
         navigationId: navId
       });
 
-      // Get view-specific parameters
       const projectId = params.projectId || params.project || null;
       const conversationId = params.conversationId || params.chatId || null;
 
-      // Update URL if needed
       if (updateUrl) {
         const urlParams = {};
-
-        // Add parameters to URL as needed
         if (viewId === 'projectDetails' && projectId) {
           urlParams.project = projectId;
-
           if (conversationId) {
             urlParams.chatId = conversationId;
           }
         }
-
         updateUrlParams(urlParams, replace);
       }
 
-      // Update state before view activation
       if (projectId) {
         state.currentProjectId = projectId;
       }
-
       if (conversationId) {
         state.currentConversationId = conversationId;
       }
 
-      // Fire navigating event
       emitNavigationEvent('navigating', {
         from: state.currentView,
         to: viewId,
@@ -297,20 +242,11 @@ export function createNavigationService({
         navigationId: navId
       });
 
-      // Activate the view
       const success = await activateView(viewId, params);
-
       if (success) {
-        // Add to navigation stack if successful and addToHistory is true
         if (addToHistory) {
-          state.navigationStack.push({
-            viewId,
-            params,
-            timestamp: Date.now()
-          });
+          state.navigationStack.push({ viewId, params, timestamp: Date.now() });
         }
-
-        // Fire afterNavigate event
         emitNavigationEvent('afterNavigate', {
           from: state.previousView,
           to: viewId,
@@ -319,7 +255,6 @@ export function createNavigationService({
           success: true
         });
       } else {
-        // Fire navigation error event
         emitNavigationEvent('navigationError', {
           from: state.currentView,
           to: viewId,
@@ -330,14 +265,11 @@ export function createNavigationService({
           message: 'View activation failed'
         });
       }
-
       return success;
     } catch (error) {
-      logger.error('[NavigationService][navigateTo] before-navigate error',
-        error,
-        { context: 'navigationService:navigateTo' }
-      );
-      // Fire navigation error event
+      logger.error('[NavigationService][navigateTo] before-navigate error', error, {
+        context: 'navigationService:navigateTo'
+      });
       emitNavigationEvent('navigationError', {
         from: state.currentView,
         to: viewId,
@@ -353,85 +285,46 @@ export function createNavigationService({
     }
   }
 
-  /**
-   * Navigate to project list view
-   * @param {Object} options - Navigation options
-   * @returns {Promise<boolean>} Success indicator
-   */
   function navigateToProjectList(options = {}) {
     return navigateTo('projectList', {}, options);
   }
 
-  /**
-   * Navigate to project details view
-   * @param {string} projectId - Project ID
-   * @param {Object} options - Navigation options
-   * @returns {Promise<boolean>} Success indicator
-   */
   function navigateToProject(projectId, options = {}) {
     if (!projectId) {
       return Promise.resolve(false);
     }
-
     return navigateTo('projectDetails', { projectId }, options);
   }
 
-  /**
-   * Navigate to conversation within a project
-   * @param {string} projectId - Project ID
-   * @param {string} conversationId - Conversation ID
-   * @param {Object} options - Navigation options
-   * @returns {Promise<boolean>} Success indicator
-   */
   function navigateToConversation(projectId, conversationId, options = {}) {
     if (!projectId || !conversationId) {
       return Promise.resolve(false);
     }
-
-    return navigateTo('projectDetails', {
-      projectId,
-      conversationId,
-      activeTab: 'conversations'
-    }, options);
+    return navigateTo(
+      'projectDetails',
+      { projectId, conversationId, activeTab: 'conversations' },
+      options
+    );
   }
 
-  /**
-   * Go back in navigation history
-   * @returns {Promise<boolean>} Success indicator
-   */
   async function goBack() {
     try {
       if (state.navigationStack.length <= 1) {
-        // If no previous entries, go to project list
         return navigateToProjectList({ replace: true });
       }
-
-      // Remove current state
       state.navigationStack.pop();
-
-      // Get previous state
       const previous = state.navigationStack[state.navigationStack.length - 1];
-
-      // Navigate to previous state, replacing current history entry
       return navigateTo(previous.viewId, previous.params, { replace: true });
     } catch (err) {
-      logger.error('[NavigationService] goBack failed',
-                   err, { context: MODULE_CONTEXT });
+      logger.error('[NavigationService] goBack failed', err, { context: MODULE_CONTEXT });
       return false;
     }
   }
 
-  // === Event Handlers ===
-  /**
-   * Handle browser popstate event (back/forward buttons)
-   * @param {Event} event - Popstate event
-   */
-  function handlePopState(event) {
+  function handlePopState(/* event */) {
     const params = getUrlParams();
     const projectId = params.project;
     const conversationId = params.chatId;
-
-    // Determine target view based on URL parameters
     try {
       if (projectId) {
         if (conversationId) {
@@ -443,26 +336,12 @@ export function createNavigationService({
         navigateToProjectList({ addToHistory: false });
       }
     } catch (err) {
-      logger.error('[NavigationService] handlePopState failed',
-                   err, { context: MODULE_CONTEXT });
-      return;
+      logger.error('[NavigationService] handlePopState failed', err, { context: MODULE_CONTEXT });
     }
   }
 
-  // === Initialization ===
-  /**
-   * Initialize the navigation service
-   */
   function init() {
-    // Register popstate handler
-    // Use canonical safeHandler from DI, normalize for both direct function or object with .safeHandler (early bootstrap)
-    const safeHandlerRaw = DependencySystem.modules.get('safeHandler');
-    const safeHandler =
-      typeof safeHandlerRaw === 'function'
-        ? safeHandlerRaw
-        : (typeof safeHandlerRaw?.safeHandler === 'function'
-          ? safeHandlerRaw.safeHandler
-          : (fn) => fn); // graceful fallback
+    // Register popstate handler using safeHandler
     eventHandlers.trackListener(
       browserService.getWindow(),
       'popstate',
@@ -470,9 +349,7 @@ export function createNavigationService({
       { context: MODULE_CONTEXT, description: 'popstate' }
     );
 
-    // Notification removed (NavigationService initialized)
-
-    // Parse initial URL and set initial state
+    // Parse initial URL
     const params = getUrlParams();
     if (params.project) {
       state.currentProjectId = params.project;
@@ -481,9 +358,6 @@ export function createNavigationService({
       state.currentConversationId = params.chatId;
     }
 
-    // Notification removed (initial navigation state)
-
-    // Notify ready
     emitNavigationEvent('ready', {
       currentProjectId: state.currentProjectId,
       currentConversationId: state.currentConversationId
@@ -492,21 +366,14 @@ export function createNavigationService({
     return true;
   }
 
-  /**
-   * Clean up event listeners and state
-   */
   function cleanup() {
-    // Clean up event listeners
     eventHandlers.cleanupListeners({ context: MODULE_CONTEXT });
-
-    // Clear state
     state.registeredViews.clear();
     state.transitionListeners.length = 0;
     state.navigationStack.length = 0;
     state.viewParams.clear();
   }
 
-  // === Public API ===
   return {
     // Core navigation
     navigateTo,
@@ -517,6 +384,7 @@ export function createNavigationService({
 
     // View management
     registerView,
+    hasView,
 
     // URL management
     updateUrlParams,
@@ -524,7 +392,6 @@ export function createNavigationService({
 
     // State access
     getCurrentView: () => state.currentView,
-    hasView,
     getCurrentProjectId: () => state.currentProjectId,
     getCurrentConversationId: () => state.currentConversationId,
     isNavigating: () => state.navigationInProgress,
@@ -534,14 +401,14 @@ export function createNavigationService({
 
     // Initialization & cleanup
     init,
+    cleanup,
 
-    /* consolidated navigation helpers */
-    getLocationSearch : getLocationSearch,
-    getCurrentHref    : getCurrentHref,
-    getCurrentPathname: getCurrentPathname,
+    // Consolidated navigation helpers
+    getLocationSearch,
+    getCurrentHref,
+    getCurrentPathname,
     pushState,
     replaceState,
-    navAPI,           // ← for modules that still DI-expect navAPI
-    cleanup
+    navAPI
   };
 }

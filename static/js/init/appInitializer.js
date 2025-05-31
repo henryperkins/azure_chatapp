@@ -1142,6 +1142,22 @@ if (handlers?.dispatchEvent) {
                     context: 'coreInit'
                 });
 
+                // Immediately initialize KnowledgeBaseComponent so it can dispatch its ready event.
+                // Use visibility false, no data, no projectId, for safe boot.
+                if (typeof knowledgeBaseComponentInstance.initialize === 'function') {
+                    // Defensive: initialize with "not visible" and no kbData, which is safe.
+                    knowledgeBaseComponentInstance.initialize(false, null, null)
+                        .then(() =>
+                            logger.debug('[coreInit] KnowledgeBaseComponent initial hidden initialization complete.', {
+                                context: 'coreInit'
+                            })
+                        )
+                        .catch(err =>
+                            logger.error('[coreInit] KnowledgeBaseComponent initial hidden initialization failed',
+                                err, { context: 'coreInit' })
+                        );
+                }
+
                 // Connect the KnowledgeBaseComponent to the ProjectDetailsComponent
                 if (projectDetailsComp && typeof projectDetailsComp.setKnowledgeBaseComponent === 'function') {
                     projectDetailsComp.setKnowledgeBaseComponent(knowledgeBaseComponentInstance);

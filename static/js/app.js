@@ -35,7 +35,7 @@ import { createKnowledgeBaseComponent } from './knowledgeBaseComponent.js';
 import { createProjectDetailsEnhancements } from './project-details-enhancements.js';
 import { createTokenStatsManager } from './tokenStatsManager.js';
 import { createModalManager } from './modalManager.js';
-import { createAuth } from './auth.js';
+import { createAuthModule } from './auth.js';
 import { createProjectManager } from './projectManager.js';
 import { createModelConfig } from './modelConfig.js';
 import { createProjectDashboard } from './projectDashboard.js';
@@ -83,7 +83,7 @@ const appInit = createAppInitializer({
   createProjectDetailsEnhancements,
   createTokenStatsManager,
   createModalManager,
-  createAuth,
+  createAuthModule,
   createProjectManager,
   createModelConfig,
   createProjectDashboard,

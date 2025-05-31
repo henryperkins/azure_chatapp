@@ -305,7 +305,7 @@ export function createDomReadinessService({
 
         resolve(found);
       }
-    }, 100);
+    }, 500);
   }
 
   /**
@@ -557,6 +557,24 @@ export function createDomReadinessService({
         new Error(`[domReadinessService] Invalid event name: ${eventName}`)
       );
     }
+
+    // == STICKY STATE PATCH: if "app:ready", resolve immediately using sticky readiness flag ==
+    if (
+      eventName === 'app:ready' &&
+      ((typeof window !== 'undefined' && window.app?.state?.ready) ||
+       (typeof globalThis !== 'undefined' && globalThis.app?.state?.ready))
+    ) {
+      _logger.info?.('[domReadinessService] Sticky readiness flag detected (`window.app.state.ready === true`), resolving waitForEvent("app:ready") immediately', { context });
+      try {
+        const detail = (window?.app?.state) || { ready: true };
+        const syntheticEvt = eventHandlers.createCustomEvent('app:ready', { detail });
+        return Promise.resolve(syntheticEvt);
+      } catch (e) {
+        _logger.warn?.('[domReadinessService] Could not synthesize "app:ready" event from sticky readiness. Falling back to regular wait.', { context });
+        // fall through to regular code if event construction fails
+      }
+    }
+    // == END PATCH ==
 
     // Check if event was already fired (replay capability)
     if (firedEvents.has(eventName)) {
