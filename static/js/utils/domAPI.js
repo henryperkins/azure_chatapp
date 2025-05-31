@@ -37,7 +37,6 @@ export function createDomAPI({
 
   // unified warn/error sink (no direct console)
   let _logger = logger || { warn: () => { }, error: () => { } };
-  const logger = _logger;          // alias for rule-12 scanner
 
   /* allow late upgrade when real logger is ready */
   function setLogger(newLogger) { if (newLogger) _logger = newLogger; }

@@ -55,7 +55,6 @@ export const normalizeUrl = normaliseUrl;
 
 export function createBrowserService({ windowObject, logger } = {}) {
   let _logger = logger;
-  const logger = _logger;          // alias for rule-12 scanner
 
   _moduleLogger = _logger;
 

@@ -241,23 +241,32 @@ export function createKnowledgeBaseComponent(options = {}) {
     }
 
     async initialize(isVisible, kbData = null, projectId = null) {
-      // Build selector list and keep only existing elements to avoid
-      // false time-outs when the mobile template omits some IDs
-      const allSelectors = Object.values(this.elementSelectors)
-        .filter(Boolean)
-        .map(sel => (sel.startsWith('#') || sel.startsWith('.')) ? sel : `#${sel}`);
+      // Build selector list excluding optional search/UI selectors so
+      // domReadinessService does not wait for elements that may not be
+      // present in certain templates (e.g., mobile view without KB search).
+      const OPTIONAL_KEYS = new Set([
+        'searchInput', 'searchButton',
+        'resultsContainer', 'resultsSection',
+        'noResultsSection', 'topKSelect',
+        'resultModal', 'resultTitle', 'resultSource',
+        'resultScore', 'resultContent', 'useInChatBtn'
+      ]);
 
-      const presentSelectors = allSelectors.filter(sel => this.domAPI.querySelector(sel));
+      const requiredSelectors = Object.entries(this.elementSelectors)
+        .filter(([key]) => !OPTIONAL_KEYS.has(key))
+        .map(([, sel]) =>
+          (sel.startsWith('#') || sel.startsWith('.')) ? sel : `#${sel}`
+        );
 
-      // Always ensure the main container participates
-      if (this.domAPI.querySelector('#knowledgeTab') && !presentSelectors.includes('#knowledgeTab')) {
-        presentSelectors.push('#knowledgeTab');
+      // Always ensure the root KB container participates in readiness check
+      if (!requiredSelectors.includes('#knowledgeTab')) {
+        requiredSelectors.push('#knowledgeTab');
       }
 
       this.logger.info(`[${MODULE}] Initializing. Received isVisible: ${isVisible}, kbData ID: ${kbData?.id}, projectId: ${projectId}`, { context: MODULE });
 
       await this.domReadinessService.dependenciesAndElements({
-        domSelectors: presentSelectors,
+        domSelectors: requiredSelectors,
         deps: ['auth', 'AppBus'], // Ensure auth and AppBus are ready for listeners
         context: MODULE + '::initializeDOM',
         timeout: this.app?.APP_CONFIG?.TIMEOUTS?.COMPONENT_ELEMENTS_READY ?? 8000,
@@ -280,13 +289,30 @@ export function createKnowledgeBaseComponent(options = {}) {
       }
 
       const auth = this.DependencySystem.modules.get('auth');
-      if (auth && !auth.isReady()) {
-        this.logger.info(`[${MODULE}] Auth module not ready yet, waiting for authReady event.`, { context: MODULE });
-        await new Promise(resolve => {
-          this.eventHandlers.trackListener(auth.AuthBus, 'authReady', () => {
-            this.logger.info(`[${MODULE}] Received authReady event during init.`, { context: MODULE });
-            resolve();
-          }, { once: true, context: MODULE, description: 'KB_Init_AuthReady' });
+      const authIsReady =
+        typeof auth?.isReady === 'function'
+          ? auth.isReady()
+          : this.app?.state?.isReady === true;
+      if (!authIsReady) {
+        this.logger.info(
+          `[${MODULE}] Auth module not ready yet, waiting for authReady event.`,
+          { context: MODULE }
+        );
+        await new Promise((resolve) => {
+          // Prefer AuthBus, but fall back to document-level event for safety
+          const readyTarget = auth?.AuthBus || this.domAPI.getDocument();
+          this.eventHandlers.trackListener(
+            readyTarget,
+            'authReady',
+            () => {
+              this.logger.info(
+                `[${MODULE}] Received authReady event during init.`,
+                { context: MODULE }
+              );
+              resolve();
+            },
+            { once: true, context: MODULE, description: 'KB_Init_AuthReady' }
+          );
         });
       }
       this.logger.info(`[${MODULE}] Auth module is now ready. App authenticated: ${this.app.state.isAuthenticated}`, { context: MODULE });

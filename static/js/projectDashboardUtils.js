@@ -41,7 +41,7 @@ function _resolveDependencies(opts) {
 }
 
 
-function createUIUtils({ eventHandlers, sanitizer, domAPI }) {
+function createUIUtils({ eventHandlers, _sanitizer, domAPI, gUtils }) {
   return {
     createElement: (...a) =>
       gUtils.createElement(...a, eventHandlers.trackListener, domAPI)
@@ -149,8 +149,9 @@ export function createProjectDashboardUtils(options = {}) {
   return {
     UIUtils: createUIUtils({
       eventHandlers,
-      sanitizer,
-      domAPI
+      _sanitizer: sanitizer,
+      domAPI,
+      gUtils
     }),
 
     init: function () {
@@ -172,7 +173,7 @@ export function createProjectDashboardUtils(options = {}) {
             domAPI.dispatchEvent(eDoc, new CustomEvent('projectdashboardutils:initialized', { detail: { success: true } }));
           }
         }
-      } catch(error) {
+      } catch (error) {
         logger && logger.error('Error in ProjectDashboardUtils.init', error, { context: 'ProjectDashboardUtils:init' });
       }
       return this;

@@ -69,13 +69,19 @@ def init_telemetry(
     else:
         release = f"{app_name}+{git_sha}"
 
+    # Get SQLAlchemy setting from environment/config
+    # Import settings here to ensure it's loaded after .env might be processed
+    from config import settings as app_settings
+
+    enable_sqlalchemy_setting = app_settings.SENTRY_SQLA_ASYNC_ENABLED
+
     configure_sentry(
         dsn=sentry_dsn,
         environment=environment,
         release=release,
         traces_sample_rate=traces_sample_rate,
         profiles_sample_rate=profiles_sample_rate,
-        enable_sqlalchemy=False,  # Keep disabled for async safety
+        enable_sqlalchemy=enable_sqlalchemy_setting,  # Use the loaded setting
     )
 
     logger.info(

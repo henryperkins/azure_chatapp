@@ -3,11 +3,7 @@
  * selectorConstants.js
  * Centralized selectors for critical DOM elements used across the application.
  */
-export function createSelectorConstants () {
-  return { SELECTORS, ELEMENT_SELECTORS, cleanup () {} };
-}
-
-const SELECTORS = {
+export const SELECTORS = {
   // Project List View
   projectListView: '#projectListView',
   projectListContainer: '#projectListContainer',
@@ -65,12 +61,15 @@ const SELECTORS = {
   knowledgeBaseFilesListContainer: '#knowledgeBaseFilesListContainer',
   knowledgeBaseSettingsModal: '#knowledgeBaseSettingsModal',
   knowledgeBaseForm: '#knowledgeBaseForm',
-  modelSelect: '#modelSelect',
   cancelKnowledgeBaseFormBtn: '#cancelKnowledgeBaseFormBtn',
   deleteKnowledgeBaseBtn: '#deleteKnowledgeBaseBtn'
 };
 
-const ELEMENT_SELECTORS = {
+export function createSelectorConstants () {
+  return { SELECTORS, ELEMENT_SELECTORS, cleanup () {} };
+}
+
+export const ELEMENT_SELECTORS = {
   // Knowledge Base Component specific selectors
   KB: {
     container: 'knowledgeTab',
@@ -81,6 +80,7 @@ const ELEMENT_SELECTORS = {
     docCount: 'kbDocCount',
     chunkCount: 'kbChunkCount',
     modelDisplay: 'kbModelDisplay',
+    modelSelect: 'modelSelect',
     baseName: 'knowledgeBaseName',
     versionDisplay: 'kbVersionDisplay',
     lastUsedDisplay: 'kbLastUsedDisplay',
@@ -92,7 +92,6 @@ const ELEMENT_SELECTORS = {
     filesListContainer: 'knowledgeBaseFilesListContainer',
     settingsModal: 'knowledgeBaseSettingsModal',
     settingsForm: 'knowledgeBaseForm',
-    modelSelect: 'modelSelect',
     cancelSettingsBtn: 'cancelKnowledgeBaseFormBtn',
     deleteBtn: 'deleteKnowledgeBaseBtn'
   },

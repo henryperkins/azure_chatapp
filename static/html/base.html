@@ -211,6 +211,54 @@
     };
     window.DependencySystem = DependencySystem;
   </script>
+
+  <!-- Sentry SDK for Frontend -->
+  <script src="https://browser.sentry-cdn.com/7.100.0/bundle.tracing.replay.min.js"
+    crossorigin="anonymous"></script>
+  <script>
+    // Ensure this DSN is for your Sentry FRONTEND project
+    // You should replace this placeholder with your actual frontend DSN.
+    // It can be the same as your backend DSN if you don't have a separate frontend project in Sentry.
+    const sentryFrontendDsn = "https://b03711f63d1160f48dcaeda3edae14ac@o4508070823395328.ingest.us.sentry.io/4509138383863808";
+
+    // Get build-time values via injected global, fallback to window vars if available
+    // This allows server to inject unique release/version/build at deploy time
+    const sentryFrontendRelease =
+      window.__SENTRY_RELEASE__ ||
+      (typeof APP_NAME !== "undefined" && typeof APP_VERSION !== "undefined" && typeof GIT_SHA !== "undefined"
+        ? `${APP_NAME}@${APP_VERSION}+${GIT_SHA}`
+        : "azure_chatapp@1.0.0+dev");
+    const sentryFrontendEnv =
+      window.__SENTRY_ENV__ ||
+      (typeof ENVIRONMENT !== "undefined" ? ENVIRONMENT : "production");
+
+    if (sentryFrontendDsn) {
+      Sentry.init({
+        dsn: sentryFrontendDsn,
+        integrations: [
+          Sentry.browserTracingIntegration(),
+          Sentry.replayIntegration({
+            maskAllText: true,       // Mask all text by default (privacy)
+            blockAllMedia: true,     // Block screen recording of images/videos for privacy
+          }),
+        ],
+        tracesSampleRate: 0.1,        // Lower default sample for production safety
+        replaysSessionSampleRate: 0.02,
+        replaysOnErrorSampleRate: 1.0,
+        release: sentryFrontendRelease,
+        environment: sentryFrontendEnv,
+        attachStacktrace: true,
+        sendDefaultPii: false,
+      });
+      console.log("Sentry Frontend SDK initialized", {
+        dsn: sentryFrontendDsn,
+        env: sentryFrontendEnv,
+        release: sentryFrontendRelease
+      });
+    } else {
+      console.warn("Sentry DSN for frontend not configured. Sentry will not be initialized.");
+    }
+  </script>
 </head>
 
 <body class="bg-base-200 text-base-content min-h-screen mobile-safe flex flex-col font-sans">

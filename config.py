@@ -19,14 +19,8 @@ NEVER use the insecure defaults in production!
 """
 
 import os
-from dotenv import load_dotenv
 from typing import Any
-from pathlib import Path
 from urllib.parse import quote_plus
-
-env_path = Path(__file__).resolve().parent / ".env"
-load_dotenv(dotenv_path=env_path, override=True)
-
 
 VECTOR_DB_STORAGE_PATH = "./storage/vector_db"
 
@@ -51,7 +45,9 @@ class Settings:
 
     # Client logging configuration
     CLIENT_LOG_FILE = os.getenv("CLIENT_LOG_FILE", "")  # Empty string = no file logging
-    CLIENT_ERROR_DEDUP_TTL = int(os.getenv("CLIENT_ERROR_DEDUP_TTL", "300"))  # 5 minutes
+    CLIENT_ERROR_DEDUP_TTL = int(
+        os.getenv("CLIENT_ERROR_DEDUP_TTL", "300")
+    )  # 5 minutes
     CLIENT_MAX_BATCH_SIZE = int(os.getenv("CLIENT_MAX_BATCH_SIZE", "100"))
 
     # Debug/Environment
@@ -60,7 +56,11 @@ class Settings:
 
     # Sentry Configuration (still optional in debug)
     SENTRY_DSN = os.getenv("SENTRY_DSN", "")
-    SENTRY_ENABLED = os.getenv("SENTRY_ENABLED", "False").lower() == "true"
+    SENTRY_ENABLED = os.getenv("SENTRY_ENABLED", "False").lower() in {
+        "true",
+        "1",
+        "yes",
+    }
     SENTRY_TRACES_SAMPLE_RATE = float(
         os.getenv("SENTRY_TRACES_SAMPLE_RATE", "1.0")
     )  # high for debug
