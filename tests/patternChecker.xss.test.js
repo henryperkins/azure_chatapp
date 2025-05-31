@@ -10,9 +10,9 @@ const script = path.resolve('scripts/patternChecker.cjs');
 function run(file) {
   try {
     // Capture stdout; only interested in exit code for "safe" cases,
-    // but for "unsafe" we also check for rule 9 mention in output.
-    // Use the --rule=9 flag to only check XSS rule
-    const out = execSync(`node ${script} --rule=9 ${file}`, { encoding: 'utf8', stdio: 'pipe' });
+    // but for "unsafe" we also check for rule 6 (XSS guardrail) mention in output.
+    // Use the --rule=6 flag to only check XSS rule
+    const out = execSync(`node ${script} --rule=6 ${file}`, { encoding: 'utf8', stdio: 'pipe' });
     return { code: 0, stdout: out };
   } catch (err) {
     return {
