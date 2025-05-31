@@ -14,6 +14,7 @@
  */
 
 import { SELECTORS } from "./utils/selectorConstants.js";
+import { getSafeHandler } from './utils/getSafeHandler.js';
 
 export function createProjectDashboard({
   DependencySystem,
@@ -82,6 +83,9 @@ export function createProjectDashboard({
       this.sanitizer = sanitizer;
       this.dashboardBus = dashboardBus;
 
+      // Canonical safeHandler for this instance
+      const safeHandler = getSafeHandler(DependencySystem);
+
       // Modules retrieved from dependencySystem
       this.getModule = (key) => {
         const module = this.dependencySystem.modules.get(key);
@@ -116,7 +120,6 @@ export function createProjectDashboard({
         currentView: null,
         _aborted: false
       };
-      this._viewsRegistered = false;
       this._unsubs = [];
 
       this._authBusBound = false;      // orchestration will bind once
@@ -154,11 +157,8 @@ export function createProjectDashboard({
     /**
      * Utility: wrap any event handler using canonical safeHandler from DI
      */
-    _wrapHandler(handlerFn, description) {
-      const safeHandler = DependencySystem.modules.get('safeHandler');
-      if (!safeHandler) throw new Error('safeHandler missing from DependencySystem');
-
-      return safeHandler(handlerFn, `ProjectDashboard:${description}`);
+    _wrapHandler(fn, desc) {
+      return safeHandler(fn, `ProjectDashboard:${desc}`);
     }
 
     /**
@@ -182,7 +182,6 @@ export function createProjectDashboard({
           this._authBusBound = true;
         }
       }
-      if (!this._viewsRegistered) this._ensureNavigationViews();
 
       // Defer template-dependent init until 'ui:templates:ready' event.
       const initStartTime = Date.now();
@@ -756,60 +755,6 @@ export function createProjectDashboard({
       })();
     }
 
-    /**
-     * Ensure main views are at least stub-registered.
-     */
-    _ensureNavigationViews() {
-      if (this._viewsRegistered || !this.navigationService?.registerView) return;
-      try {
-        this.navigationService.registerView('projectList', {
-          show: async () => {                       // delegate to real logic
-            try { await this.showProjectList(); } catch {
-              // Ignore navigation failures to keep dashboard robust (view not found, etc.)
-              return false;
-            }
-            return true;
-          },
-          hide: async () => {
-            try { this.components.projectList?.hide?.(); } catch {
-              // Ignore errors during hide - likely uninitialized, no critical error
-            }
-            return true;
-          }
-        });
-      } catch (err) {
-        // ignore duplicate navigation view registration
-      }
-
-      try {
-        this.navigationService.registerView('projectDetails', {
-          show: async (params = {}) => {
-            const { projectId, activeTab, conversationId } = params;
-            if (!projectId) return false;
-            try {
-              await this.showProjectDetails(projectId);
-              if (activeTab && this.components.projectDetails?.switchTab) {
-                this.components.projectDetails.switchTab(activeTab);
-              }
-              // (optional) handle conversationId here if needed
-            } catch (err) {
-              // if initialization or nav failed, do not proceed
-              return false;
-            }
-            return true;
-          },
-          hide: async () => {
-            try { this.components.projectDetails?.hide?.(); } catch (err) {
-              // ignore errors during component hide
-            }
-            return true;
-          }
-        });
-      } catch (err) {
-        // ignore duplicate navigation view registration
-      }
-      this._viewsRegistered = true;
-    }
 
     /**
      * Register final show/hide for projectList & projectDetails.

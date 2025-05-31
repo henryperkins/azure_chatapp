@@ -40,60 +40,11 @@ function _resolveDependencies(opts) {
   };
 }
 
- // --- Centralized sanitizer helper (Guideline #6) ---
-function _safeSetInnerHTML(el, html, sanitizer, domAPI) {
-  if (!sanitizer?.sanitize) {
-    throw new Error(`[${MODULE}] sanitizer.sanitize is required for setting innerHTML`);
-  }
-  domAPI.setInnerHTML(el, sanitizer.sanitize(html));
-}
-
-// --- UI Utils helpers refactored (Guideline #2) ---
-function applyCommonProps(element, options, domAPI, sanitizer) {
-  if (options.className) element.className = options.className;
-  if (options.id) element.id = options.id;
-  if (options.textContent !== undefined) element.textContent = options.textContent;
-  if (options.innerHTML !== undefined) {
-    _safeSetInnerHTML(element, options.innerHTML, sanitizer, domAPI);
-  }
-  Object.entries(options).forEach(([key, value]) => {
-    if (key.startsWith('data-')) element.setAttribute(key, value);
-  });
-  ['title', 'alt', 'src', 'href', 'placeholder', 'type', 'value', 'name'].forEach(prop => {
-    if (options[prop] !== undefined) element[prop] = options[prop];
-  });
-  if (options.data && typeof options.data === 'object') {
-    Object.entries(options.data).forEach(([k, v]) => element.dataset[k] = v);
-  }
-}
-
-function wireEventHandlers(element, options, eventHandlers) { // Pass eventHandlers
-  const trackListener = eventHandlers?.trackListener;
-  if (!trackListener) return; // Cannot wire without trackListener
-  Object.entries(options).forEach(([key, handler]) => {
-    if (key.startsWith('on') && typeof handler === 'function') {
-      const eventType = key.slice(2).toLowerCase();
-      trackListener(element, eventType, handler, {
-        description: `UIUtils createElement event (${eventType})`,
-        module: MODULE,
-        context: 'uiUtils'
-      });
-    }
-  });
-}
-
-function createElementAdvanced(tag, options, domAPI, sanitizer, eventHandlers) {
-  const el = domAPI.createElement(tag);
-  applyCommonProps(el, options, domAPI, sanitizer);
-  wireEventHandlers(el, options, eventHandlers);
-  return el;
-}
 
 function createUIUtils({ eventHandlers, sanitizer, domAPI }) {
   return {
-    createElement(tag, options = {}) {
-      return createElementAdvanced(tag, options, domAPI, sanitizer, eventHandlers);
-    }
+    createElement: (...a) =>
+      gUtils.createElement(...a, eventHandlers.trackListener, domAPI)
   };
 }
 
@@ -193,6 +144,7 @@ export function createProjectDashboardUtils(options = {}) {
   const logger = _getDependency(options.logger, 'logger', DependencySystem, false);
   // Only use canonical bus found via DependencySystem.modules.get('eventBus')
   const eventBus = DependencySystem?.modules?.get?.("eventBus");
+  const gUtils = DependencySystem.modules.get('globalUtils');
 
   return {
     UIUtils: createUIUtils({
