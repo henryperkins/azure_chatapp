@@ -90,32 +90,65 @@ class ClientLogService:
     async def _forward_to_sentry(
         self, entry: Any, request_context: Dict[str, Any]
     ) -> None:
-        """Forward error logs to Sentry"""
+        """Forward error logs from client to Sentry with enhanced context."""
         try:
             with sentry_sdk.push_scope() as scope:
-                scope.set_tag("source", "client")
-                scope.set_tag("client_context", entry.context)
+                scope.set_tag("source", "client_log_service")  # Differentiate from direct client Sentry
+                scope.set_tag("client_context", getattr(entry, "context", None))
 
-                if entry.sessionId:
-                    scope.set_tag("session_id", entry.sessionId)
+                # Add more granular tags/ids if present
+                if hasattr(entry, "sessionId") and entry.sessionId:
+                    scope.set_tag("client_session_id", entry.sessionId)
+                if hasattr(entry, "traceId") and entry.traceId:
+                    scope.set_tag("client_trace_id", entry.traceId)
 
+                # User context from the request, not the client (privacy)
                 if request_context.get("user_id"):
-                    scope.set_user({"id": request_context["user_id"]})
+                    scope.set_user({
+                        "id": request_context["user_id"],
+                        "ip_address": request_context.get("client_ip")
+                    })
+                elif request_context.get("client_ip"):
+                    scope.set_user({"ip_address": request_context.get("client_ip")})
 
-                # Add breadcrumb for context
+                # Add client metadata as extra fields/tags (prefix to avoid collisions)
+                if hasattr(entry, "metadata") and entry.metadata:
+                    scope.set_extra("client_metadata", entry.metadata)
+                # Add entire request context as extra for traceability
+                scope.set_extra("log_upload_context", request_context)
+
+                # Create more structured Sentry events for error logs with data payloads
+                sentry_event_level = getattr(entry, "level", "error").lower() if hasattr(entry, "level") else "error"
+
+                # If entry.data looks like an Error object (from the browser), capture as such
+                client_data = getattr(entry, "data", None)
+                if isinstance(client_data, dict) and (
+                    "name" in client_data or "stack" in client_data
+                ):
+                    # Optionally: synthesize a "synthetic exception" if stack/message present
+                    sentry_sdk.capture_event({
+                        "message": f"[CLIENT] {entry.message}",
+                        "level": sentry_event_level,
+                        "extra": {
+                            "client_error_details": client_data,
+                            "original_client_log": entry.dict(exclude_none=True)
+                        }
+                    })
+                else:
+                    sentry_sdk.capture_message(
+                        f"[CLIENT] {entry.message}",
+                        level=sentry_event_level
+                    )
+
+                # Always add a breadcrumb for the client log
                 sentry_sdk.add_breadcrumb(
-                    category="client",
+                    category="client_log",
                     message=entry.message,
-                    level=entry.level,
-                    data=entry.data or {},
-                )
-
-                # Capture as message
-                sentry_sdk.capture_message(
-                    f"[CLIENT] {entry.message}", level=entry.level
+                    level=sentry_event_level,
+                    data=getattr(entry, "metadata", {}) or {},
                 )
         except Exception as e:
-            logger.error(f"Failed to forward to Sentry: {e}")
+            logger.error(f"Failed to forward client log to Sentry: {e}", exc_info=True)
 
     async def _write_to_file(self, entry: Any, request_context: Dict[str, Any]) -> None:
         """Write log entry to file"""

@@ -1040,6 +1040,7 @@ if (handlers?.dispatchEvent) {
             // Phase 3.4: ProjectDetailsComponent (partial)
             const projectDetailsComp = makeProjectDetailsComponent({
                 projectManager: null, // set later
+                DependencySystem,
                 eventHandlers,
                 modalManager,
                 FileUploadComponentClass: createFileUploadComponent,

@@ -28,6 +28,18 @@ Key Integration Points:
 """
 
 import os
+from dotenv import load_dotenv
+
+# Load .env file at the VERY beginning
+# This ensures all environment variables are set before any other module (like config or utils)
+# tries to access them.
+env_path = os.path.join(os.path.dirname(__file__), ".env")  # More robust path
+if os.path.exists(env_path):
+    load_dotenv(dotenv_path=env_path, override=True)
+else:
+    # Optionally log if .env is not found, or handle as needed
+    print(f"Warning: .env file not found at {env_path}")
+
 import logging
 from typing import Dict, Any
 
@@ -39,21 +51,21 @@ from starlette.middleware.sessions import SessionMiddleware
 from fastapi.routing import APIRoute
 
 # Initialize telemetry (logging + Sentry) FIRST - must be at module level before any other logging
+from config import settings  # Now settings will use already loaded env vars
 from utils.bootstrap import init_telemetry
 
-APP_NAME = os.getenv("APP_NAME", "Insecure Debug App")
-APP_VERSION = os.getenv("APP_VERSION", "unknown")
-ENVIRONMENT = os.getenv("ENVIRONMENT", "development")  # Default to dev
+# APP_NAME, APP_VERSION, ENVIRONMENT are now preferably accessed via settings
+# or directly via os.getenv if init_telemetry needs them before settings object is fully ready
+# However, utils.bootstrap.py already falls back to os.getenv for these if not provided.
 
-# Initialize all telemetry systems
 init_telemetry(
-    app_name=APP_NAME,
-    app_version=APP_VERSION,
-    environment=ENVIRONMENT
+    app_name=settings.APP_NAME,
+    app_version=settings.APP_VERSION,
+    environment=settings.ENV,  # Use settings.ENV
+    sentry_dsn=settings.SENTRY_DSN,
 )
 
-# Import config after telemetry setup
-from config import settings  # noqa: E402
+# Import config after telemetry setup - this line is fine, but config itself shouldn't load_dotenv
 from db import init_db, get_async_session_context  # noqa: E402
 from utils.auth_utils import clean_expired_tokens  # noqa: E402
 from utils.db_utils import schedule_token_cleanup  # noqa: E402
@@ -115,6 +127,7 @@ def setup_middlewares_insecure(app: FastAPI) -> None:
             if sval.startswith("[") and sval.endswith("]"):
                 try:
                     import json
+
                     items = json.loads(sval)
                     if isinstance(items, list):
                         return [str(o).strip() for o in items if str(o).strip()]
@@ -231,8 +244,8 @@ for logname in ("uvicorn.access", "", "notification_system"):
 
 # Create app with docs always enabled (even in "production" - insecure for debug)
 app = FastAPI(
-    title=APP_NAME,
-    version=APP_VERSION,
+    title=settings.APP_NAME,
+    version=settings.APP_VERSION,
     description="INSECURE/DEBUG API",
     docs_url="/docs",
     redoc_url="/redoc",
@@ -253,7 +266,9 @@ async def on_startup():
         await init_db()
         await create_default_user()  # Insecure default user creation
         await schedule_token_cleanup(interval_minutes=30)
-        logger.info(f"{APP_NAME} v{APP_VERSION} started in debug mode.")
+        logger.info(
+            f"{settings.APP_NAME} v{settings.APP_VERSION} started in debug mode."
+        )
         DB_AVAILABLE = True
     except Exception as exc:
         logger.critical(f"Startup failed: {exc}", exc_info=True)
@@ -343,9 +358,9 @@ async def health_check() -> Dict[str, Any]:
     return {
         "status": "healthy (INSECURE DEBUG)",
         "db_available": DB_AVAILABLE,
-        "environment": ENVIRONMENT,
-        "app_name": APP_NAME,
-        "version": APP_VERSION,
+        "environment": settings.ENV,
+        "app_name": settings.APP_NAME,
+        "version": settings.APP_VERSION,
     }
 
 

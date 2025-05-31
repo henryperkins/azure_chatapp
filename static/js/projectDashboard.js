@@ -84,7 +84,9 @@ export function createProjectDashboard({
       this.dashboardBus = dashboardBus;
 
       // Canonical safeHandler for this instance
-      const safeHandler = getSafeHandler(DependencySystem);
+      const _safeHandler = getSafeHandler(DependencySystem);
+      // Patch for legacy no-undef usage in event attachment
+      this.safeHandler = _safeHandler;
 
       // Modules retrieved from dependencySystem
       this.getModule = (key) => {
@@ -158,7 +160,7 @@ export function createProjectDashboard({
      * Utility: wrap any event handler using canonical safeHandler from DI
      */
     _wrapHandler(fn, desc) {
-      return safeHandler(fn, `ProjectDashboard:${desc}`);
+      return this.safeHandler(fn, `ProjectDashboard:${desc}`);
     }
 
     /**

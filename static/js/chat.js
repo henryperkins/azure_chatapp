@@ -52,7 +52,8 @@ export function createChatManager(deps = {}) {
     domReadinessService,
     logger,
     DependencySystem,
-    APP_CONFIG                // ← NEW (DI)
+    APP_CONFIG,               // ← NEW (DI)
+    browserService            // ← Must be injected and used as this.browserService
   } = deps;
 
   // Dependency-injected global replacements with defaults
@@ -210,6 +211,7 @@ export function createChatManager(deps = {}) {
       this._uiAttached = false;
       this.APP_CONFIG = APP_CONFIG;
       this._appEventListenersAttached = false; // Flag to ensure app/auth listeners are attached once
+      this.browserService = browserService;    // Store browserService in the instance
     }
 
 
@@ -667,7 +669,7 @@ export function createChatManager(deps = {}) {
               });
             }
           }
-          browserService.setSearchParam('chatId', conversationId);
+          this.browserService.setSearchParam('chatId', conversationId);
 
           // Update token stats for loaded conversation
           const tokenStatsManager = this.DependencySystem?.modules?.get('tokenStatsManager');
@@ -795,7 +797,7 @@ export function createChatManager(deps = {}) {
         if (this.titleElement) {
           this.titleElement.textContent = conversation.title || "New Conversation";
         }
-        browserService.setSearchParam('chatId', convId);
+        this.browserService.setSearchParam('chatId', convId);
 
         const event = new CustomEvent('chat:conversationCreated', {
           detail: {
@@ -1032,7 +1034,7 @@ export function createChatManager(deps = {}) {
         );
         this.currentConversationId = null;
         this._clearMessages();
-        browserService.removeSearchParam('chatId');
+        this.browserService.removeSearchParam('chatId');
         return true;
       } catch (error) {
         logger.error("[ChatManager][deleting conversation]", error, { context: "chatManager" });
@@ -1066,7 +1068,7 @@ export function createChatManager(deps = {}) {
         if (loadedSuccessfully) {
           return;
         }
-        browserService.removeSearchParam('chatId');
+          this.browserService.removeSearchParam('chatId');
       }
 
       try {
@@ -1077,7 +1079,7 @@ export function createChatManager(deps = {}) {
           this.currentConversationId = conversations[0].id;
           if (this.titleElement) this.titleElement.textContent = conversations[0].title || "Conversation";
           await this._loadMessages(this.currentConversationId);
-          browserService.setSearchParam('chatId', this.currentConversationId);
+          this.browserService.setSearchParam('chatId', this.currentConversationId);
         } else {
           await this.createNewConversation();
         }

@@ -61,6 +61,8 @@ export function createProjectDetailsComponent({
     apiClient,
     app,
     DependencySystem,
+    formatDate,    // pass to class instance for internal use
+    formatBytes
   });
 
   // Expose only the canonical public API for compliance (no dynamic shape)
@@ -100,41 +102,41 @@ export function createProjectDetailsComponent({
 
 class ProjectDetailsComponent {
   constructor(deps) {
-      this.domAPI = deps.domAPI;
-      this.htmlTemplateLoader = deps.htmlTemplateLoader;
-      this.domReadinessService = deps.domReadinessService;
-      this.eventHandlers = deps.eventHandlers;
-      this.navigationService = deps.navigationService;
-      this.sanitizer = deps.sanitizer;
-      this.logger = deps.logger;
-      this.projectManager = deps.projectManager;
-      this.APP_CONFIG = deps.APP_CONFIG || {};
-      this.modalManager = deps.modalManager;
-      this.FileUploadComponentClass = deps.FileUploadComponentClass;
-      this.knowledgeBaseComponent = deps.knowledgeBaseComponent;
-      this.app = deps.app || this.eventHandlers.DependencySystem?.modules?.get('appModule');
-      this.modelConfig = deps.modelConfig;
-      this.chatManager = deps.chatManager;
-      this.apiClient = deps.apiClient;
-      this.containerId = "projectDetailsView";
-      this.templatePath = "/static/html/project_details.html";
-      this.state = {
-          templateLoaded: false,
-          loading: false,
-          activeTab: "chat",
-          projectDataLoaded: false
-      };
-      this.projectId = null;
-      this.projectData = null;
-      this.listenersContext = MODULE_CONTEXT + "_listeners";
-      this.bus = new EventTarget();
-      this.fileUploadComponent = null;
-      this.elements = {};
-      this.auth = this.eventHandlers.DependencySystem?.modules?.get("auth");
-      // Canonical safeHandler accessor (single source of truth)
-      this.safeHandler = getSafeHandler(this.DependencySystem);
-      // Track single KBC bootstrap log/noise
-      this._kbcFirstWarned = false;
+    this.domAPI = deps.domAPI;
+    this.htmlTemplateLoader = deps.htmlTemplateLoader;
+    this.domReadinessService = deps.domReadinessService;
+    this.eventHandlers = deps.eventHandlers;
+    this.navigationService = deps.navigationService;
+    this.sanitizer = deps.sanitizer;
+    this.logger = deps.logger;
+    this.projectManager = deps.projectManager;
+    this.APP_CONFIG = deps.APP_CONFIG || {};
+    this.modalManager = deps.modalManager;
+    this.FileUploadComponentClass = deps.FileUploadComponentClass;
+    this.knowledgeBaseComponent = deps.knowledgeBaseComponent;
+    this.app = deps.app || this.eventHandlers.DependencySystem?.modules?.get('appModule');
+    this.modelConfig = deps.modelConfig;
+    this.chatManager = deps.chatManager;
+    this.apiClient = deps.apiClient;
+    this.containerId = "projectDetailsView";
+    this.templatePath = "/static/html/project_details.html";
+    this.state = {
+      templateLoaded: false,
+      loading: false,
+      activeTab: "chat",
+      projectDataLoaded: false
+    };
+    this.projectId = null;
+    this.projectData = null;
+    this.listenersContext = MODULE_CONTEXT + "_listeners";
+    this.bus = new EventTarget();
+    this.fileUploadComponent = null;
+    this.elements = {};
+    this.auth = this.eventHandlers.DependencySystem?.modules?.get("auth");
+    // Canonical safeHandler accessor (single source of truth)
+    this.safeHandler = getSafeHandler(this.DependencySystem);
+    // Track single KBC bootstrap log/noise
+    this._kbcFirstWarned = false;
   }
 
   setProjectManager(pm) {
@@ -502,24 +504,24 @@ class ProjectDetailsComponent {
   _renderProjectData() {
     if (!this.elements.container || !this.projectData) return;
     const { name, description, goals, customInstructions, created_at } = this.projectData;
-    if (this.elements.title) this.elements.title.textContent = sanitizer.sanitize(name || "Untitled Project");
+    if (this.elements.title) this.elements.title.textContent = this.sanitizer.sanitize(name || "Untitled Project");
     if (this.elements.projectNameDisplay) {
-      this.elements.projectNameDisplay.textContent = sanitizer.sanitize(name || "Untitled Project");
+      this.elements.projectNameDisplay.textContent = this.sanitizer.sanitize(name || "Untitled Project");
     }
     if (this.elements.projectDescriptionDisplay) {
       this.domAPI.setInnerHTML(this.elements.projectDescriptionDisplay,
-        sanitizer.sanitize(description || "No description provided."));
+        this.sanitizer.sanitize(description || "No description provided."));
     }
     if (this.elements.projectGoalsDisplay) {
       this.domAPI.setInnerHTML(this.elements.projectGoalsDisplay,
-        sanitizer.sanitize(goals || "No goals specified."));
+        this.sanitizer.sanitize(goals || "No goals specified."));
     }
     if (this.elements.projectInstructionsDisplay) {
       this.domAPI.setInnerHTML(this.elements.projectInstructionsDisplay,
-        sanitizer.sanitize(customInstructions || "No custom instructions."));
+        this.sanitizer.sanitize(customInstructions || "No custom instructions."));
     }
     if (this.elements.projectCreatedDate && created_at) {
-      this.elements.projectCreatedDate.textContent = sanitizer.sanitize(formatDate(created_at));
+      this.elements.projectCreatedDate.textContent = this.sanitizer.sanitize(this.formatDate(created_at));
     }
   }
 
@@ -551,9 +553,9 @@ class ProjectDetailsComponent {
       <div class="flex items-center gap-3 min-w-0 flex-1">
         <span class="text-xl text-primary">📄</span>
         <div class="flex flex-col min-w-0 flex-1">
-          <div class="font-medium truncate" title="${sanitizer.sanitize(file.filename)}">${sanitizer.sanitize(file.filename)}</div>
+          <div class="font-medium truncate" title="${this.sanitizer.sanitize(file.filename)}">${this.sanitizer.sanitize(file.filename)}</div>
           <div class="text-xs text-base-content/70">
-            ${sanitizer.sanitize(formatBytes(file.file_size))} · ${sanitizer.sanitize(formatDate(file.created_at))}
+            ${this.sanitizer.sanitize(this.formatBytes(file.file_size))} · ${this.sanitizer.sanitize(this.formatDate(file.created_at))}
           </div>
         </div>
       </div>
@@ -583,11 +585,11 @@ class ProjectDetailsComponent {
     div.className = "conversation-item";
     div.dataset.conversationId = cv.id;
     this.domAPI.setInnerHTML(div, `
-      <h4 class="font-medium truncate mb-1">${sanitizer.sanitize(cv.title || "Untitled conversation")}</h4>
-      <p class="text-sm text-base-content/60 truncate leading-tight mt-0.5">${sanitizer.sanitize(cv.last_message || "No messages yet")}</p>
+      <h4 class="font-medium truncate mb-1">${this.sanitizer.sanitize(cv.title || "Untitled conversation")}</h4>
+      <p class="text-sm text-base-content/60 truncate leading-tight mt-0.5">${this.sanitizer.sanitize(cv.last_message || "No messages yet")}</p>
       <div class="flex justify-between mt-1 text-xs text-base-content/60">
-        <span>${sanitizer.sanitize(formatDate(cv.updated_at))}</span>
-        <span class="badge badge-ghost badge-sm">${sanitizer.sanitize(cv.message_count || 0)} msgs</span>
+        <span>${this.sanitizer.sanitize(this.formatDate(cv.updated_at))}</span>
+        <span class="badge badge-ghost badge-sm">${this.sanitizer.sanitize(cv.message_count || 0)} msgs</span>
       </div>
     `);
     // No click handler here; chatUIEnhancements handles it.
@@ -601,10 +603,10 @@ class ProjectDetailsComponent {
     div.dataset.artifactId = art.id;
     this.domAPI.setInnerHTML(div, `
       <div class="flex justify-between items-center">
-        <h4 class="font-medium truncate">${sanitizer.sanitize(art.name || "Untitled artifact")}</h4>
-        <span class="text-xs text-base-content/60">${sanitizer.sanitize(formatDate(art.created_at))}</span>
+        <h4 class="font-medium truncate">${this.sanitizer.sanitize(art.name || "Untitled artifact")}</h4>
+        <span class="text-xs text-base-content/60">${this.sanitizer.sanitize(this.formatDate(art.created_at))}</span>
       </div>
-      <p class="text-sm text-base-content/70 truncate mt-1">${sanitizer.sanitize(art.description || art.type || "No description")}</p>
+      <p class="text-sm text-base-content/70 truncate mt-1">${this.sanitizer.sanitize(art.description || art.type || "No description")}</p>
       <div class="mt-2">
         <button class="btn btn-xs btn-outline" data-action="download">Download</button>
       </div>`);
@@ -621,7 +623,7 @@ class ProjectDetailsComponent {
     if (!this.modalManager) return;
     this.modalManager.confirmAction({
       title: "Delete file",
-      message: `Delete “${sanitizer.sanitize(fileName || fileId)}” permanently?`,
+      message: `Delete “${this.sanitizer.sanitize(fileName || fileId)}” permanently?`,
       confirmText: "Delete",
       confirmClass: "btn-error",
       onConfirm: this.safeHandler(async () => {
@@ -863,26 +865,26 @@ class ProjectDetailsComponent {
       .catch(e => this._logError("Error loading stats in restoreStatsCounts", e));
   }
 
-// (No _safeTxt or _safeAttr helpers remain)
+  // (No _safeTxt or _safeAttr helpers remain)
 
   getEventBus() { return this.bus; }
 
   setKnowledgeBaseComponent(kbcInstance) {
-      this.knowledgeBaseComponent = kbcInstance;
-      this._logInfo("KnowledgeBaseComponent instance received and set.", { kbcInstance: !!kbcInstance });
-      if (this.state.activeTab === "knowledge") {
-          if (!this.knowledgeBaseComponent || typeof this.knowledgeBaseComponent.initialize !== "function") {
-              if (!this._kbcFirstWarned) {
-                  this._logWarn("KnowledgeBaseComponent instance missing or invalid after set - skipping re-initialization");
-                  this._kbcFirstWarned = true;
-              }
-          } else if (!this.projectId) {
-              this._logWarn("KnowledgeBaseComponent not initialized because projectId is not yet set (project not loaded)");
-          } else {
-              const kbData = this.projectData?.knowledge_base;
-              this.knowledgeBaseComponent.initialize(true, kbData, this.projectId)
-                  .catch(e => this._logError("Error re-initializing knowledge base component after set", e));
-          }
+    this.knowledgeBaseComponent = kbcInstance;
+    this._logInfo("KnowledgeBaseComponent instance received and set.", { kbcInstance: !!kbcInstance });
+    if (this.state.activeTab === "knowledge") {
+      if (!this.knowledgeBaseComponent || typeof this.knowledgeBaseComponent.initialize !== "function") {
+        if (!this._kbcFirstWarned) {
+          this._logWarn("KnowledgeBaseComponent instance missing or invalid after set - skipping re-initialization");
+          this._kbcFirstWarned = true;
+        }
+      } else if (!this.projectId) {
+        this._logWarn("KnowledgeBaseComponent not initialized because projectId is not yet set (project not loaded)");
+      } else {
+        const kbData = this.projectData?.knowledge_base;
+        this.knowledgeBaseComponent.initialize(true, kbData, this.projectId)
+          .catch(e => this._logError("Error re-initializing knowledge base component after set", e));
       }
+    }
   }
 }
