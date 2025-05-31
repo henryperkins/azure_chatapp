@@ -729,8 +729,25 @@ export function createKnowledgeBaseComponent(options = {}) {
    _origCleanup(...args);
  };
 
- // never expose `.state` directly
- return instance;
+ // --- never expose `.state` directly – wrap instance ------------------
+ const publicAPI = new Proxy(instance, {
+   get (t, p, r) {
+     if (p === 'state') throw new Error('[KBComponent] state is private');
+     const v = Reflect.get(t, p, r);
+     return (typeof v === 'function') ? v.bind(t) : v;
+   },
+   set (t, p, v, r) {
+     if (p === 'state') throw new Error('[KBComponent] state is read-only');
+     return Reflect.set(t, p, v, r);
+   },
+   has (t, p)                { return (p === 'state') ? false : Reflect.has(t, p); },
+   ownKeys (t)               { return Reflect.ownKeys(t).filter(k => k !== 'state'); },
+   getOwnPropertyDescriptor (t, p) {
+     return (p === 'state') ? undefined : Reflect.getOwnPropertyDescriptor(t, p);
+   }
+ });
+
+ return publicAPI;
 }
 
 export default createKnowledgeBaseComponent;
