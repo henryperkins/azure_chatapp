@@ -4,6 +4,7 @@
 /*
 // VENDOR-EXEMPT-SIZE: Core module pending refactor in Q3-25
 */
+import { getSafeHandler } from './utils/getSafeHandler.js';
 const MODULE_CONTEXT = "ProjectDetailsComponent";
 
 export function createProjectDetailsComponent({
@@ -130,11 +131,8 @@ class ProjectDetailsComponent {
       this.fileUploadComponent = null;
       this.elements = {};
       this.auth = this.eventHandlers.DependencySystem?.modules?.get("auth");
-      // Canonical safeHandler injected via DI, fallback is error.
-      this.safeHandler = this.eventHandlers?.DependencySystem?.modules?.get?.('safeHandler');
-      if (typeof this.safeHandler !== 'function') {
-          throw new Error(`[${MODULE_CONTEXT}] Missing required dependency: safeHandler`);
-      }
+      // Canonical safeHandler accessor (single source of truth)
+      this.safeHandler = getSafeHandler(this.DependencySystem);
       // Track single KBC bootstrap log/noise
       this._kbcFirstWarned = false;
   }
@@ -158,8 +156,6 @@ class ProjectDetailsComponent {
     try { this.logger.error(`[${MODULE_CONTEXT}] ${msg}`, err && err.stack ? err.stack : err, { context: MODULE_CONTEXT, ...meta }); }
     catch { throw new Error(`[${MODULE_CONTEXT}] ${msg}: ${err && err.stack ? err.stack : err}`); }
   }
-  // Canonical safeHandler injected via DI, local fallback removed.
-
   _setState(partial) { this.state = { ...this.state, ...partial }; }
 
   async _loadTemplate() {
