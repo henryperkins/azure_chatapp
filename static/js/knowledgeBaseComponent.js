@@ -151,7 +151,6 @@ export function createKnowledgeBaseComponent(options = {}) {
         activeProcesses: 0,
         lastHealthCheck: null,
         // CONSOLIDATED: No local authState - read from appModule.state
-        isInitialized: false,
       };
 
       this.formatBytes = uiUtils.formatBytes;
@@ -304,19 +303,6 @@ export function createKnowledgeBaseComponent(options = {}) {
         return;
       }
 
-      // If already initialized and just a visibility change, handle and return.
-      if (this.state.isInitialized && this.elements.container) {
-        this.logger.debug(`[${MODULE}] Already initialized. Setting visibility: ${isVisible}`, { context: MODULE });
-        this.elements.container.classList.toggle("hidden", !isVisible);
-        this.elements.container.classList.toggle("pointer-events-none", !isVisible);
-        // If becoming visible and kbData or projectId provided, refresh.
-        if (isVisible && (kbData || projectId)) {
-          await this.renderOrClear(kbData, projectId);
-        }
-        return;
-      }
-
-      this.state.isInitialized = true;
       this.logger.info(`[${MODULE}] First-time initialization logic running.`, { context: MODULE });
 
       await this.renderOrClear(kbData, projectId);
@@ -724,7 +710,6 @@ export function createKnowledgeBaseComponent(options = {}) {
       } else if (this.eventHandlers && typeof this.eventHandlers.cleanupListeners === 'function') {
         this.eventHandlers.cleanupListeners({ context: MODULE });
       }
-      this.state.isInitialized = false;
       // destroy complete
     }
   }
