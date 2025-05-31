@@ -307,6 +307,11 @@ node scripts/patternsChecker.cjs --rule=1 static/js/myModule.js
 **Validated Rules** (from actual implementation):
 1. Factory Function Export - `createXyz` pattern with dependency validation
 2. Strict Dependency Injection - No direct `window`, `document`, `console` access
+* **Lifecycle Flags** – No module other than `appModule` may declare or
+  mutate lifecycle / readiness flags (`initialized`, `initializing`,
+  `isReady`, `ready`, etc.).  All such state lives exclusively in
+  `appModule.state` and is orchestrated by
+  `static/js/init/appInitializer.js`.
 3. Pure Imports - No side effects at import time
 4. Centralized Event Handling - `eventHandlers.trackListener` usage
 5. Context Tags - Required context strings for all listeners/logs
