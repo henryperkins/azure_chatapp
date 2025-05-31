@@ -118,10 +118,16 @@ export function createNavigationService({
    */
   function updateUrlParams(params = {}, replace = false) {
     // delegate to the central implementation to keep behaviour consistent
-    const newUrl = browserService.buildUrl(params);
-    replace
-      ? browserService.replaceState({}, '', newUrl)
-      : browserService.pushState   ({}, '', newUrl);
+    try {
+      const newUrl = browserService.buildUrl(params);
+      replace
+        ? browserService.replaceState({}, '', newUrl)
+        : browserService.pushState   ({}, '', newUrl);
+    } catch (err) {
+      logger.error('[NavigationService] updateUrlParams failed',
+                   err, { context: MODULE_CONTEXT });
+      return;
+    }
   }
 
   // ——— Centralized location helpers (used by ChatManager & others) ———
@@ -148,14 +154,18 @@ export function createNavigationService({
    */
   function registerView(viewId, handlers = {}) {
     if (!viewId) {
-      return;
+      logger.error('[NavigationService] registerView validation failed',
+                   new Error('Missing viewId'), { context: MODULE_CONTEXT });
+      return false;
     }
 
     const requiredHandlers = ['show', 'hide'];
     const missingHandlers = requiredHandlers.filter(h => typeof handlers[h] !== 'function');
 
     if (missingHandlers.length > 0) {
-      return;
+      logger.error('[NavigationService] registerView validation failed',
+                   new Error('Missing handlers: ' + missingHandlers.join(',')), { context: MODULE_CONTEXT });
+      return false;
     }
 
     state.registeredViews.set(viewId, handlers);
@@ -389,19 +399,25 @@ export function createNavigationService({
    * @returns {Promise<boolean>} Success indicator
    */
   async function goBack() {
-    if (state.navigationStack.length <= 1) {
-      // If no previous entries, go to project list
-      return navigateToProjectList({ replace: true });
+    try {
+      if (state.navigationStack.length <= 1) {
+        // If no previous entries, go to project list
+        return navigateToProjectList({ replace: true });
+      }
+
+      // Remove current state
+      state.navigationStack.pop();
+
+      // Get previous state
+      const previous = state.navigationStack[state.navigationStack.length - 1];
+
+      // Navigate to previous state, replacing current history entry
+      return navigateTo(previous.viewId, previous.params, { replace: true });
+    } catch (err) {
+      logger.error('[NavigationService] goBack failed',
+                   err, { context: MODULE_CONTEXT });
+      return false;
     }
-
-    // Remove current state
-    state.navigationStack.pop();
-
-    // Get previous state
-    const previous = state.navigationStack[state.navigationStack.length - 1];
-
-    // Navigate to previous state, replacing current history entry
-    return navigateTo(previous.viewId, previous.params, { replace: true });
   }
 
   // === Event Handlers ===
@@ -426,10 +442,8 @@ export function createNavigationService({
         navigateToProjectList({ addToHistory: false });
       }
     } catch (err) {
-      logger.error('[NavigationService][handlePopState] failure',
-        err,
-        { context: 'navigationService:handlePopState' }
-      );
+      logger.error('[NavigationService] handlePopState failed',
+                   err, { context: MODULE_CONTEXT });
       return;
     }
   }
