@@ -65,9 +65,15 @@ export function createKnowledgeBaseManager(ctx) {
 
   const domReadinessService = ctx.domReadinessService
     || ctx.getDep?.('domReadinessService');
-  const appReadyPromise = domReadinessService
-    ? domReadinessService.dependenciesAndElements({ deps: ['app'] })
-    : Promise.resolve();
+  // Eager appReadyPromise removed; replaced with lazy getter below.
+  let _appReadyPromise = null;
+  async function waitForAppReady() {
+    if (_appReadyPromise) return _appReadyPromise;          // cache
+    _appReadyPromise = domReadinessService
+      ? domReadinessService.dependenciesAndElements({ deps: ['app'] })
+      : Promise.resolve();
+    return _appReadyPromise;
+  }
 
   /**
    * Enables or disables the knowledge base for the current project.
@@ -81,7 +87,7 @@ export function createKnowledgeBaseManager(ctx) {
    */
   async function toggleKnowledgeBase(enabled) {
     logger.info(`[${MODULE}][toggleKnowledgeBase] Called with enabled: ${enabled}`, { context: MODULE });
-    await appReadyPromise;
+    await waitForAppReady();
     logger.debug(`[${MODULE}][toggleKnowledgeBase] App is ready. Proceeding.`, { context: MODULE });
 
     const pid = ctx._getCurrentProjectId();
@@ -145,7 +151,7 @@ export function createKnowledgeBaseManager(ctx) {
    */
   async function reprocessFiles(projectId) {
     logger.info(`[${MODULE}][reprocessFiles] Called for project ID: ${projectId}`, { context: MODULE });
-    await appReadyPromise;
+    await waitForAppReady();
     logger.debug(`[${MODULE}][reprocessFiles] App is ready. Proceeding.`, { context: MODULE });
 
     if (!ctx.validateUUID(projectId)) {
@@ -261,7 +267,7 @@ export function createKnowledgeBaseManager(ctx) {
    */
   async function _submitKnowledgeBaseForm(projectId, payload) {
     logger.info(`[${MODULE}][_submitKnowledgeBaseForm] Submitting for project ID: ${projectId}`, { payload, context: MODULE });
-    await appReadyPromise;
+    await waitForAppReady();
     logger.debug(`[${MODULE}][_submitKnowledgeBaseForm] App is ready. Proceeding.`, { context: MODULE });
 
     try {
@@ -340,7 +346,7 @@ export function createKnowledgeBaseManager(ctx) {
    */
   async function handleDeleteKnowledgeBase() {
     logger.info(`[${MODULE}][handleDeleteKnowledgeBase] Initiating delete.`, { context: MODULE });
-    await appReadyPromise;
+    await waitForAppReady();
     logger.debug(`[${MODULE}][handleDeleteKnowledgeBase] App is ready. Proceeding.`, { context: MODULE });
 
     const projectId = ctx._getCurrentProjectId();
@@ -408,7 +414,7 @@ export function createKnowledgeBaseManager(ctx) {
    */
   async function showKnowledgeBaseModal() {
     logger.info(`[${MODULE}][showKnowledgeBaseModal] Showing KB settings modal.`, { context: MODULE });
-    await appReadyPromise;
+    await waitForAppReady();
     logger.debug(`[${MODULE}][showKnowledgeBaseModal] App is ready. Proceeding.`, { context: MODULE });
 
     const modal = ctx.elements.settingsModal;
@@ -535,7 +541,7 @@ export function createKnowledgeBaseManager(ctx) {
    */
   async function loadKnowledgeBaseHealth(kbId) {
     logger.info(`[${MODULE}][loadKnowledgeBaseHealth] Called for KB ID: ${kbId}`, { context: MODULE });
-    await appReadyPromise;
+    await waitForAppReady();
     logger.debug(`[${MODULE}][loadKnowledgeBaseHealth] App is ready. Proceeding.`, { context: MODULE });
 
     if (!kbId || !ctx.validateUUID(kbId)) {
@@ -634,7 +640,7 @@ export function createKnowledgeBaseManager(ctx) {
    */
   async function loadKnowledgeBaseFiles(projectId, kbId) {
     logger.info(`[${MODULE}][loadKnowledgeBaseFiles] Called for project: ${projectId}, KB ID: ${kbId}`, { context: MODULE });
-    await appReadyPromise;
+    await waitForAppReady();
     logger.debug(`[${MODULE}][loadKnowledgeBaseFiles] App is ready. Proceeding.`, { context: MODULE });
 
     if (!projectId || !kbId) {
@@ -803,7 +809,7 @@ export function createKnowledgeBaseManager(ctx) {
    */
   async function handleAttachGitHubRepo() {
     logger.info(`[${MODULE}][handleAttachGitHubRepo] Attempting to attach GitHub repo.`, { context: MODULE });
-    await appReadyPromise;
+    await waitForAppReady();
     logger.debug(`[${MODULE}][handleAttachGitHubRepo] App is ready. Proceeding.`, { context: MODULE });
 
     const projectId = ctx._getCurrentProjectId();
@@ -885,7 +891,7 @@ export function createKnowledgeBaseManager(ctx) {
    */
   async function handleDetachGitHubRepo() {
     logger.info(`[${MODULE}][handleDetachGitHubRepo] Attempting to detach GitHub repo.`, { context: MODULE });
-    await appReadyPromise;
+    await waitForAppReady();
     logger.debug(`[${MODULE}][handleDetachGitHubRepo] App is ready. Proceeding.`, { context: MODULE });
 
     const projectId = ctx._getCurrentProjectId();
