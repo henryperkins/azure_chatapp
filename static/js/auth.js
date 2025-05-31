@@ -372,7 +372,7 @@ export function createAuthModule(deps) {
             if (typeof domAPI.dispatchEvent === 'function') {
               domAPI.dispatchEvent(docObj, evt);
             } else {
-              docObj.dispatchEvent(evt);
+              domAPI.dispatchEvent(docObj, evt);
             }
           }
         } catch (docErr) {

@@ -766,6 +766,7 @@ export function createSidebar({
     sidebarMobileDock?.cleanup();
   }
   function cleanup() {
+    eventHandlers.cleanupListeners({ context: MODULE });
     destroy();
   }
 
