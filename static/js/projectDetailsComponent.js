@@ -960,6 +960,8 @@ class ProjectDetailsComponent {
     }
   }
 
+  // (Removed _safeAttr and _safeTxt helpers from constructor docstring)
+
   _restoreStatsCounts() {
     if (!this.projectId) return;
     this.projectManager.loadProjectStats(this.projectId)
