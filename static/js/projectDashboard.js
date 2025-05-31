@@ -114,7 +114,6 @@ export function createProjectDashboard({
       // Internal state
       this.state = {
         currentView: null,
-        initialized: false,
         _aborted: false
       };
       this._viewsRegistered = false;
@@ -166,9 +165,6 @@ export function createProjectDashboard({
      * Public method: Initialize the ProjectDashboard
      */
     async initialize() {
-      if (this.state.initialized) {
-        return true; // Already done
-      }
 
       /* ---- first–time bindings moved from ctor -------------------- */
       if (!this._authBusBound) {
@@ -238,7 +234,6 @@ export function createProjectDashboard({
           }
 
           // Mark initialized
-          this.state.initialized = true;
           const initDuration = Date.now() - initStartTime;
 
           // Dispatch an internal event on the local bus
@@ -254,7 +249,6 @@ export function createProjectDashboard({
           return true;
         } catch (err) {
           logger.error('[ProjectDashboard][initialize]', err, { context: 'projectDashboard' });
-          this.state.initialized = false;
           const initDuration = Date.now() - initStartTime;
 
           this.dashboardBus.dispatchEvent(
@@ -337,7 +331,7 @@ export function createProjectDashboard({
         }
 
         // Initialize projectList component if not already
-        if (this.components.projectList && !this.components.projectList.state?.initialized) {
+        if (this.components.projectList?.initialize) {
           try {
             await this.components.projectList.initialize();
           } catch (err) {
@@ -970,7 +964,7 @@ export function createProjectDashboard({
       // Initialise child components only once the app is fully ready to avoid
       // premature waits for the `app:ready` event inside their own logic.
       // Always attempt to initialize ProjectListComponent; do not block on appIsReady
-      if (this.components.projectList && !this.components.projectList.state?.initialized) {
+      if (this.components.projectList?.initialize) {
         try {
           await this.domReadinessService.dependenciesAndElements({
             domSelectors: ['#projectListView'],
@@ -985,7 +979,7 @@ export function createProjectDashboard({
 
       // Retain appIsReady check for details, as details may depend on full app config
       const appIsReady = this.dependencySystem.modules.get('appModule')?.state?.isReady === true;
-      if (appIsReady && this.components.projectDetails && !this.components.projectDetails.state?.initialized) {
+      if (appIsReady && this.components.projectDetails?.initialize) {
         try {
           await this.domReadinessService.dependenciesAndElements({
             domSelectors: ['#projectDetailsView'],

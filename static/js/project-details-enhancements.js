@@ -553,8 +553,6 @@ export function createProjectDetailsEnhancements({
    */
   async function initializeProjectList() {
     try {
-      if (state.projectListInitialized) return;
-
       // Wait for DOM to be ready for project list
       await domReadinessService.dependenciesAndElements({
         domSelectors: [SELECTORS.projectListContainer],
@@ -565,7 +563,6 @@ export function createProjectDetailsEnhancements({
       enhanceProjectCards();
       setupProjectFilters();
 
-      state.projectListInitialized = true;
       logger.info('[initializeProjectList] Project list enhancements initialized', {
         context: CONTEXT
       });
@@ -719,18 +716,16 @@ export function createProjectDetailsEnhancements({
    */
   async function initialize() {
     try {
-      if (state.initialized) return;
-
       // Determine if we're on the project list or project details page
       const isProjectListPage = !!domAPI.querySelector(SELECTORS.projectListContainer);
       const isProjectDetailsPage = !!domAPI.querySelector('.project-details-root');
 
       // Initialize appropriate enhancements
-      if (isProjectListPage && !state.projectListInitialized) {
+      if (isProjectListPage) {
         await initializeProjectList();
       }
 
-      if (isProjectDetailsPage && !state.initialized) {
+      if (isProjectDetailsPage) {
         // Wait for DOM to be ready for project details
         await domReadinessService.dependenciesAndElements({
           domSelectors: ['.project-details-root'],
@@ -754,7 +749,6 @@ export function createProjectDetailsEnhancements({
           });
         }
 
-        state.initialized = true;
         logger.info('[initialize] Project details enhancements initialized', {
           context: CONTEXT
         });
@@ -771,10 +765,6 @@ export function createProjectDetailsEnhancements({
     try {
       // Clean up all event listeners
       eventHandlers.cleanupListeners({ context: CONTEXT });
-
-      // Reset state
-      state.initialized = false;
-      state.projectListInitialized = false;
 
       logger.info('[cleanup] Project details enhancements cleaned up', {
         context: CONTEXT
