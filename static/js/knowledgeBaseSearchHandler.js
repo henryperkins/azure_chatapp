@@ -260,14 +260,8 @@ export async function createKnowledgeBaseSearchHandler(ctx) {
 
     chatInput.value = current ? `${current}\n\n${refText}` : refText;
     chatInput.focus();
-    const evts = ctx.eventHandlers;
-    if (evts?.dispatchEvent && evts?.createCustomEvent) {
-      evts.dispatchEvent(
-        'input',
-        { bubbles: true },
-        chatInput
-      );
-    }
+    const inputEvt = new Event('input', { bubbles: true });
+    ctx.domAPI.dispatchEvent(chatInput, inputEvt);
   }
 
   /**

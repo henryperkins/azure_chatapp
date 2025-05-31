@@ -1114,7 +1114,5 @@ export function createAuthModule(deps) {
   return publicAuth;
 }
 
-export default createChatManager;
-
 /* guard-rail: default factory export */
 export default createAuthModule;
