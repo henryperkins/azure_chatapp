@@ -117,6 +117,6 @@ export const ELEMENT_SELECTORS = {
   }
 };
 
-export function createSelectorConstants({} = {}) {
+export function createSelectorConstants() {
   return { SELECTORS, ELEMENT_SELECTORS, cleanup () {} };
 }
