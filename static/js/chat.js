@@ -1126,6 +1126,7 @@ export function createChatManager(deps = {}) {
     }
 
     async _loadMessages(conversationId) {
+      const chatUIEnh = this.DependencySystem.modules.get('chatUIEnhancements');
       if (!conversationId) {
         return;
       }
@@ -1140,7 +1141,13 @@ export function createChatManager(deps = {}) {
 
         this._clearMessages();
         messages.forEach(message => {
-          this._showMessage(message.role, message.content, message.id, message.thinking, message.redacted_thinking);
+          chatUIEnh.appendMessage(
+            message.role,
+            message.content,
+            message.id,
+            message.thinking,
+            message.redacted_thinking
+          );
         });
         if (this.messageContainer) {
           this.messageContainer.scrollTop = this.messageContainer.scrollHeight;
