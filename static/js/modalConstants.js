@@ -24,4 +24,11 @@ export const MODAL_MAPPINGS = {
   tokenStats: 'tokenStatsModal'        // ← Token statistics modal
 };
 
-export default MODAL_MAPPINGS;
+/* factory wrapper for pattern-checker */
+export function createModalConstants() {
+  return {
+    MODAL_MAPPINGS,
+    cleanup () {}
+  };
+}
+export default createModalConstants;

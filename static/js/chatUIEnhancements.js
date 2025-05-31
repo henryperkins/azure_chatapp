@@ -979,3 +979,5 @@ export function createChatUIEnhancements(deps = {}) {
     setupProjectChatEnhancements
   };
 }
+
+export default createChatUIEnhancements;

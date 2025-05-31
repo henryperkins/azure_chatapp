@@ -210,8 +210,8 @@ export function createNavigationService({
     } catch (error) {
       logger.error(
         '[NavigationService] activateView failed',
-        { status: error?.status ?? 500, data: error, message: error?.message ?? String(error) },
-        { context: MODULE }
+        error,
+        { context: 'navigationService:activateView' }
       );
       return false;
     }
@@ -323,8 +323,8 @@ export function createNavigationService({
       return success;
     } catch (error) {
       logger.error('[NavigationService][navigateTo] before-navigate error',
-        { status: error?.status ?? 500, data: error, message: error?.message ?? String(error) },
-        { context: MODULE }
+        error,
+        { context: 'navigationService:navigateTo' }
       );
       // Fire navigation error event
       emitNavigationEvent('navigationError', {
@@ -427,8 +427,8 @@ export function createNavigationService({
       }
     } catch (err) {
       logger.error('[NavigationService][handlePopState] failure',
-        { status: err?.status ?? 500, data: err, message: err?.message ?? String(err) },
-        { context: MODULE }
+        err,
+        { context: 'navigationService:handlePopState' }
       );
       return;
     }

@@ -739,6 +739,5 @@ return {
   }
 };
 }
-/**
- * (…existing module code…)
- */
+
+export default createKnowledgeBaseComponent;

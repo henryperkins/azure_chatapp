@@ -77,12 +77,9 @@ export async function createKnowledgeBaseSearchHandler(ctx) {
         _showNoResults();
       }
     } catch (err) {
-      ctx.logger?.error?.(
-        MODULE,
-        'searchKnowledgeBase failed',
-        err,
-        { context: MODULE, status: err?.status ?? 500, data: err, message: err?.message ?? String(err) }
-      );
+      ctx.logger.error('[KnowledgeBaseSearchHandler] searchKnowledgeBase failed',
+                       err,
+                       { context: 'knowledgeBaseSearchHandler:search' });
     } finally {
       ctx.state.isSearching = false;
       _hideSearchLoading();
@@ -263,10 +260,12 @@ export async function createKnowledgeBaseSearchHandler(ctx) {
 
     chatInput.value = current ? `${current}\n\n${refText}` : refText;
     chatInput.focus();
-    if (ctx.eventHandlers.dispatchEvent) {
-      ctx.eventHandlers.dispatchEvent(
-        chatInput,
-        ctx.eventHandlers.createCustomEvent('input', { bubbles: true })
+    const evts = ctx.eventHandlers;
+    if (evts?.dispatchEvent && evts?.createCustomEvent) {
+      evts.dispatchEvent(
+        'input',
+        { bubbles: true },
+        chatInput
       );
     }
   }
@@ -339,3 +338,5 @@ export async function createKnowledgeBaseSearchHandler(ctx) {
     }
   };
 }
+
+export default createKnowledgeBaseSearchHandler;
