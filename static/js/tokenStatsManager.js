@@ -39,8 +39,6 @@ export function createTokenStatsManager({
 
   // Module state
   const state = {
-    initialized: false,
-    initializing: null,
     currentProject: null,
     currentConversation: null,
     statsData: {
@@ -105,12 +103,9 @@ export function createTokenStatsManager({
    * Initialize the token stats manager
    */
   async function initialize() {
-    if (state.initialized) return;
-    if (state.initializing) return state.initializing;
 
     // Deferred logic: run only when ui:templates:ready event fires.
     const runInit = async () => {
-      state.initializing = (async () => {
         try {
           _logInfo('Initializing token stats manager');
 
@@ -132,7 +127,6 @@ export function createTokenStatsManager({
             });
             logger.error(`[${MODULE_CONTEXT}] elementsReady failed`, err,
               { context: MODULE_CONTEXT, phase: 'init', missing: requiredSel });
-            state.initializing = null;   // allow future retries
             return false;                // non-fatal
           }
 
@@ -142,18 +136,13 @@ export function createTokenStatsManager({
           // Initialize modal functionality
           _initializeTokenStatsModal();
 
-          state.initialized = true;
           _logInfo('Token stats manager initialized');
         } catch (err) {
           _logError('Failed to initialize token stats manager', err);
           logger.error(`[${MODULE_CONTEXT}] Failed to initialize token stats manager`, err,
             { context: MODULE_CONTEXT });
-        } finally {
-          state.initializing = null;
         }
-      })();
-
-      return state.initializing;
+      return true;
     };
 
     // Wait for templates ready via domReadinessService, then initialize
@@ -660,7 +649,6 @@ export function createTokenStatsManager({
    */
   function cleanup() {
     eventHandlers.cleanupListeners({ context: MODULE_CONTEXT });
-    state.initialized = false;
     _logInfo('Token stats manager cleaned up');
   }
 
