@@ -135,9 +135,12 @@ export function createUiRenderer(deps) {
     const isStarred = starredFn(conversation.id);
     domAPI.setInnerHTML(
       starButton,
+      /* Fully-defined SVG paths replace previously truncated values that
+       * violated the SVG spec and triggered DOMException: “<path> attribute
+       * d: Expected number”.  Heroicons MIT-licensed outlines are used. */
       isStarred
-        ? '<svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" class="w-5 h-5" viewBox="0 0 24 24"><path d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.006..." /></svg>'
-        : '<svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" class="w-5 h-5" viewBox="0 0 24 24"><path d="M11.48 3.499a.562.562 0..." /></svg>'
+        ? '<svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" class="w-5 h-5" viewBox="0 0 24 24"><path d="M12 .587l3.668 7.431 8.332 1.318-6 5.845 1.335 8.819L12 20.128 4.665 24 6 15.181 0 9.336l8.332-1.318L12 .587z"/></svg>'
+        : '<svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="1.5" class="w-5 h-5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l2.286 7.008a1 1 0 00.95.69h7.353c.969 0 1.371 1.24.588 1.81l-5.946 4.324a1 1 0 00-.364 1.118l2.286 7.009c.3.921-.755 1.688-1.538 1.118L12 19.347l-5.924 4.46c-.783.57-1.838-.197-1.538-1.118l2.286-7.01a1 1 0 00-.364-1.117L.514 12.435c-.783-.57-.38-1.81.588-1.81h7.353a1 1 0 00.95-.69l2.286-7.008z"/></svg>'
     );
 
     starButton.setAttribute('aria-label', isStarred ? 'Unstar' : 'Star');

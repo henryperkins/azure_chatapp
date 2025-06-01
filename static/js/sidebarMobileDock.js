@@ -134,7 +134,11 @@ export function createSidebarMobileDock({
       ensureMobileDock();
     }
     const isMobile = (viewportAPI.getInnerWidth() < 640);
-    const shouldShow = (isMobile && sidebarVisible);
+    // Show the dock whenever we are on a mobile viewport **and** the sidebar
+    // itself is NOT visible.  The dock acts as a surrogate navigation when the
+    // full sidebar is closed; if the sidebar is open (overlay or pinned) we
+    // hide the dock to avoid duplicated controls.
+    const shouldShow = (isMobile && !sidebarVisible);
     if (shouldShow) {
       mobileDockEl && domAPI.removeClass(mobileDockEl, 'hidden');
     } else {

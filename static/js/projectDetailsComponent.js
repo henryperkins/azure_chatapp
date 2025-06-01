@@ -168,7 +168,35 @@ class ProjectDetailsComponent {
       this._logError('Failed to dispatch projectManagerReady event', err);
     }
   }
-  setChatManager(cm) { this.chatManager = cm; }
+  /**
+   * Injects the ChatManager instance once it becomes available **after** this
+   * component has already been constructed.  Because the ProjectDetailsComponent
+   * is instantiated before the ChatManager during the application bootstrap
+   * sequence, "chat" related UI was never initialised, causing the chat_ui
+   * template to remain absent from the DOM.
+   *
+   * When this setter is called we immediately attempt to (re-)initialise the
+   * chat UI for the currently active tab and update any dependent UI state so
+   * the button enabling logic reflects the newly available capability.
+   *
+   * @param {Object|null} cm – The newly created ChatManager instance.
+   */
+  setChatManager(cm) {
+    this.chatManager = cm;
+    this._logInfo('ChatManager instance received and set.', { hasChatManager: !!cm });
+
+    // Re-initialize chat UI if user is currently on the Chat tab.
+    if ((this.state.activeTab === 'chat' || this.state.activeTab === 'conversations') && this.chatManager?.initialize) {
+      try {
+        this._restoreChatAndModelConfig();
+      } catch (err) {
+        this._logError('Error while restoring chat UI after ChatManager injection', err);
+      }
+    }
+
+
+    this._updateNewChatButtonState();
+  }
 
   _logInfo(msg, meta) { try { this.logger.info(`[${MODULE_CONTEXT}] ${msg}`, { context: MODULE_CONTEXT, ...meta }); } catch (e) { return; } }
   _logWarn(msg, meta) { try { this.logger.warn(`[${MODULE_CONTEXT}] ${msg}`, { context: MODULE_CONTEXT, ...meta }); } catch (e) { return; } }
@@ -388,9 +416,34 @@ class ProjectDetailsComponent {
     this.eventHandlers.trackListener(doc, "projectFilesLoaded",
       this.safeHandler((e) => this.renderFiles(e.detail?.files || []), "FilesLoaded"),
       { context: 'ProjectDetailsComponent', description: "FilesLoaded" });
-    this.eventHandlers.trackListener(doc, "projectConversationsLoaded",
-      this.safeHandler((e) => this.renderConversations(e.detail?.conversations || []), "ConversationsLoaded"),
-      { context: 'ProjectDetailsComponent', description: "ConversationsLoaded" });
+    /*
+     * The uiRenderer.renderConversations(contract) expects the **projectId** as
+     * its first parameter (signature: renderConversations(projectId, search, ...)).
+     * Passing the conversations array here corrupted the URL construction
+     * further down the call-chain, producing a request like
+     *   /api/projects/[object Object],[object Object]/conversations
+     * which the backend rightfully rejects with 422.
+     */
+    // When conversations are loaded update both the sidebar via uiRenderer
+    // and the in-panel list inside the chat tab so users can select a
+    // conversation directly from the Project Details view.
+    this.eventHandlers.trackListener(
+      doc,
+      "projectConversationsLoaded",
+      this.safeHandler(
+        (e) => {
+          // 1️⃣ Sidebar (existing behaviour)
+          this.renderConversations(this.projectId);
+
+          // 2️⃣ Project Details panel list (new / fixed behaviour)
+          if (Array.isArray(e?.detail?.conversations)) {
+            this._renderConversationList(e.detail.conversations);
+          }
+        },
+        "ConversationsLoaded"
+      ),
+      { context: 'ProjectDetailsComponent', description: 'ConversationsLoaded' }
+    );
     this.eventHandlers.trackListener(doc, "projectArtifactsLoaded",
       this.safeHandler((e) => this.renderArtifacts(e.detail?.artifacts || []), "ArtifactsLoaded"),
       { context: 'ProjectDetailsComponent', description: "ArtifactsLoaded" });
@@ -612,6 +665,46 @@ class ProjectDetailsComponent {
     `);
     // No click handler here; chatUIEnhancements handles it.
     return div;
+  }
+
+  /**
+   * Render the conversation list inside the chat tab (#conversationsList).
+   * Replaces existing items and updates the conversations counter.
+   *
+   * @param {Array<object>} conversations - Array of conversation objects.
+   */
+  _renderConversationList(conversations = []) {
+    try {
+      const listContainer = this.elements?.conversationsList || this.domAPI.getElementById?.('conversationsList');
+      if (!listContainer) {
+        this._logWarn('Conversations list container not found – skipping render');
+        return;
+      }
+
+      // Clear previous contents
+      this.domAPI.setInnerHTML(listContainer, '');
+
+      if (!Array.isArray(conversations) || conversations.length === 0) {
+        // Provide a graceful empty-state message expected by project-details-enhancements.js
+        const empty = this.domAPI.createElement('div');
+        empty.className = 'empty-state text-center p-4 text-base-content/60';
+        this.domAPI.setTextContent(empty, 'No conversations yet');
+        this.domAPI.appendChild(listContainer, empty);
+      } else {
+        conversations.forEach((cv) => {
+          const item = this._conversationItem(cv);
+          this.domAPI.appendChild(listContainer, item);
+        });
+      }
+
+      // Update badge count in header if present
+      const countEl = this.domAPI.getElementById?.('conversationCount');
+      if (countEl) {
+        this.domAPI.setTextContent(countEl, String(conversations.length));
+      }
+    } catch (err) {
+      this._logError('Failed to render conversation list', err);
+    }
   }
 
   _artifactItem(art) {
@@ -853,6 +946,16 @@ class ProjectDetailsComponent {
               sendButtonSelector: "#chatSendBtn",
               titleSelector: "#chatTitle"
             });
+
+            // After chatManager is ready, ensure chatUIEnhancements is initialized
+            try {
+              const chatUIEnh = this.eventHandlers?.DependencySystem?.modules?.get?.('chatUIEnhancements');
+              if (chatUIEnh?.initialize) {
+                await chatUIEnh.initialize({ projectId: this.projectId });
+              }
+            } catch (e) {
+              this._logWarn('chatUIEnhancements initialize failed (non-blocking)', { err: e?.message });
+            }
 
             this._logInfo("ChatManager initialized successfully", { projectId: this.projectId });
           } else {

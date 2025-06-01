@@ -1,4 +1,5 @@
 import { getSafeHandler } from './utils/getSafeHandler.js';
+import { createChatUIEnhancements } from './chatUIEnhancements.js';
 
 /**
  * @typedef {Object} DomAPI
@@ -55,6 +56,37 @@ export function createChatManager(deps = {}) {
     APP_CONFIG,               // ← NEW (DI)
     browserService            // ← Must be injected and used as this.browserService
   } = deps;
+
+  /**
+   * Ensure the chatUIEnhancements module is available in the DependencySystem.
+   * It is needed for attaching event handlers and extra UI logic.  Because the
+   * enhancements module itself depends on ChatManager, we lazily create it the
+   * first time ChatManager.initialise() runs and pass the current ChatManager
+   * instance into the factory.
+   *
+   * This avoids bootstrap-order issues where chatUIEnhancements was never
+   * instantiated, causing undefined errors when ChatManager tried to access it.
+   */
+  function _ensureChatUIEnhancements(chatManagerInstance) {
+    if (!DependencySystem?.modules?.get('chatUIEnhancements')) {
+      try {
+        createChatUIEnhancements({
+          domAPI              : _domAPI,
+          eventHandlers       : _EH,
+          browserService      : deps.browserService,
+          domReadinessService : domReadinessService,
+          logger,
+          sanitizer           : DOMPurify,
+          chatManager         : chatManagerInstance,
+          modalManager        : DependencySystem?.modules?.get('modalManager'),
+          DependencySystem
+        });
+        logger.info('[ChatManager] chatUIEnhancements module instantiated on-demand');
+      } catch (err) {
+        logger.error('[ChatManager] Failed to create chatUIEnhancements', err);
+      }
+    }
+  }
 
   // Dependency-injected global replacements with defaults
   const {
@@ -342,7 +374,8 @@ export function createChatManager(deps = {}) {
         // UI Setup (ensure elements are present and events are bound)
         await this._setupUIElements(); // Resolves DOM elements based on selectors
 
-        // Attach event handlers via chatUIEnhancements
+        // Ensure enhancements module is ready then attach its event handlers
+        _ensureChatUIEnhancements(this);
         const chatUIEnh = DependencySystem.modules.get('chatUIEnhancements');
         chatUIEnh.attachEventHandlers({
           inputField        : this.inputField,
