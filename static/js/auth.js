@@ -17,7 +17,7 @@ import createAuthFormListenerFactory from './authFormListenerFactory.js';
  */
 
  // VENDOR-EXEMPT-SIZE: Core module pending refactor in Q3-25
-export function createAuth(deps) {   // ← canonical name for “auth.js”
+export function createAuth(deps) {   // canonical factory required by guardrails (file auth.js)
   // === FACTORY GUARDRAIL: STRICT DI VALIDATION (No fallback, throw immediately, BEFORE destructuring) ===
   if (!deps || typeof deps !== "object") {
     throw new Error("[AuthModule] 'deps' DI object is required as argument to createAuthModule");
@@ -936,21 +936,12 @@ function readCookie(name) {
       }, AUTH_CONFIG.VERIFICATION_INTERVAL);
       logger.info('[AuthModule][init] Periodic auth verification scheduled.', { interval: AUTH_CONFIG.VERIFICATION_INTERVAL, context: 'init' });
 
-      // Mark auth module as ready in the canonical state
+      // Mark auth module as ready via appModule lifecycle only — no global window flags
       const appModuleRef = DependencySystem?.modules?.get('appModule');
       if (appModuleRef?.setAppLifecycleState) {
         appModuleRef.setAppLifecycleState({ isReady: true });
       }
-      // Sticky readiness flag (idempotent for late listeners)
-      if (window.app && window.app.state) {
-        window.app.state.ready = true;
-      } else if (typeof window !== "undefined") {
-        // Defensive polyfill
-        window.app = window.app || {};
-        window.app.state = window.app.state || {};
-        window.app.state.ready = true;
-      }
-      logger.info('[AuthModule][init] Auth module is now ready (sticky flag set window.app.state.ready = true)', { context: 'init' });
+      logger.info('[AuthModule][init] Auth module is now ready', { context: 'init' });
 
       // Dispatch authReady event
       const finalState = getAppState();
@@ -1120,6 +1111,6 @@ function readCookie(name) {
   return publicAuth;
 }
 
-/* guard-rail: default factory export */
+/* guard-rail: default & named export */
 export default createAuth;
-export { createAuth as createAuthModule };
+export { createAuth, createAuth as createAuthModule };

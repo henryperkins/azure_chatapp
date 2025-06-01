@@ -94,6 +94,72 @@
     --color-primary  : rgb(var(--p)  / 1);
     --color-secondary: rgb(var(--s)  / 1);
   }
+
+  /* ---------------------------------------------------------------------
+     Global Spacing & Typography Scale
+     ---------------------------------------------------------------------
+     Many component-level styles in mobile-components.css and
+     mobile-layouts.css reference custom properties like
+     `--spacing-md` or `--font-size-base`. These variables were never
+     centralised which caused the browser to resolve them to `unset`
+     resulting in inconsistent or excessive padding/margins and font
+     sizes.  Defining a single canonical spacing & typography scale
+     here gives every stylesheet one predictable source of truth and
+     dramatically improves overall responsiveness on both mobile and
+     desktop breakpoints.
+
+     Spacing Scale (based on an 4 px baseline):
+       xs  – 0.25rem ( 4px)
+       sm  – 0.5rem  ( 8px)
+       md  – 0.75rem (12px)
+       lg  – 1.25rem (20px)
+       xl  – 2rem    (32px)
+       2xl – 3rem    (48px)
+
+     Typography Scale (minor-third):
+       xs  – 0.75rem  (12px)
+       sm  – 0.875rem (14px)
+       base– 1rem     (16px)
+       lg  – 1.125rem (18px)
+       xl  – 1.25rem  (20px)
+       2xl – 1.5rem   (24px)
+  --------------------------------------------------------------------- */
+
+  :root {
+    /* Spacing */
+    --spacing-xs: 0.25rem;
+    --spacing-sm: 0.5rem;
+    --spacing-md: 0.75rem;
+    --spacing-lg: 1.25rem;
+    --spacing-xl: 2rem;
+    --spacing-2xl: 3rem;
+
+    /* Typography */
+    --font-size-xs: 0.75rem;
+    --font-size-sm: 0.875rem;
+    --font-size-base: 1rem;
+    --font-size-lg: 1.125rem;
+    --font-size-xl: 1.25rem;
+    --font-size-2xl: 1.5rem;
+  }
+
+  /* Dark theme uses the same spatial and type scale */
+  html.dark,
+  [data-theme="dracula-enhanced"] {
+    --spacing-xs: 0.25rem;
+    --spacing-sm: 0.5rem;
+    --spacing-md: 0.75rem;
+    --spacing-lg: 1.25rem;
+    --spacing-xl: 2rem;
+    --spacing-2xl: 3rem;
+
+    --font-size-xs: 0.75rem;
+    --font-size-sm: 0.875rem;
+    --font-size-base: 1rem;
+    --font-size-lg: 1.125rem;
+    --font-size-xl: 1.25rem;
+    --font-size-2xl: 1.5rem;
+  }
 }
 
 /* Improved animations with reduced motion support */

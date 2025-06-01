@@ -11,7 +11,8 @@ export function createSidebarMobileDock({
   logger,
   domReadinessService,
   safeHandler,
-  onTabActivate
+  onTabActivate,
+  onOpenSettings // optional – opens the model config / settings drawer
 } = {}) {
   if (!domAPI) throw new Error('[SidebarMobileDock] domAPI is required');
   if (!eventHandlers) throw new Error('[SidebarMobileDock] eventHandlers is required');
@@ -92,10 +93,16 @@ export function createSidebarMobileDock({
         const body = domAPI.getDocument()?.body;
         body && domAPI.appendChild(body, mobileDockEl);
       }
-      // Create 3 buttons
+      // Create 3 navigation buttons + 1 settings button (far-right)
       createDockButton('dockRecentBtn', 'Recent', '🕑', () => onTabActivate('recent'));
       createDockButton('dockStarredBtn', 'Starred', '⭐', () => onTabActivate('starred'));
       createDockButton('dockProjectsBtn', 'Projects', '📁', () => onTabActivate('projects'));
+
+      // Settings / model-config drawer button is optional; only add if handler
+      // provided so that we don’t render a dead control.
+      if (typeof onOpenSettings === 'function') {
+        createDockButton('dockSettingsBtn', 'Config', '⚙️', () => onOpenSettings());
+      }
       return mobileDockEl;
     } finally {
       creationInProgress = false;

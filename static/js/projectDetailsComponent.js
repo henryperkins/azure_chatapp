@@ -412,6 +412,89 @@ class ProjectDetailsComponent {
         container: !!this.elements.container
       });
     }
+
+    /* ───────── Project action buttons (edit / archive / delete) ───────── */
+    const currentPM = this.projectManager || this.DependencySystem?.modules?.get('projectManager');
+    const mm = this.modalManager || this.DependencySystem?.modules?.get('modalManager');
+
+    // Edit
+    const editBtn = this.elements.container.querySelector('#editProjectBtn');
+    if (editBtn && mm?.show) {
+      this.eventHandlers.trackListener(
+        editBtn,
+        'click',
+        this.safeHandler(() => {
+          if (!this.projectData) return;
+          // Open the project modal in edit mode
+          mm.show('project', {
+            updateContent: (modalEl) => {
+              const nameInput = modalEl.querySelector('#projectModalNameInput');
+              if (nameInput) nameInput.value = this.projectData.name || '';
+              const descInput = modalEl.querySelector('#projectModalDescInput');
+              if (descInput) descInput.value = this.projectData.description || '';
+            }
+          });
+        }, 'EditProjectBtn'),
+        { context: 'ProjectDetailsComponent', description: 'EditProjectBtn' }
+      );
+    }
+
+    // Archive / Un-archive
+    const archiveBtn = this.elements.container.querySelector('#archiveProjectBtn');
+    if (archiveBtn && currentPM && mm?.confirmDelete) {
+      this.eventHandlers.trackListener(
+        archiveBtn,
+        'click',
+        this.safeHandler(() => {
+          if (!this.projectData?.id) return;
+          const isArchived = !!this.projectData.archived;
+          mm.confirmDelete({
+            title: isArchived ? 'Unarchive Project?' : 'Archive Project?',
+            message: isArchived ?
+              `Are you sure you want to unarchive "${this.projectData.name}"?` :
+              `Are you sure you want to archive "${this.projectData.name}"? Archived projects are hidden by default.`,
+            confirmText: isArchived ? 'Unarchive' : 'Archive',
+            confirmClass: isArchived ? 'btn-success' : 'btn-warning',
+            onConfirm: async () => {
+              try {
+                await currentPM.toggleArchiveProject(this.projectData.id);
+                await currentPM.loadProjects?.();
+              } catch (err) {
+                this._logError('Error toggling archive', err);
+              }
+            }
+          });
+        }, 'ArchiveProjectBtn'),
+        { context: 'ProjectDetailsComponent', description: 'ArchiveProjectBtn' }
+      );
+    }
+
+    // Delete
+    const deleteBtn = this.elements.container.querySelector('#deleteProjectBtn');
+    if (deleteBtn && currentPM && mm?.confirmDelete) {
+      this.eventHandlers.trackListener(
+        deleteBtn,
+        'click',
+        this.safeHandler(() => {
+          if (!this.projectData?.id) return;
+          mm.confirmDelete({
+            title: 'Delete Project?',
+            message: `Are you sure you want to permanently delete "${this.projectData.name}"? This action cannot be undone.`,
+            confirmText: 'Delete',
+            confirmClass: 'btn-error',
+            onConfirm: async () => {
+              try {
+                await currentPM.deleteProject(this.projectData.id);
+                this.navigationService.navigateToProjectList();
+              } catch (err) {
+                this._logError('Error deleting project', err);
+              }
+            }
+          });
+        }, 'DeleteProjectBtn'),
+        { context: 'ProjectDetailsComponent', description: 'DeleteProjectBtn' }
+      );
+    }
     const doc = this.domAPI.getDocument();
     this.eventHandlers.trackListener(doc, "projectFilesLoaded",
       this.safeHandler((e) => this.renderFiles(e.detail?.files || []), "FilesLoaded"),
@@ -456,14 +539,33 @@ class ProjectDetailsComponent {
       this.safeHandler(
         async (e) => {
           if (!this.knowledgeBaseComponent) return;
-          try {
-            await this.knowledgeBaseComponent.initialize?.(
-              false,
-              e.detail?.knowledgeBase,
-              e.detail?.projectId
-            );
-          } catch (err) {
-            this._logError("Error initializing knowledgeBaseComponent", err);
+          const _initKbc = async () => {
+            try {
+              await this.knowledgeBaseComponent.initialize?.(
+                false,
+                e.detail?.knowledgeBase,
+                e.detail?.projectId
+              );
+            } catch (err) {
+              this._logError("Error initializing knowledgeBaseComponent", err);
+            }
+          };
+
+          // Only initialise after authentication; otherwise defer once.
+          const authModule = this.eventHandlers.DependencySystem?.modules?.get?.('auth');
+          const isAuthed = authModule?.isAuthenticated?.() ?? this.auth?.isAuthenticated?.();
+
+          if (isAuthed) {
+            _initKbc();
+          } else {
+            this._logWarn("User not authenticated – deferring KnowledgeBaseComponent initialization until login");
+
+            const authBus = authModule?.AuthBus || this.domAPI.getDocument();
+            const onceAuth = this.safeHandler(() => {
+              _initKbc();
+            }, 'KBC_Init_AuthWait');
+
+            authBus.addEventListener('authStateChanged', onceAuth, { once: true });
           }
           this.knowledgeBaseComponent.renderKnowledgeBaseInfo?.(
             e.detail?.knowledgeBase,
@@ -473,6 +575,14 @@ class ProjectDetailsComponent {
             this.projectData ||= {};
             this.projectData.knowledge_base = e.detail.knowledgeBase;
             this._updateNewChatButtonState();
+
+            // Now that the Knowledge Base is loaded and active we can safely
+            // (re-)attempt ChatManager initialisation if the user is on the
+            // chat-related tabs.  This prevents the earlier race condition
+            // where ChatManager.initialise was invoked before KB readiness.
+            if ((this.state.activeTab === 'chat' || this.state.activeTab === 'conversations') && this.chatManager?.initialize) {
+              this._restoreChatAndModelConfig();
+            }
           }
         },
         "KnowledgeLoaded"
@@ -529,8 +639,10 @@ class ProjectDetailsComponent {
           return false;
         };
 
-        /* 1️⃣ Attempt immediate initialisation if the component is already injected */
-        if (!tryInit()) {
+        const isAuthed = this.auth?.isAuthenticated?.();
+
+        /* 1️⃣ Attempt immediate initialisation only if authenticated */
+        if (isAuthed && !tryInit()) {
           /* 2️⃣ Try resolving the instance from the DI container */
           const kbc = this.eventHandlers?.DependencySystem?.modules?.get?.('knowledgeBaseComponent');
           if (kbc) {
@@ -551,6 +663,18 @@ class ProjectDetailsComponent {
           this.domAPI
             .getDocument()
             .addEventListener('knowledgebasecomponent:initialized', onceHandler, { once: true });
+        } else if (!isAuthed) {
+          this._logWarn("User not authenticated – deferring KnowledgeBaseComponent initialization until login");
+
+          const authModule = this.eventHandlers.DependencySystem?.modules?.get?.('auth');
+          const authBus = authModule?.AuthBus || this.domAPI.getDocument();
+
+          const authOnce = this.safeHandler(() => {
+            // Re-invoke _loadTabContent('knowledge') after auth to run regular logic
+            this._loadTabContent('knowledge');
+          }, 'KnowledgeTabAuthDeferredInit');
+
+          authBus.addEventListener('authStateChanged', authOnce, { once: true });
         }
         break;
       }
@@ -917,6 +1041,21 @@ class ProjectDetailsComponent {
 
   async _restoreChatAndModelConfig() {
     const tab = this.state.activeTab;
+    // Bail out early until the Knowledge Base for the current project is
+    // available and active.  ChatManager cannot finish initialisation without
+    // an active KB and will otherwise reject with
+    // "Project has no knowledge base", emitting a misleading error and
+    // leaving the UI in a broken state.  We therefore postpone ChatManager
+    // initialisation until `projectKnowledgeBaseLoaded` has fired and the
+    // KB is confirmed active.
+
+    const kbReady = !!(this.projectData?.knowledge_base && this.projectData.knowledge_base.is_active !== false);
+
+    if (!kbReady) {
+      this._logWarn("Knowledge Base not ready – deferring ChatManager initialisation");
+      return;
+    }
+
     if ((tab === "conversations" || tab === "chat") && this.chatManager?.initialize) {
       const chatTabContent = this.elements.tabs.chat;
       if (chatTabContent) {

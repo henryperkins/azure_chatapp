@@ -458,10 +458,22 @@ class ModalManager {
       this.logger.warn?.(`[ModalManager] show(${modalName}): #modalsContainer element not found. Modals might not display correctly if they rely on this container.`, { modalName });
     }
 
-    const INIT_SAFE = new Set(['login','register','error','fatal','confirm']);
-    if (this.app?.isInitializing &&
-        !options.showDuringInitialization &&
-        !INIT_SAFE.has(modalName)) {
+    const INIT_SAFE = new Set(['login', 'register', 'error', 'fatal', 'confirm']);
+
+    // Detect current app-initializing state regardless of whether the appModule
+    // exposes it as a *method* (canonical as of 2025) or as a boolean flag.
+    let appIsInitializing = false;
+    if (this.app) {
+      if (typeof this.app.isInitializing === 'function') {
+        appIsInitializing = !!this.app.isInitializing();
+      } else if (typeof this.app.isInitializing === 'boolean') {
+        appIsInitializing = this.app.isInitializing;
+      } else if (this.app.state && typeof this.app.state.initializing === 'boolean') {
+        appIsInitializing = this.app.state.initializing;
+      }
+    }
+
+    if (appIsInitializing && !options.showDuringInitialization && !INIT_SAFE.has(modalName)) {
       this.logger.warn?.(`[ModalManager] show(${modalName}): Attempt to show modal during app initialization (and !options.showDuringInitialization). Aborting.`, { modalName });
       return false;
     }
@@ -591,6 +603,104 @@ class ModalManager {
       throw new Error('[ModalManager] eventHandlers.trackListener is required for confirmAction');
     }
 
+    this.show(modalName, {
+      showDuringInitialization: options.showDuringInitialization,
+    });
+  }
+
+  /**
+   * Display the dedicated Delete confirmation modal (#deleteConfirmModal).
+   * Mirrors confirmAction() but targets the "delete" mapping so we can have
+   * separate copy/styling for destructive actions.
+   *
+   * @param {Object} options
+   * @param {string} [options.title]        – Heading text (defaults to "Confirm Delete")
+   * @param {string} [options.message]      – Body text
+   * @param {string} [options.confirmText]  – Confirm button label (defaults "Delete")
+   * @param {string} [options.cancelText]   – Cancel button label
+   * @param {Function} [options.onConfirm]  – callback if user confirms
+   * @param {Function} [options.onCancel]   – callback if user cancels/ closes
+   * @returns {Promise<void>|undefined}
+   */
+  async confirmDelete(options = {}) {
+    this.logger.debug?.('[ModalManager] confirmDelete() called.', { options });
+
+    const sh = this.safeHandler;
+
+    try {
+      await this.isReadyPromise();
+    } catch (err) {
+      this.logger.error?.('[ModalManager] confirmDelete: manager not ready', err);
+      if (typeof options.onCancel === 'function') options.onCancel();
+      return;
+    }
+
+    const modalName = 'delete';
+    const modalId = this.modalMappings[modalName];
+    if (!modalId) {
+      this.logger.warn?.('[ModalManager] confirmDelete: mapping "delete" missing');
+      return;
+    }
+
+    const modalEl = this.domAPI.getElementById(modalId);
+    if (!modalEl) {
+      this.logger.warn?.(`[ModalManager] confirmDelete: element #${modalId} not found`);
+      return;
+    }
+
+    // Populate content
+    const titleEl = modalEl.querySelector('h3');
+    const messageEl = modalEl.querySelector('#deleteConfirmText');
+    const confirmBtn = modalEl.querySelector('#confirmDeleteBtn');
+    const cancelBtn = modalEl.querySelector('#cancelDeleteBtn');
+
+    if (titleEl) titleEl.textContent = options.title || 'Confirm Delete';
+    if (messageEl) messageEl.textContent = options.message || 'Are you sure you want to delete this item?';
+    if (confirmBtn) {
+      confirmBtn.textContent = options.confirmText || 'Delete';
+      confirmBtn.className = `btn ${options.confirmClass || 'btn-error'}`;
+    }
+    if (cancelBtn) cancelBtn.textContent = options.cancelText || 'Cancel';
+
+    // Replace buttons to remove stale listeners
+    function _replace(btn) {
+      if (!btn) return null;
+      const clone = btn.cloneNode(true);
+      btn.parentNode.replaceChild(clone, btn);
+      return clone;
+    }
+    const newConfirmBtn = _replace(confirmBtn);
+    const newCancelBtn = _replace(cancelBtn);
+
+    const confirmHandler = sh(() => {
+      this.hide(modalName);
+      if (typeof options.onConfirm === 'function') options.onConfirm();
+    }, 'ModalManager:confirmDelete:confirm');
+
+    const cancelHandler = sh(() => {
+      this.hide(modalName);
+      if (typeof options.onCancel === 'function') options.onCancel();
+    }, 'ModalManager:confirmDelete:cancel');
+
+    if (!this.eventHandlers?.trackListener) {
+      throw new Error('[ModalManager] eventHandlers.trackListener is required for confirmDelete');
+    }
+    if (newConfirmBtn) {
+      this.eventHandlers.trackListener(newConfirmBtn, 'click', confirmHandler, {
+        description: 'Delete Modal Confirm Click',
+        context: 'modalManager',
+        source: 'ModalManager.confirmDelete'
+      });
+    }
+    if (newCancelBtn) {
+      this.eventHandlers.trackListener(newCancelBtn, 'click', cancelHandler, {
+        description: 'Delete Modal Cancel Click',
+        context: 'modalManager',
+        source: 'ModalManager.confirmDelete'
+      });
+    }
+
+    // Show modal via existing util
     this.show(modalName, {
       showDuringInitialization: options.showDuringInitialization,
     });
