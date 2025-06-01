@@ -16,6 +16,11 @@
   --icon-size-md: 24px;
   --icon-size-lg: 32px;
   --icon-stroke-width: 2px;
+
+  /* Button height variables (ensure always defined) */
+  --btn-height-sm: 36px;
+  --btn-height-md: 44px; /* matches touch target */
+  --btn-height-lg: 52px;
 }
 
 /* Enhanced Touch Target Compliance */
@@ -42,6 +47,7 @@ input, select, textarea {
   font-size: var(--mobile-safe-font);
   min-height: var(--mobile-touch-target);
   line-height: 1.5;
+  @apply placeholder:text-base-content/60; /* increase contrast */
 }
 
 /* Standardized Button System */
@@ -53,17 +59,22 @@ input, select, textarea {
   height: var(--btn-height-md);
   min-width: var(--mobile-touch-target);
   gap: var(--spacing-sm);
+
+  /* Accessible focus ring */
+  @apply focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-base-100;
 }
 
 /* Button size variants */
 .btn-sm {
   height: var(--btn-height-sm);
   @apply px-3 text-sm;
+  min-width: var(--mobile-touch-target);
 }
 
 .btn-lg {
   height: var(--btn-height-lg);
   @apply px-6 text-lg;
+  min-width: var(--mobile-touch-target);
 }
 
 /* Button hover/active states with consistent opacity */

@@ -306,11 +306,54 @@ export function createUiRenderer(deps) {
     });
   }
 
+  /* -------------------------------------------------------------
+   *  Placeholder implementations for legacy ProjectDetailsComponent.
+   *  Full UX redesign will bring these into their own focused modules.
+   *  For now they simply dispatch events so ProjectDetailsComponent
+   *  can rebuild its DOM via existing private helpers.
+   * ------------------------------------------------------------- */
+
+  function renderFiles(projectId, files = []) {
+    try {
+      const doc = domAPI.getDocument();
+      domAPI.dispatchEvent(doc, eventHandlers.createCustomEvent('uiRenderer:filesRendered', {
+        detail: { projectId, files }
+      }));
+    } catch (err) {
+      logger.error('[UiRenderer][renderFiles] failed', err, { context: CONTEXT });
+    }
+  }
+
+  function renderArtifacts(projectId, artifacts = []) {
+    try {
+      const doc = domAPI.getDocument();
+      domAPI.dispatchEvent(doc, eventHandlers.createCustomEvent('uiRenderer:artifactsRendered', {
+        detail: { projectId, artifacts }
+      }));
+    } catch (err) {
+      logger.error('[UiRenderer][renderArtifacts] failed', err, { context: CONTEXT });
+    }
+  }
+
+  function renderStats(projectId, stats = {}) {
+    try {
+      const doc = domAPI.getDocument();
+      domAPI.dispatchEvent(doc, eventHandlers.createCustomEvent('uiRenderer:statsRendered', {
+        detail: { projectId, stats }
+      }));
+    } catch (err) {
+      logger.error('[UiRenderer][renderStats] failed', err, { context: CONTEXT });
+    }
+  }
+
   // Canonical cleanup must be first for DI pattern checkers
   return {
     renderConversations,
     renderStarredConversations,
     renderProjects,
+    renderFiles,
+    renderArtifacts,
+    renderStats,
     cleanup
   };
 }

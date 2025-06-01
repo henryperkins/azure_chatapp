@@ -40,8 +40,10 @@ export function createProjectDetailsComponent({
     }
     throw new Error(`[${MODULE_CONTEXT}] Missing required dependencies: ${missing.join(", ")}`);
   }
-  // Use canonical globalUtils helpers for formatting
-  const { formatDate, formatBytes } = DependencySystem.modules.get('globalUtils');
+  // Use canonical uiUtils helpers for formatting (preferred over globalUtils)
+  const uiUtils = DependencySystem.modules.get('uiUtils') || {};
+  const formatDate = uiUtils.formatDate || (() => '');
+  const formatBytes = uiUtils.formatBytes || (() => '');
 
   const instance = new ProjectDetailsComponent({
     domAPI,
@@ -116,8 +118,21 @@ class ProjectDetailsComponent {
     this.knowledgeBaseComponent = deps.knowledgeBaseComponent;
     this.app = deps.app || this.eventHandlers.DependencySystem?.modules?.get('appModule');
     this.modelConfig = deps.modelConfig;
+
+    // Store DI container for later safe look-ups
+    this.DependencySystem = deps.DependencySystem;
     this.chatManager = deps.chatManager;
     this.apiClient = deps.apiClient;
+
+    // UiRenderer provides heavy DOM list rendering helpers used by event handlers
+    this.uiRenderer = deps.DependencySystem?.modules?.get('uiRenderer');
+
+    // Bridge legacy instance methods expected by earlier template listeners to
+    // the canonical uiRenderer implementation, preserving single-source logic
+    this.renderFiles = (...a) => this.uiRenderer?.renderFiles?.(...a);
+    this.renderConversations = (...a) => this.uiRenderer?.renderConversations?.(...a);
+    this.renderArtifacts = (...a) => this.uiRenderer?.renderArtifacts?.(...a);
+    this.renderStats = (...a) => this.uiRenderer?.renderStats?.(...a);
     this.containerId = "projectDetailsView";
     this.templatePath = "/static/html/project_details.html";
     this.state = {
@@ -133,6 +148,9 @@ class ProjectDetailsComponent {
     this.fileUploadComponent = null;
     this.elements = {};
     this.auth = this.eventHandlers.DependencySystem?.modules?.get("auth");
+    // Utilities injected via factory (globalUtils) for consistent formatting
+    this.formatDate = typeof deps.formatDate === 'function' ? deps.formatDate.bind(this) : undefined;
+    this.formatBytes = typeof deps.formatBytes === 'function' ? deps.formatBytes.bind(this) : undefined;
     // Canonical safeHandler accessor (single source of truth)
     this.safeHandler = getSafeHandler(this.DependencySystem);
     // Track single KBC bootstrap log/noise
