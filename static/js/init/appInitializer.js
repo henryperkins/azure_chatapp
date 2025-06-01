@@ -1099,6 +1099,25 @@ if (handlers?.dispatch) {
                 return instance;
             })();
 
+            // Connect the ChatManager instance to the ProjectDetailsComponent so it can
+            // (re-)initialise the chat UI as soon as the dependency becomes available.
+            // Without this explicit wiring the ProjectDetailsComponent is created before
+            // the ChatManager and therefore never receives a valid instance, which
+            // prevents the chat_ui template from being injected and displayed in the
+            // “Chat” tab.
+            if (projectDetailsComp && typeof projectDetailsComp.setChatManager === 'function') {
+                try {
+                    projectDetailsComp.setChatManager(chatManagerInstance);
+                    logger.debug('[coreInit] ChatManager connected to ProjectDetailsComponent.', {
+                        context: 'coreInit'
+                    });
+                } catch (err) {
+                    logger.error('[coreInit] Failed to wire ChatManager into ProjectDetailsComponent', err, {
+                        context: 'coreInit'
+                    });
+                }
+            }
+
             // Phase 3.6: ProjectManager
             const pmFactory = await makeProjectManager({
                 DependencySystem,

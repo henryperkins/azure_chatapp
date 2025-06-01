@@ -727,6 +727,15 @@ export function createSidebar({
       // Restore pinned state
       restorePersistentState();
 
+      // Ensure the mobile dock visibility matches the initial sidebar state
+      if (sidebarMobileDock?.updateDockVisibility) {
+        try {
+          sidebarMobileDock.updateDockVisibility(visible);
+        } catch (dockErr) {
+          logger.warn('[Sidebar] Failed to sync mobile dock visibility on init', dockErr, { context: MODULE });
+        }
+      }
+
       // Bind events
       bindDomEvents();
       bindTabButtonsAndPin();
