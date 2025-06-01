@@ -696,36 +696,52 @@ export function createProjectListComponent(deps) {
                     const btn = e.target.closest('#createProjectBtn');
                     if (!btn) return;
 
-                    /* Wait for ModalManager readiness – still guard against rare races */
-                    try {
-                        const mm = DependencySystem?.modules?.get?.('modalManager');
-                        if (mm?.isReadyPromise) {
-                            await mm.isReadyPromise().catch(() => { /* ignore */ });
-                        }
-                    } catch (_) { /* ignore */ }
+                    // Ensure full app readiness before attempting to open the modal.
+                    await domReadinessService.waitForEvent('app:ready', {
+                        timeout: APP_CONFIG.TIMEOUTS?.APP_READY_WAIT ?? 30000,
+                        context: MODULE_CONTEXT + ':createProjectBtn:click'
+                    });
 
-                    _openNewProjectModal();
+                    let mm = modalManager || DependencySystem?.modules?.get?.('modalManager');
+
+                    /* Wait for ModalManager internal readiness */
+                    try {
+                        if (mm?.isReadyPromise) await mm.isReadyPromise();
+                    } catch (_) { /* ignore – handled by guard below */ }
+
+                    if (!mm?.show) {
+                        logger.warn('[ProjectListComponent] ModalManager not ready on createProjectBtn click', {
+                            context: MODULE_CONTEXT
+                        });
+                        return;
+                    }
+
+                    mm.show('project');
                 },
                 { context: MODULE_CONTEXT, description: 'delegate:createProjectBtn' }
             );
         };
 
-        /* Bind only after global initialization completes.
-           The appInitializer emits a replay-capable 'app:ready' event when
-           appModule.state.initializing flips to false. Waiting prevents the
-           ModalManager.show() guard (showDuringInitialization) from aborting. */
-        const appMod = DependencySystem?.modules?.get?.('appModule');
-        if (appMod?.state?.initializing) {
-            domReadinessService
-                .waitForEvent('app:ready', {
-                    timeout: APP_CONFIG.TIMEOUTS?.APP_READY_WAIT ?? 30000,
-                    context: MODULE_CONTEXT + ':bindCreateProjectBtn'
-                })
-                .then(bindListener)
-                .catch(bindListener); // On timeout, bind anyway to avoid dead UI
-        } else {
-            bindListener();
-        }
+        /*
+         * Always wait for the replay-capable `app:ready` event before wiring the
+         * “New Project” click listener. domReadinessService.waitForEvent()
+         * resolves immediately if the event already fired, so this covers both
+         * cold-boot and late-boot scenarios without relying on brittle
+         * appModule.state.initializing checks.
+         */
+        domReadinessService
+            .waitForEvent('app:ready', {
+                timeout: APP_CONFIG.TIMEOUTS?.APP_READY_WAIT ?? 30000,
+                context: MODULE_CONTEXT + ':bindCreateProjectBtn'
+            })
+            .then(bindListener)
+            .catch((err) => {
+                logger.warn('[ProjectListComponent] app:ready wait failed/timeout, binding createProjectBtn anyway', {
+                    error: err?.message,
+                    context: MODULE_CONTEXT
+                });
+                bindListener();
+            });
     }
     function _openNewProjectModal() {
         if (!modalManager?.show) { return; }
@@ -741,24 +757,30 @@ export function createProjectListComponent(deps) {
         });
     }
     async function _confirmDelete(project) {
-        if (modalManager?.confirmAction) {
-            let ok = false;
-            try {
-                ok = await new Promise(resolve => {
-                    modalManager.confirmAction({
-                        title: `Delete "${project.name}"?`,
-                        message: `This cannot be undone.`,
-                        confirmText: "Delete",
-                        confirmClass: "btn-error",
-                        onConfirm: () => resolve(true),
-                        onCancel: () => resolve(false)
-                    });
+        if (!modalManager) return;
+
+        const useDeleteModal = typeof modalManager.confirmDelete === 'function';
+        const fn = useDeleteModal ? modalManager.confirmDelete.bind(modalManager)
+                                  : modalManager.confirmAction?.bind(modalManager);
+
+        if (!fn) return;
+
+        let ok = false;
+        try {
+            ok = await new Promise(resolve => {
+                fn({
+                    title: `Delete "${project.name}"?`,
+                    message: 'This cannot be undone.',
+                    confirmText: 'Delete',
+                    confirmClass: 'btn-error',
+                    onConfirm: () => resolve(true),
+                    onCancel: () => resolve(false)
                 });
-            } catch (err) {
-                logger.error('[ProjectListComponent][_confirmDelete]', err, { context: MODULE_CONTEXT });
-            }
-            if (ok) _executeDelete(project.id);
+            });
+        } catch (err) {
+            logger.error('[ProjectListComponent][_confirmDelete]', err, { context: MODULE_CONTEXT });
         }
+        if (ok) _executeDelete(project.id);
     }
     async function _executeDelete(projectId) {
         if (!projectManager?.deleteProject) return;

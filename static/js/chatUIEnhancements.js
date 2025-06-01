@@ -742,10 +742,23 @@ export function createChatUIEnhancements(deps = {}) {
    */
   async function confirmDeleteConversationModal(conversationTitle) {
     const context = `${MODULE_CONTEXT}::confirmDeleteConversationModal`;
-    if (!modalManager?.showModal || !modalManager?.closeModal) {
-      logger.error(`[${MODULE_CONTEXT}] modalManager dependency missing or incomplete`, {
-        context
+
+    // Preferred path: use ModalManager.confirmDelete if available (wire to deleteConfirmModal)
+    if (typeof modalManager?.confirmDelete === 'function') {
+      return new Promise((resolve) => {
+        modalManager.confirmDelete({
+          title: 'Delete Conversation',
+          message: `Are you sure you want to delete "${sanitizer.sanitize(conversationTitle || 'this conversation')}"? This action cannot be undone.`,
+          confirmText: 'Delete',
+          confirmClass: 'btn-error',
+          onConfirm: () => resolve(true),
+          onCancel: () => resolve(false)
+        });
       });
+    }
+
+    if (!modalManager?.showModal || !modalManager?.closeModal) {
+      logger.error(`[${MODULE_CONTEXT}] modalManager dependency missing or incomplete`, { context });
       return false;
     }
 

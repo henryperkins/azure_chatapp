@@ -781,31 +781,40 @@ export function createEventHandlers({
     function bindAuthButtonDelegate() {
       if (authButtonDelegationBound) return;
       const parentNode = domAPI.getElementById('header') || domAPI.getDocument();
-      const currentModalManager = modalManager || DependencySystem.modules.get('modalManager');
 
       logger.info('[EventHandler] bindAuthButtonDelegate', {
         parentNodeExists: !!parentNode,
-        modalManagerExists: !!currentModalManager,
-        modalManagerHasShow: !!(currentModalManager?.show),
         context: 'eventHandler.bindAuthButtonDelegate'
       });
 
-      if (!currentModalManager?.show) {
-        logger.warn('[EventHandler] modalManager not available for auth button', {
-          context: 'eventHandler.bindAuthButtonDelegate'
-        });
-        return;
-      }
+      /*
+       * IMPORTANT: The ModalManager may not be registered at the moment this
+       * function is invoked because `modalsLoaded` can fire _before_
+       * createModalManager() finishes wiring itself into the DependencySystem.
+       * We therefore attach the delegated listener unconditionally and resolve
+       * the ModalManager lazily inside the click handler. This guarantees that
+       * the login button starts working as soon as ModalManager becomes
+       * available, without relying on an additional re-bind step.
+       */
 
       function handleAuthButtonClick(e, _element) {
         domAPI.preventDefault(e);
         logger.info('[EventHandler] Auth button clicked', { context: 'eventHandler.authButton' });
+
         try {
-          currentModalManager.show('login');
+          const mm = modalManager || DependencySystem.modules.get('modalManager');
+          if (!mm?.show) {
+            logger.warn('[EventHandler] ModalManager not ready – cannot show login modal yet', {
+              context: 'eventHandler.authButton'
+            });
+            return;
+          }
+          mm.show('login');
           logger.info('[EventHandler] Login modal requested', { context: 'eventHandler.authButton' });
-        }
-        catch (error) {
-          logger.error(`[${MODULE}][bindAuthButtonDelegate]`, error, { context: 'auth' });
+        } catch (error) {
+          logger.error(`[${MODULE}][bindAuthButtonDelegate] Failed to open login modal`, error, {
+            context: 'auth'
+          });
         }
       }
 

@@ -55,6 +55,8 @@
     --default-mono-font-family: var(--font-mono);
   }
 }
+
+# Removed custom overrides manually added; these should come from source CSS build
 @layer base {
   *, ::after, ::before, ::backdrop, ::file-selector-button {
     box-sizing: border-box;

@@ -93,6 +93,8 @@ export function createModelConfig({
       modelName: rawModelName,
       provider: api.store.getItem("provider") || "anthropic",
       maxTokens: parseInt(api.store.getItem("maxTokens") || "4096", 10),
+      // New: temperature (0-2 range per many providers, default 0.7)
+      temperature: parseFloat(api.store.getItem("temperature") || "0.7"),
       reasoningEffort: api.store.getItem("reasoningEffort") || "medium",
       reasoningSummary: api.store.getItem("reasoningSummary") || "concise",
       visionEnabled: api.store.getItem("visionEnabled") === "true",
@@ -222,6 +224,11 @@ export function createModelConfig({
       modelName: config.modelName || state.modelName,
       provider: config.provider || state.provider,
       maxTokens: clampInt(config.maxTokens, 100, 100000, state.maxTokens),
+      // Temperature can be between 0 and 2 (per OpenAI docs); clamp similar pattern.
+      temperature:
+        config.temperature !== undefined
+          ? Math.max(0, Math.min(2, parseFloat(config.temperature)))
+          : state.temperature,
       reasoningEffort: config.reasoningEffort || state.reasoningEffort,
       reasoningSummary: config.reasoningSummary || state.reasoningSummary,
       visionEnabled:
@@ -257,6 +264,7 @@ export function createModelConfig({
     api.store.setItem("modelName", state.modelName);
     api.store.setItem("provider", state.provider);
     api.store.setItem("maxTokens", state.maxTokens.toString());
+    api.store.setItem("temperature", state.temperature.toString());
     api.store.setItem("reasoningEffort", state.reasoningEffort);
     api.store.setItem("reasoningSummary", state.reasoningSummary);
     api.store.setItem("visionEnabled", state.visionEnabled.toString());
@@ -582,6 +590,10 @@ export function createModelConfig({
     if (reasoningEl) {
       reasoningEl.textContent = state.reasoningEffort || "N/A";
     }
+    const tempEl = domAPI.getElementById("temperatureDisplay");
+    if (tempEl) {
+      tempEl.textContent = state.temperature.toFixed(2);
+    }
     if (visionStatusEl) {
       const modelSupportsVision = getModelOptions().find((m) => m.id === state.modelName)?.supportsVision;
       if (modelSupportsVision) {
@@ -602,7 +614,10 @@ export function createModelConfig({
     api.delayed(() => {
       buildModelSelectUI(api, state, container);
       buildMaxTokensUI(api, state, container);
+      buildTemperatureUI(api, state, container);
+      buildReasoningEffortUI(api, state, container);
       buildVisionToggleIfNeeded(api, state, container);
+      buildWebSearchToggleUI(api, state, container);
       dispatchEventToBus(api, "modelConfigRendered", { containerId: container.id });
     }, 0);
   }
@@ -656,7 +671,7 @@ export function createModelConfig({
     if (!domAPI) return;
 
     const maxTokensDiv = domAPI.createElement("div");
-    maxTokensDiv.className = "my-2 flex flex-col";
+    maxTokensDiv.className = "my-2 flex flex-col w-full";
 
     const maxTokensLabel = domAPI.createElement("label");
     maxTokensLabel.htmlFor = `quickMaxTokens-${container.id}`;
@@ -673,7 +688,9 @@ export function createModelConfig({
     maxTokensInput.min = "100";
     maxTokensInput.max = "100000";
     maxTokensInput.value = state.maxTokens;
-    maxTokensInput.className = "range range-xs";
+    // Ensure slider never overflows the narrow sidebar; w-full forces it to
+    // scale with container while range-xs keeps compact height.
+    maxTokensInput.className = "range range-xs w-full";
 
     registerListener(
       api,
@@ -692,6 +709,123 @@ export function createModelConfig({
     labelAndValue.append(maxTokensLabel, maxTokensValue);
     maxTokensDiv.append(labelAndValue, maxTokensInput);
     container.appendChild(maxTokensDiv);
+  }
+
+  function buildTemperatureUI(api, state, container) {
+    const domAPI = api.ds?.modules?.get?.("domAPI");
+    if (!domAPI) return;
+
+    const tempDiv = domAPI.createElement("div");
+    tempDiv.className = "my-2 flex flex-col w-full";
+
+    const tempLabel = domAPI.createElement("label");
+    tempLabel.htmlFor = `quickTemperature-${container.id}`;
+    tempLabel.className = "text-xs font-medium text-gray-700 dark:text-gray-300 mb-1";
+    tempLabel.textContent = "Temperature:";
+
+    const tempValue = domAPI.createElement("span");
+    tempValue.className = "ml-1 text-xs text-gray-500 dark:text-gray-400";
+    tempValue.textContent = state.temperature.toFixed(2);
+
+    const tempInput = domAPI.createElement("input");
+    tempInput.id = `quickTemperature-${container.id}`;
+    tempInput.type = "range";
+    tempInput.min = "0";
+    tempInput.max = "2";
+    tempInput.step = "0.05";
+    tempInput.value = state.temperature;
+    tempInput.className = "range range-xs w-full";
+
+    registerListener(
+      api,
+      tempInput,
+      "input",
+      (e) => {
+        const val = parseFloat(e.target.value);
+        tempValue.textContent = val.toFixed(2);
+        updateModelConfig(api, state, { temperature: val });
+      },
+      { description: `quick config temperature slider for ${container.id}` }
+    );
+
+    const labelAndValue = domAPI.createElement("div");
+    labelAndValue.className = "flex justify-between items-center";
+    labelAndValue.append(tempLabel, tempValue);
+
+    tempDiv.append(labelAndValue, tempInput);
+    container.appendChild(tempDiv);
+  }
+
+  function buildReasoningEffortUI(api, state, container) {
+    const domAPI = api.ds?.modules?.get?.("domAPI");
+    if (!domAPI) return;
+
+    const label = domAPI.createElement("label");
+    label.htmlFor = `quickReasoning-${container.id}`;
+    label.className = "block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1";
+    label.textContent = "Reasoning Effort:";
+
+    const select = domAPI.createElement("select");
+    select.id = `quickReasoning-${container.id}`;
+    select.className = "select select-bordered select-sm w-full mb-2";
+
+    const options = [
+      { id: "low", name: "Low" },
+      { id: "medium", name: "Medium" },
+      { id: "high", name: "High" },
+    ];
+    options.forEach((opt) => {
+      const option = domAPI.createElement("option");
+      option.value = opt.id;
+      option.text = opt.name;
+      select.appendChild(option);
+    });
+    select.value = state.reasoningEffort;
+
+    registerListener(
+      api,
+      select,
+      "change",
+      () => {
+        updateModelConfig(api, state, { reasoningEffort: select.value });
+      },
+      { description: `quick config reasoning effort select for ${container.id}` }
+    );
+
+    container.appendChild(label);
+    container.appendChild(select);
+  }
+
+  function buildWebSearchToggleUI(api, state, container) {
+    const domAPI = api.ds?.modules?.get?.("domAPI");
+    if (!domAPI) return;
+
+    const outerDiv = domAPI.createElement("div");
+    outerDiv.className = "my-2 flex items-center";
+
+    const toggle = domAPI.createElement("input");
+    toggle.type = "checkbox";
+    toggle.id = `quickWebSearch-${container.id}`;
+    toggle.className = "toggle toggle-xs mr-2";
+    toggle.checked = state.enable_web_search;
+
+    const label = domAPI.createElement("label");
+    label.htmlFor = `quickWebSearch-${container.id}`;
+    label.className = "text-xs cursor-pointer";
+    label.textContent = "Enable Web Search";
+
+    registerListener(
+      api,
+      toggle,
+      "change",
+      () => {
+        updateModelConfig(api, state, { enable_web_search: toggle.checked });
+      },
+      { description: `quick config web search toggle for ${container.id}` }
+    );
+
+    outerDiv.append(toggle, label);
+    container.appendChild(outerDiv);
   }
 
   function buildVisionToggleIfNeeded(api, state, container) {

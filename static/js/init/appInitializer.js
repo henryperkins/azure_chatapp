@@ -2043,31 +2043,26 @@ if (handlers?.dispatch) {
 
         // --- PATCH: Extra post-UI readiness verification ---
         // Ensure DOM/selectors needed for post-auth/project UI actually exist
-        const domVerify = (sel, desc) => {
+        // Post-UI verification (ensure key selectors exist on main app pages).
+        // If the current HTML does not include these selectors (e.g. a standalone
+        // login page) we should **not** abort the whole boot sequence — simply
+        // log a warning and continue. The app will lazy-load the missing views
+        // once the user navigates to the main UI.
+
+        const criticalSelectors = [
+            ['#projectListView', 'Project List outer'],
+            ['#projectCardsPanel', 'Project card grid'],
+            ['#projectFilterTabs', 'Project filter tabs']
+        ];
+
+        criticalSelectors.forEach(([sel, desc]) => {
             const el = domAPI.querySelector(sel);
             if (!el) {
-                logger.error(`[appInitializer] Required selector missing post-UIInit: ${sel}`, { context: 'appInitializer:postUiInit' });
-                throw new Error(`[appInitializer] Required UI selector missing: ${sel} (${desc})`);
+                logger.warn(`[appInitializer] Optional selector missing post-UIInit: ${sel} – ${desc}. Continuing…`, {
+                    context: 'appInitializer:postUiInit'
+                });
             }
-            return true;
-        };
-        try {
-            domVerify('#projectListView', 'Project List outer');
-            domVerify('#projectCardsPanel', 'Project card grid');
-            domVerify('#projectFilterTabs', 'Project filter tabs');
-        } catch (verifyErr) {
-            logger.error('[appInitializer] Aborting boot due to missing base selectors.', verifyErr, {
-                context: 'appInitializer:finalCheck'
-            });
-            appModule.setAppLifecycleState({
-                initializing: false,
-                initialized: false,
-                currentPhase: 'failed_idle',
-                isReady: false
-            });
-            eventHandlers.dispatch('app:failed');
-            throw verifyErr;
-        }
+        });
 
         // Finalize
         appModule.setAppLifecycleState({

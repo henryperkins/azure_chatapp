@@ -698,10 +698,24 @@ export function createSidebar({
       });
       findDom();
       // Mobile Dock instance is prepared here; actual init is deferred
+      // Create mobile dock with handlers that ensure the sidebar becomes
+      // visible before performing the requested action so that, on phone
+      // screens, tapping the dock buttons actually navigates somewhere the
+      // user can see.
       sidebarMobileDock = createSidebarMobileDock({
         domAPI, eventHandlers, viewportAPI, logger,
         domReadinessService, safeHandler,
-        onTabActivate: activateTab
+        // Show sidebar and then activate desired tab
+        onTabActivate: (name) => {
+          showSidebar();
+          activateTab(name);
+        },
+        // Show sidebar and open the settings panel containing the
+        // quick-config UI for model selection / tokens etc.
+        onOpenSettings: () => {
+          showSidebar();
+          toggleSettingsPanel(true);
+        }
       });
 
       // Auth forms
