@@ -1,0 +1,140 @@
+{
+  "FileUploadComponent.js": [],
+  "accessibility-utils.js": [],
+  "app.js": [
+    "FileUploadComponent.js",
+    "accessibility-utils.js",
+    "appConfig.js",
+    "auth.js",
+    "chat.js",
+    "init/appInitializer.js",
+    "knowledgeBaseComponent.js",
+    "modalConstants.js",
+    "modalManager.js",
+    "modelConfig.js",
+    "navigationService.js",
+    "project-details-enhancements.js",
+    "projectDashboard.js",
+    "projectDetailsComponent.js",
+    "projectListComponent.js",
+    "projectManager.js",
+    "sidebar.js",
+    "tokenStatsManager.js",
+    "uiRenderer.js",
+    "utils/apiClient.js",
+    "utils/apiEndpoints.js",
+    "utils/browserService.js",
+    "utils/globalUtils.js",
+    "utils/htmlTemplateLoader.js",
+    "utils/polyfillCustomEvent.js"
+  ],
+  "appConfig.js": [
+    "utils/selectorConstants.js"
+  ],
+  "auth.js": [
+    "authFormListenerFactory.js"
+  ],
+  "authFormListenerFactory.js": [],
+  "chat-ui-utils.js": [],
+  "chat.js": [
+    "utils/getSafeHandler.js"
+  ],
+  "chatExtensions.js": [],
+  "chatUIEnhancements.js": [
+    "utils/getSafeHandler.js",
+    "utils/globalUtils.js",
+    "utils/initHelpers.js",
+    "utils/pullToRefresh.js"
+  ],
+  "errorReporter.js": [],
+  "eventHandler.js": [
+    "utils/globalUtils.js"
+  ],
+  "formatting.js": [],
+  "init/appInitializer.js": [
+    "eventHandler.js",
+    "logDeliveryService.js",
+    "logger.js",
+    "safeHandler.js",
+    "utils/domAPI.js",
+    "utils/domReadinessService.js",
+    "utils/polyfillCustomEvent.js",
+    "utils/session.js"
+  ],
+  "kb-result-handlers.js": [],
+  "knowledgeBaseComponent.js": [
+    "knowledgeBaseManager.js",
+    "knowledgeBaseSearchHandler.js",
+    "utils/selectorConstants.js"
+  ],
+  "knowledgeBaseManager.js": [],
+  "knowledgeBaseSearchHandler.js": [],
+  "logDeliveryService.js": [],
+  "logger.js": [],
+  "modalConstants.js": [],
+  "modalManager.js": [
+    "modalConstants.js"
+  ],
+  "modelConfig.js": [],
+  "navigationService.js": [
+    "utils/getSafeHandler.js"
+  ],
+  "project-details-enhancements.js": [
+    "utils/getSafeHandler.js",
+    "utils/pullToRefresh.js",
+    "utils/selectorConstants.js"
+  ],
+  "projectDashboard.js": [
+    "utils/getSafeHandler.js",
+    "utils/selectorConstants.js"
+  ],
+  "projectDashboardFix.js": [],
+  "projectDashboardUtils.js": [],
+  "projectDetailsComponent.js": [
+    "utils/getSafeHandler.js"
+  ],
+  "projectListComponent.js": [
+    "utils/selectorConstants.js"
+  ],
+  "projectManager.js": [],
+  "safeHandler.js": [],
+  "services/starredStorage.js": [],
+  "sidebar-enhancements.js": [],
+  "sidebar.js": [
+    "sidebar-enhancements.js",
+    "sidebarAuth.js",
+    "sidebarMobileDock.js",
+    "utils/globalUtils.js"
+  ],
+  "sidebarAuth.js": [],
+  "sidebarMobileDock.js": [],
+  "theme-toggle.js": [],
+  "tokenStatsManager.js": [],
+  "uiRenderer.js": [],
+  "utils/apiClient.js": [],
+  "utils/apiEndpoints.js": [],
+  "utils/browserService.js": [
+    "utils/session.js"
+  ],
+  "utils/domAPI.js": [],
+  "utils/domReadinessService.js": [],
+  "utils/errorReporterStub.js": [],
+  "utils/getSafeHandler.js": [],
+  "utils/globalUtils.js": [
+    "projectManager.js",
+    "utils/apiClient.js",
+    "utils/browserService.js",
+    "utils/storageService.js"
+  ],
+  "utils/htmlTemplateLoader.js": [],
+  "utils/initHelpers.js": [],
+  "utils/polyfillCustomEvent.js": [],
+  "utils/pullToRefresh.js": [],
+  "utils/selectorConstants.js": [],
+  "utils/session.js": [],
+  "utils/storageService.js": [],
+  "vendor/dompurify-global.js": [
+    "vendor/dompurify.es.js"
+  ],
+  "vendor/dompurify.es.js": []
+}

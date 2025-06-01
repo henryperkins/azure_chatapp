@@ -295,11 +295,17 @@
   </div>
 
   <!-- Enhanced Header -->
+  <!--
+    Header improvements
+    • Larger, consistent icon touch-targets (≥44×44)
+    • Slightly taller top padding so that main content isn’t cramped underneath the header
+  -->
   <header id="header" class="bg-base-100 border-b border-base-200 sticky top-0 z-40
                              shadow-sm transition-all duration-300 backdrop-blur-md bg-opacity-95">
     <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
       <!-- Mobile Menu Button -->
-      <button id="navToggleBtn" class="btn btn-ghost btn-square lg:hidden" aria-label="Toggle navigation menu"
+      <!-- Mobile nav toggle (44×44 min) -->
+      <button id="navToggleBtn" class="btn btn-ghost btn-square lg:hidden min-w-[44px] min-h-[44px]" aria-label="Toggle navigation menu"
         aria-expanded="false" aria-controls="mainSidebar">
         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
@@ -322,20 +328,20 @@
       </div>
 
       <!-- Right Side Actions -->
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-3">
         <!-- Keyboard Help (Desktop) -->
-        <button id="keyboardHelpBtn" type="button" class="btn btn-ghost btn-square hidden sm:flex"
+        <button id="keyboardHelpBtn" type="button" class="btn btn-ghost btn-square hidden sm:flex min-w-[44px] min-h-[44px]"
           aria-label="Show keyboard shortcuts" title="Keyboard shortcuts (?)">
-          <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
               d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
         </button>
 
         <!-- Theme Toggle -->
-        <button id="darkModeToggle" type="button" class="btn btn-ghost btn-square" aria-label="Toggle dark mode"
+        <button id="darkModeToggle" type="button" class="btn btn-ghost btn-square min-w-[44px] min-h-[44px]" aria-label="Toggle dark mode"
           title="Toggle theme">
-          <svg id="darkModeIcon" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg id="darkModeIcon" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
               d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
           </svg>
@@ -418,7 +424,7 @@
             transition-transform duration-300 ease-in-out
             bg-base-100 border-r border-base-200
             flex flex-col h-full
-            md:shadow-none shadow-2xl" aria-label="Main navigation">
+            md:shadow-lg shadow-2xl" aria-label="Main navigation">
 
       <!-- Sidebar Header -->
       <div class="flex items-center justify-between p-4 border-b border-base-200 bg-base-100/50 backdrop-blur-sm">
@@ -484,7 +490,7 @@
                   d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
               <input id="chatSearchInput" type="search" placeholder="Search conversations..."
-                class="input input-sm w-full pl-9 pr-9" aria-label="Search conversations">
+                class="input input-sm w-full pl-9 pr-9 placeholder:text-base-content/60 focus:outline-none focus:ring-2 focus:ring-primary" aria-label="Search conversations">
               <button id="clearChatSearchBtn"
                 class="btn btn-ghost btn-square btn-xs absolute right-1 top-1/2 -translate-y-1/2 hidden"
                 aria-label="Clear search">
@@ -635,7 +641,7 @@
     </nav>
 
     <!-- Main Content Area -->
-    <main id="mainContent" class="flex-1 flex flex-col overflow-hidden bg-base-200">
+    <main id="mainContent" class="flex-1 flex flex-col overflow-hidden bg-base-200 pt-4 md:pt-6">
       <div class="flex-1 overflow-y-auto">
         <div class="p-4 md:p-6">
           <!-- Project Manager Panel -->

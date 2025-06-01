@@ -1721,6 +1721,21 @@ if (handlers?.dispatch) {
                 if (plc && typeof pdDashboard.setProjectListComponent === 'function') {
                     pdDashboard.setProjectListComponent(plc);
                 }
+                // Ensure the dashboard is fully initialised now that its
+                // dependent components are connected and the UI templates
+                // are present.  Without this call the project list remains
+                // in the loading state because ProjectDashboard never
+                // triggers showProjectList / _loadProjects.
+                if (typeof pdDashboard.initialize === 'function' && !pdDashboard.__initialized) {
+                    try {
+                        await pdDashboard.initialize();
+                        pdDashboard.__initialized = true; // prevent double-init
+                    } catch (err) {
+                        logger.error('[UIInit] ProjectDashboard.initialize failed', err, {
+                            context: 'uiInit:projectDashboardInit'
+                        });
+                    }
+                }
             }
             logger.log('[UIInit] Late-stage UI components registered', {
                 context: 'uiInit:createAndRegisterUIComponents'

@@ -192,7 +192,11 @@ export const formatNumber = (n) => new Intl.NumberFormat().format(n || 0);
 export const formatDate = (d) => {
   if (!d) return "";
   try {
-    return new Date(d).toLocaleDateString();
+    return new Date(d).toLocaleDateString(undefined, {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
   } catch (err) {
     const logger = globalThis?.DependencySystem?.modules?.get?.('logger')
                  || { error () {} };

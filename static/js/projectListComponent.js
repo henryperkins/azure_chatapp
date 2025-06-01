@@ -314,13 +314,36 @@ export function createProjectListComponent(deps) {
             domAPI.getDocument(),
             'projectListHtmlLoaded',
             () => {
+                // Re-bind filter tabs now that the real template is in the DOM
                 _bindFilterEvents();
-                if (!gridElement) {
-                    const parent =
-                        element ||
-                        domAPI.getElementById(elementId) ||
-                        domAPI.querySelector('#projectListView, .project-list-container');
-                    if (parent) gridElement = domAPI.querySelector('.mobile-grid', parent);
+
+                // Update gridElement reference to the one inserted by the template
+                const parent =
+                    element ||
+                    domAPI.getElementById(elementId) ||
+                    domAPI.querySelector('#projectListView, .project-list-container');
+                const newGrid = parent ? domAPI.querySelector('.mobile-grid', parent) : null;
+
+                if (newGrid && newGrid !== gridElement) {
+                    gridElement = newGrid;
+
+                    // Attach the click listener to the newly injected grid
+                    eventHandlers.trackListener(
+                        gridElement,
+                        'click',
+                        safeHandler((e) => _handleCardClick(e), 'ProjectListComponent:gridElement:click'),
+                        { context: MODULE_CONTEXT, description: 'gridElementClickRebind' }
+                    );
+                }
+
+                // If projects were already loaded before the template arrived, render them again so
+                // the user does not remain on the skeleton loading state.
+                if (state.projects && state.projects.length > 0) {
+                    try {
+                        renderProjects(state.projects);
+                    } catch (renderErr) {
+                        logger.error('[ProjectListComponent] Failed to re-render projects after template load', renderErr, { context: MODULE_CONTEXT });
+                    }
                 }
             },
             { once: true, context: MODULE_CONTEXT, description: 'rebindFilterTabsAfterTemplate' }
@@ -329,9 +352,10 @@ export function createProjectListComponent(deps) {
     function _bindFilterEvents() {
         const container = domAPI?.getElementById ? domAPI.getElementById("projectFilterTabs") : domAPI.getElementById("projectFilterTabs");
         if (!container) return;
+        const tabSelector = ".project-tab[data-filter], .tab[data-filter]";
         const tabs = domAPI?.querySelectorAll
-            ? [...domAPI.querySelectorAll(".tab[data-filter]", container)]
-            : [...container.querySelectorAll(".tab[data-filter]")];
+            ? [...domAPI.querySelectorAll(tabSelector, container)]
+            : [...container.querySelectorAll(tabSelector)];
         tabs.forEach(tab => _bindSingleFilterTab(tab, tab.dataset.filter));
         _bindFilterTablistKeyboardNav(container, tabs);
     }
@@ -378,13 +402,14 @@ export function createProjectListComponent(deps) {
     }
     function _updateActiveTab() {
         const tabs = domAPI?.querySelectorAll
-            ? domAPI.querySelectorAll("#projectFilterTabs .tab[data-filter]")
-            : domAPI.querySelectorAll("#projectFilterTabs .tab[data-filter]");
+            ? domAPI.querySelectorAll("#projectFilterTabs .project-tab[data-filter], #projectFilterTabs .tab[data-filter]")
+            : domAPI.querySelectorAll("#projectFilterTabs .project-tab[data-filter], #projectFilterTabs .tab[data-filter]");
 
         let activeTabId = null;
         tabs.forEach((tab) => {
             const isActive = tab.dataset.filter === state.filter;
             tab.classList.toggle("tab-active", isActive);
+            tab.classList.toggle("active", isActive);
             tab.setAttribute("aria-selected", isActive ? "true" : "false");
             tab.setAttribute("tabindex", isActive ? "0" : "-1");
             if (isActive) activeTabId = tab.id;
@@ -1015,7 +1040,11 @@ export function createProjectListComponent(deps) {
         if (!dateString) return "";
         try {
             const date = new Date(dateString);
-            return date.toLocaleDateString();
+            return date.toLocaleDateString(undefined, {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit'
+            });
         } catch (err) {
             logger.error('[ProjectListComponent][_formatDate]', err, { context: MODULE_CONTEXT });
             return dateString;

@@ -17,19 +17,19 @@
   <div class="relative mb-6">
     <div id="projectFilterTabs" class="project-tabs flex gap-2 overflow-x-auto scrollbar-none" role="tablist"
       aria-label="Project filters">
-      <button class="project-tab active" data-filter="all" id="filterTabAll" role="tab" aria-selected="true"
+      <button class="tab project-tab active flex-1" data-filter="all" id="filterTabAll" role="tab" aria-selected="true"
         tabindex="0">
         All
       </button>
-      <button class="project-tab" data-filter="recent" id="filterTabRecent" role="tab" aria-selected="false"
+      <button class="tab project-tab flex-1" data-filter="recent" id="filterTabRecent" role="tab" aria-selected="false"
         tabindex="-1">
         Recent
       </button>
-      <button class="project-tab" data-filter="pinned" id="filterTabPinned" role="tab" aria-selected="false"
+      <button class="tab project-tab flex-1" data-filter="pinned" id="filterTabPinned" role="tab" aria-selected="false"
         tabindex="-1">
         Pinned
       </button>
-      <button class="project-tab" data-filter="archived" id="filterTabArchived" role="tab" aria-selected="false"
+      <button class="tab project-tab flex-1" data-filter="archived" id="filterTabArchived" role="tab" aria-selected="false"
         tabindex="-1">
         Archived
       </button>
@@ -43,7 +43,7 @@
         stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
         <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
       </svg>
-      <input id="projectSearchInput" type="search" class="input w-full pl-10 pr-10" placeholder="Search projects..."
+      <input id="projectSearchInput" type="search" class="input w-full pl-10 pr-10 placeholder:text-base-content/60 focus:outline-none focus:ring-2 focus:ring-primary" placeholder="Search projects..."
         inputmode="search" enterkeyhint="search" aria-label="Search projects">
       <button
         id="clearSearchBtn"
@@ -81,9 +81,9 @@
           </p>
         </div>
         <!-- Single action menu instead of multiple buttons -->
-        <div class="project-card-actions">
+        <div class="project-card-actions pt-1">
           <div class="project-card-menu">
-            <button class="project-card-menu-btn" aria-label="Project actions">
+            <button class="project-card-menu-btn focus:outline-none focus:ring-2 focus:ring-primary" aria-label="Project actions">
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />

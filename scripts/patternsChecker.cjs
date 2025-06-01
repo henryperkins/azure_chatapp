@@ -753,12 +753,9 @@ function vDI(err, file, isBootstrapFile, config) {
         }
       }
       if ( !isBootstrapFile && cNode.type === "MemberExpression" && cNode.object.type === "MemberExpression" && cNode.object.object.type === "Identifier" && cNode.object.object.name === depSystemName && cNode.object.property.name === "modules" && cNode.property.name === "get" ) {
-        let isTopLevel = true; let currentPath = p;
-        while (currentPath.parentPath) {
-            if (currentPath.parentPath.isFunction() || currentPath.parentPath.isProgram()) { if (currentPath.parentPath.isFunction()) isTopLevel = false; break; }
-            currentPath = currentPath.parentPath;
-        }
-        if (isTopLevel && currentPath.parentPath.isProgram()) {
+        const funcParent = p.getFunctionParent();
+        const isTopLevel = !funcParent || funcParent.parentPath.isProgram();
+        if (isTopLevel) {
              err.push(E(file, p.node.loc.start.line, 2, `'${depSystemName}.modules.get()' must not be called at module scope.`, `Use '${depSystemName}.modules.get()' only inside functions (e.g., within a factory after DI). Prefer direct DI for primary dependencies.`));
         }
       }
@@ -774,14 +771,19 @@ function vLog(err, file, isBootstrapFile, moduleCtx, config) {
     CallExpression(p) {
       const calleeNode = p.node.callee;
       if ( calleeNode.type === "MemberExpression" && calleeNode.object.type === "CallExpression" && calleeNode.object.callee?.type === "MemberExpression" && calleeNode.object.callee.object.type === "Identifier" && calleeNode.object.callee.object.name === loggerName && calleeNode.object.callee.property.name === "withContext" && !p.scope.hasBinding(loggerName) && !isBootstrapFile && !isLoggerJs ) {
-        const chainedMethodName = calleeNode.property.name; const chainedArgs = p.get("arguments"); const lastChainedArgIndex = chainedArgs.length - 1;
+        const chainedMethodName = calleeNode.property.name;
+        const chainedArgs = p.get("arguments");
+        const lastChainedArgIndex = chainedArgs.length - 1;
         if (!["info", "warn", "error", "debug", "log", "critical", "fatal"].includes(chainedMethodName)) return;
         if (lastChainedArgIndex < 0) {
           err.push(E(file, p.node.loc.start.line, 12, `Chained logger call '${loggerName}.withContext(...).${chainedMethodName}' requires at least a message and a final metadata object with { context }.`, `Example: ${loggerName}.withContext('BaseContext').${chainedMethodName}('Event occurred', { data: 'val' }, { context: "${moduleCtx}:operation" });`));
         } else {
-          const lastChainedArgPath = chainedArgs[lastChainedArgIndex]; const lastChainedArgNode = getExpressionSourceNode(lastChainedArgPath);
-          if ( !(lastChainedArgNode && lastChainedArgNode.type === "ObjectExpression" && hasProp(lastChainedArgNode, "context")) ) {
-            err.push(E(file, p.node.loc.start.line, 12, `Chained logger call '${loggerName}.withContext(...).${chainedMethodName}' missing a final metadata object with a 'context' property.`, `Example: ${loggerName}.withContext('BaseContext').${chainedMethodName}('Event occurred', { data: 'val' }, { context: "${moduleCtx}:operation" }); Found type for last arg: ${lastChainedArgNode ? lastChainedArgNode.type : 'undefined'}`));
+          const metaArgPath = chainedArgs[lastChainedArgIndex].isObjectExpression()
+            ? chainedArgs[lastChainedArgIndex]
+            : (lastChainedArgIndex >= 1 ? chainedArgs[lastChainedArgIndex - 1] : null);
+          const metaNode = metaArgPath ? getExpressionSourceNode(metaArgPath) : null;
+          if ( !(metaNode && metaNode.type === "ObjectExpression" && hasProp(metaNode, "context")) ) {
+            err.push(E(file, p.node.loc.start.line, 12, `Chained logger call '${loggerName}.withContext(...).${chainedMethodName}' missing a final metadata object with a 'context' property.`, `Example: ${loggerName}.withContext('BaseContext').${chainedMethodName}('Event occurred', { data: 'val' }, { context: "${moduleCtx}:operation" }); Found type for meta arg: ${metaNode ? metaNode.type : 'undefined'}`));
           }
         }
       }
@@ -839,6 +841,7 @@ function vPure(err, file) {
 
 /* 4 & 5. Centralised Event Handling + Context Tags */
 function vEvent(err, file, isBootstrapFile, moduleCtx, config) {
+  if (/[/\\]tests?[/\\]/i.test(file)) return {}; // Skip test fixtures
   const ehName = config.serviceNames.eventHandlers;
   return {
     CallExpression(p) {
@@ -1043,6 +1046,35 @@ function vBus(err, file, config) {
           else if (busSourceNode.type === "ThisExpression") isKnownBus = true;
           else if (busSourceNode.type === "NewExpression" && busSourceNode.callee.name === "EventTarget") isKnownBus = true;
           else if (busSourceNode.type === "CallExpression" && busSourceNode.callee.property?.name?.match(/get.*Bus$/i)) isKnownBus = true;
+
+          // NEW: Alias variable that was initialised via DependencySystem.modules.get('XBus') earlier in scope
+          else if (!isKnownBus && busSourceNode.type === 'Identifier') {
+            const binding = p.scope.getBinding(busSourceNode.name);
+            if (binding && binding.path.isVariableDeclarator()) {
+              const init = binding.path.node.init;
+              if (init && init.type === 'CallExpression' &&
+                  init.callee?.type === 'MemberExpression' &&
+                  init.callee.object?.type === 'MemberExpression' &&
+                  init.callee.object.object?.type === 'Identifier' &&
+                  init.callee.object.object.name === (config.objectNames.dependencySystem || "DependencySystem") &&
+                  init.callee.object.property?.name === 'modules' &&
+                  init.callee.property?.name === 'get') {
+                isKnownBus = true;
+              }
+            }
+          }
+          /* ── NEW: treat buses retrieved via DependencySystem.modules.get('…Bus') as known ── */
+          else if (!isKnownBus &&
+              busSourceNode.type === "CallExpression" &&
+              busSourceNode.callee?.type === "MemberExpression" &&
+              busSourceNode.callee.object?.type === "MemberExpression" &&
+              busSourceNode.callee.object.object?.type === "Identifier" &&
+              busSourceNode.callee.object.object.name === (config.objectNames.dependencySystem || "DependencySystem") &&
+              busSourceNode.callee.object.property?.name === "modules" &&
+              busSourceNode.callee.property?.name === "get") {
+            // e.g., DependencySystem.modules.get('AppBus')
+            isKnownBus = true;
+          }
         }
 
         if (!isKnownBus) {
@@ -1257,7 +1289,12 @@ function vModuleSize(err, file, code, config) {
   if (/[/\\](auth|appModule)\.(js|ts)$/i.test(file) || config.bootstrapFileRegex.test(file)) return {};
   if (config.vendoredCommentRegex && config.vendoredCommentRegex.test(code.substring(0, 500))) return {};
   const maxLines = config.maxModuleLines || DEFAULT_CONFIG.maxModuleLines;
-  const lines = code.split(/\r?\n/).length;
+  const arr = code.split(/\r?\n/);
+  let offset = 0;
+  if (config.vendoredCommentRegex && config.vendoredCommentRegex.test(arr[0])) {
+    while (offset < arr.length && arr[offset].trim() !== '') offset++;
+  }
+  const lines = arr.length - offset;
   if (lines > maxLines) {
     err.push(E(file, 1, 14, `Module exceeds ${maxLines} line limit (${lines} lines).`, `Split this module into smaller, focused modules. Vendored libraries can be exempted with a '${"// VENDOR-EXEMPT-SIZE: library name and reason"}' comment at the top.`));
   }

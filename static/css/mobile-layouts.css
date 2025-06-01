@@ -4,10 +4,22 @@
 ============================================================================= */
 
 /* Enhanced Mobile-First Grid System */
+.icon-btn {
+  /* 44×44px accessible touch target */
+  @apply min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg;
+}
+
+.icon-sm {
+  /* Consistent 24 px icon size */
+  @apply w-6 h-6;
+}
+
 .mobile-grid {
   @apply grid gap-4 p-4;
   grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
   @apply sm:gap-6 lg:gap-8;
+  /* Add extra top padding when placed directly under sticky header on desktop */
+  @apply lg:pt-6;
 }
 
 /* Enhanced Chat Layout with Collapsible Header */
@@ -41,6 +53,8 @@
   scroll-padding-top: var(--spacing-md);
   scroll-padding-bottom: var(--spacing-md);
   min-height: 300px;
+  /* Prevent layout shift when scrollbar appears */
+  scrollbar-gutter: stable;
 }
 
 /* Improved Chat Input with Better Mobile UX */
@@ -81,6 +95,18 @@
 
 .chat-send-btn:hover  { @apply bg-primary/90; }
 .chat-send-btn:active { @apply scale-95; }
+
+/* High-contrast placeholder text & focus rings for inputs */
+input::placeholder,
+textarea::placeholder {
+  @apply text-base-content/60;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  @apply outline-none ring-2 ring-primary border-primary;
+}
 
 /* Enhanced Project Details Layout */
 .project-details {
@@ -141,6 +167,7 @@
   @apply transition-all duration-200;
   scroll-snap-align: start;
   min-width: 120px;
+  @apply flex-1; /* Equal width for all tabs */
   @apply flex items-center justify-center gap-2;
   white-space: nowrap;
   min-height: var(--mobile-touch-target);
@@ -154,6 +181,16 @@
   @apply bg-primary text-primary-content;
   @apply border-primary shadow-md;
   font-weight: 500;
+}
+
+/* Better spacing for action icons inside project cards */
+.project-card-actions {
+  padding-top: 0.25rem; /* 4px */
+}
+
+/* Keyboard focus styles */
+.project-tab:focus-visible {
+  @apply outline-none ring-2 ring-primary ring-offset-2;
 }
 
 /* Enhanced Sidebar Layout */
@@ -235,6 +272,11 @@
 
 .dock-btn--active .dock-indicator {
   @apply opacity-100 scale-x-100;
+}
+
+/* Accessibility: visible focus for dock buttons */
+.dock-btn:focus-visible {
+  @apply outline-none ring-2 ring-primary ring-offset-2;
 }
 
 .dock-fab {
@@ -464,6 +506,10 @@
 }
 
 .skip-to-content:focus {
+  @apply translate-y-0;
+}
+
+.skip-to-content:focus-visible {
   @apply translate-y-0;
 }
 
