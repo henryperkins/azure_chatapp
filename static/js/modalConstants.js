@@ -15,6 +15,8 @@ export function createModalConstants() {
   const MODAL_MAPPINGS = {           // moved inside: no top-level state
     project: 'projectModal',
     login: 'loginModal',
+    // Alias "register" maps to the same combined login/register dialog
+    register: 'loginModal',
     delete: 'deleteConfirmModal',
     confirm: 'confirmActionModal',
     error: 'errorModal',

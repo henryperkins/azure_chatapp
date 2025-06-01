@@ -77,7 +77,20 @@ export function createProjectListComponent(deps) {
         state = { ...state, ...partial };
     }
     function _getProjectId(p) {
-        return p?.uuid ?? p?.id ?? p?.project_id ?? p?.ID ?? null;
+        /*
+         * Ensure we capture the ID regardless of backend naming convention.
+         * Accepts (in priority order): uuid, id, project_id, projectId, ID, _id.
+         */
+        if (!p || typeof p !== 'object') return null;
+        return (
+            p.uuid ??
+            p.id ??
+            p.project_id ??
+            p.projectId ??
+            p.ID ??
+            p._id ??
+            null
+        );
     }
 
     // Helper to wait for DOM updates after template injection
@@ -197,6 +210,27 @@ export function createProjectListComponent(deps) {
             safeHandler(projectsLoadedHandler, 'ProjectListComponent:projectsLoaded'),
             { context: MODULE_CONTEXT }
         );
+
+        /* ------------------------------------------------------------------
+         * Some environments may fail to rebroadcast the "projectsLoaded"
+         * CustomEvent on the global document (e.g. when running inside
+         * testing frameworks with a stubbed Document or when domAPI.dispatchEvent
+         * throws due to a polyfill mismatch).  To guarantee the component is
+         * updated we ALSO subscribe directly to ProjectManager.eventBus when
+         * available.
+         * ------------------------------------------------------------------ */
+        try {
+            if (projectManager?.eventBus) {
+                eventHandlers.trackListener(
+                    projectManager.eventBus,
+                    'projectsLoaded',
+                    safeHandler(projectsLoadedHandler, 'ProjectListComponent:PMBus:projectsLoaded'),
+                    { context: MODULE_CONTEXT, description: 'ProjectManagerBus projectsLoaded listener' }
+                );
+            }
+        } catch (busErr) {
+            logger.error('[ProjectListComponent] Failed to subscribe to ProjectManager.eventBus projectsLoaded', busErr, { context: MODULE_CONTEXT });
+        }
         eventHandlers.trackListener(
             gridElement,
             "click",
@@ -421,6 +455,23 @@ export function createProjectListComponent(deps) {
             element.classList.remove("hidden", "opacity-0");
             element.style.opacity = '1';
             element.style.display = "";
+        }
+    }
+
+    async function hide() {
+        try {
+            if (element) {
+                element.classList.add('hidden');
+                element.style.display = 'none';
+            }
+            if (gridElement) {
+                gridElement.classList.add('hidden');
+                gridElement.style.display = 'none';
+            }
+            return true;
+        } catch (err) {
+            logger.error('[ProjectListComponent][hide] failed', err, { context: MODULE_CONTEXT });
+            return false;
         }
     }
     /**
@@ -1033,6 +1084,7 @@ export function createProjectListComponent(deps) {
         destroy,
         renderProjects, // for test/debug
         show,
+        hide,
         onViewProject, // can be overridden
         eventBus,
         setProjectManager: (pm) => {

@@ -262,6 +262,9 @@
 </head>
 
 <body class="bg-base-200 text-base-content min-h-screen mobile-safe flex flex-col font-sans">
+
+  <!-- Accessibility: Skip link becomes visible on keyboard focus only -->
+  <a href="#main-content" class="skip-to-content sr-only focus:not-sr-only">Skip to main content</a>
   <!-- Enhanced Loading State -->
   <div id="appLoading" class="app-loading">
     <div class="flex flex-col items-center gap-4">
