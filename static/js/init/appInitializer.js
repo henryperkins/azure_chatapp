@@ -140,6 +140,12 @@ export function createAppInitializer(opts = {}) {
         eventHandlers.setDomReadinessService(domReadinessService);
 
         // 11. UI and global utilities
+        // ------------------------------------------------------------------
+        // GLOBAL APP BUS (single source of truth for cross-module events)
+        // Provide this **before** any module that might dispatch to it.
+        const AppBus = new EventTarget();
+        DependencySystem.register('AppBus', AppBus);
+
         const uiUtils = {
             formatBytes: opts.globalFormatBytes,
             formatDate: opts.globalFormatDate,
@@ -409,13 +415,13 @@ export function createAppInitializer(opts = {}) {
                             previousProjectId: detail.previousProjectId,
                             context: 'appState:projectChangeEvent'
                         });
-if (handlers?.dispatchEvent) {
-    handlers.dispatchEvent(
+if (handlers?.dispatch) {
+    handlers.dispatch(
         'currentProjectChanged',
         { detail },
         appBus
     );
-} else if (typeof appBus.dispatchEvent === 'function') {
+} else if (appBus && typeof appBus.dispatchEvent === 'function') {
     appBus.dispatchEvent(
         handlers.createCustomEvent('currentProjectChanged', { detail })
     );
@@ -429,8 +435,8 @@ if (handlers?.dispatchEvent) {
                                     projectId: state.currentProject.id,
                                     context: 'appState:projectChangeEvent:legacy'
                                 });
-if (handlers?.dispatchEvent) {
-    handlers.dispatchEvent(
+if (handlers?.dispatch) {
+    handlers.dispatch(
         'projectSelected',
         {
             detail: {
@@ -440,7 +446,7 @@ if (handlers?.dispatchEvent) {
         },
         doc
     );
-} else if (typeof domAPIlookup.dispatchEvent === 'function') {
+} else if (domAPIlookup && typeof domAPIlookup.dispatchEvent === 'function') {
     domAPIlookup.dispatchEvent(
         doc,
         handlers.createCustomEvent('projectSelected', {
@@ -1144,22 +1150,10 @@ if (handlers?.dispatchEvent) {
                     context: 'coreInit'
                 });
 
-                // Immediately initialize KnowledgeBaseComponent so it can dispatch its ready event.
-                // Use visibility false, no data, no projectId, for safe boot.
-                if (typeof knowledgeBaseComponentInstance.initialize === 'function') {
-                    // Defensive: initialize with "not visible" and no kbData, which is safe.
-                    knowledgeBaseComponentInstance.initialize(false, null, null)
-                        .then(() => {
-                            logger.debug('[coreInit] KnowledgeBaseComponent initial hidden initialization complete.', {
-                                context: 'coreInit'
-                            });
-                            appModule.state.knowledgeBaseComponentReady = true;
-                        })
-                        .catch(err =>
-                            logger.error('[coreInit] KnowledgeBaseComponent initial hidden initialization failed',
-                                err, { context: 'coreInit' })
-                        );
-                }
+                // Do NOT initialize the component here; it must run only after
+                // project_details.html has been injected and the user is
+                // authenticated.  uiInit.registerNavigationViews() will call
+                // knowledgeBaseComponent.initialize() at the appropriate time.
 
                 // Connect the KnowledgeBaseComponent to the ProjectDetailsComponent
                 if (projectDetailsComp && typeof projectDetailsComp.setKnowledgeBaseComponent === 'function') {
@@ -1346,6 +1340,27 @@ if (handlers?.dispatchEvent) {
                     navService.navigateToProjectList().catch(() => { });
                 } else if (projectManager?.loadProjects) {
                     projectManager.loadProjects('all').catch(() => { });
+                }
+
+                /* --------------------------------------------------------------------
+                 * UI CONSOLIDATION: Ensure any auth-related modals (e.g. #loginModal,
+                 * #registerModal) are forcibly closed once the user has successfully
+                 * authenticated.  In some fast-load scenarios the authReady /
+                 * authStateChanged events may have fired before ModalManager
+                 * listeners were attached, leaving the modal visible even though the
+                 * application state is already authenticated.
+                 * ------------------------------------------------------------------ */
+                if (isAuthenticated) {
+                    try {
+                        const modalManager = DependencySystem.modules.get?.('modalManager');
+                        if (modalManager && typeof modalManager.hide === 'function') {
+                            ['login', 'register'].forEach((modalName) => {
+                                try { modalManager.hide(modalName); } catch { /* ignore */ }
+                            });
+                        }
+                    } catch (modalErr) {
+                        logger.warn('[authInit][handleAuthStateChange] Unable to hide auth modals after login', modalErr, { context: 'authInit:handleAuthStateChange' });
+                    }
                 }
             };
 
@@ -1759,11 +1774,32 @@ if (handlers?.dispatchEvent) {
                             const dash = DependencySystem.modules.get('projectDashboard');
                             if (dash?.showProjectDetails) {
                                 await dash.showProjectDetails(projectId);
+                    // Ensure KnowledgeBaseComponent is initialized once the
+                    // project details template (which contains its DOM nodes)
+                    // is in the document.  Initialize only once.
+                    const kbComp = DependencySystem.modules.get('knowledgeBaseComponent');
+                    if (kbComp && (!kbComp.isInitialized || kbComp.isInitialized() === false) && typeof kbComp.initialize === 'function') {
+                        try {
+                            await kbComp.initialize(true, null, projectId);
+                            logger.debug('[uiInit] KnowledgeBaseComponent initialized (projectDetails navigation)', { context: 'uiInit' });
+                        } catch (err) {
+                            logger.error('[uiInit] KnowledgeBaseComponent initialization failed during projectDetails navigation', err, { context: 'uiInit' });
+                        }
+                    }
                                 return true;
                             }
                             const pdc = DependencySystem.modules.get('projectDetailsComponent');
                             if (pdc?.showProjectDetails) {
                                 await pdc.showProjectDetails(projectId);
+                            const kbComp = DependencySystem.modules.get('knowledgeBaseComponent');
+                            if (kbComp && (!kbComp.isInitialized || kbComp.isInitialized() === false) && typeof kbComp.initialize === 'function') {
+                                try {
+                                    await kbComp.initialize(true, null, projectId);
+                                    logger.debug('[uiInit] KnowledgeBaseComponent initialized (fallback path)', { context: 'uiInit' });
+                                } catch (err) {
+                                    logger.error('[uiInit] KnowledgeBaseComponent initialization failed (fallback)', err, { context: 'uiInit' });
+                                }
+                            }
                                 return true;
                             }
                             throw new Error('[uiInit] Cannot show projectDetails');
@@ -1864,6 +1900,19 @@ if (handlers?.dispatchEvent) {
                         if (sidebarAuth?.init) {
                           await sidebarAuth.init();
                           sidebarAuth.setupInlineAuthForm?.();
+
+                          // Ensure the sidebar auth UI immediately reflects the current
+                          // canonical authentication state even if the authReady/authStateChanged
+                          // events fired before SidebarAuth listeners were wired (race condition
+                          // observed on fast connections).
+                          if (typeof sidebarAuth.forceAuthStateSync === 'function') {
+                            try {
+                              sidebarAuth.forceAuthStateSync();
+                            } catch (syncErr) {
+                              logger.warn('[uiInit] sidebarAuth.forceAuthStateSync threw', syncErr, { context: 'uiInit' });
+                            }
+                          }
+
                           logger.debug('[uiInit] SidebarAuth initialised by orchestrator', { context: 'uiInit' });
                         }
                     } catch (err) {

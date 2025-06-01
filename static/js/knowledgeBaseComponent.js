@@ -150,6 +150,8 @@ export function createKnowledgeBaseComponent(options = {}) {
         fileProcessingQueue: [],
         activeProcesses: 0,
         lastHealthCheck: null,
+        // Track whether initialize() has completed successfully
+        initialized: false,
         // CONSOLIDATED: No local authState - read from appModule.state
       };
 
@@ -157,6 +159,9 @@ export function createKnowledgeBaseComponent(options = {}) {
       this.formatDate = uiUtils.formatDate;
       this.fileIcon = uiUtils.fileIcon;
       this.scheduler = getDep("scheduler") || { setTimeout, clearTimeout };
+
+      // Public helper for outside modules (via Proxy) to know init status
+      this.isInitialized = () => this.state.initialized === true;
 
       // Provide all cb/utilities needed by manager/searchHandler
       this._safeSetInnerHTML = _safeSetInnerHTML;
@@ -205,7 +210,7 @@ export function createKnowledgeBaseComponent(options = {}) {
 
     _initElements() {
       const OPTIONAL_KEYS = new Set([
-        'activeSection', 'inactiveSection', 'statusBadge',
+        'activeSection', 'inactiveSection', 'statusBadge', 'modelSelect',
         'searchInput', 'searchButton', // Search elements are optional (not in current HTML)
         'kbToggle', 'reprocessButton', 'setupButton', 'settingsButton',
         'kbNameDisplay', 'kbModelDisplay', 'kbVersionDisplay', 'kbLastUsedDisplay',
@@ -241,11 +246,18 @@ export function createKnowledgeBaseComponent(options = {}) {
     }
 
     async initialize(isVisible, kbData = null, projectId = null) {
+      if (this.state.initialized) {
+        // Already initialised – optionally update visibility only
+        if (isVisible && this.elements?.container) {
+          this.elements.container.classList.remove('hidden');
+        }
+        return;
+      }
       // Build selector list excluding optional search/UI selectors so
       // domReadinessService does not wait for elements that may not be
       // present in certain templates (e.g., mobile view without KB search).
       const OPTIONAL_KEYS = new Set([
-        'searchInput', 'searchButton',
+        'searchInput', 'searchButton', 'modelSelect',
         'resultsContainer', 'resultsSection',
         'noResultsSection', 'topKSelect',
         'resultModal', 'resultTitle', 'resultSource',
@@ -278,6 +290,9 @@ export function createKnowledgeBaseComponent(options = {}) {
         this._initElements();
         await this._initializeSearchHandler();
         this._bindEventHandlers(); // Bind handlers after elements are initialized
+
+        // Mark component as fully initialised to prevent re-initialisation.
+        this.state.initialized = true;
       } catch (error) {
         this.logger.error(`[${MODULE}] Failed to initialize elements or bind handlers: ${error.message}`, { error, context: MODULE });
         this.domAPI.dispatchEvent(
