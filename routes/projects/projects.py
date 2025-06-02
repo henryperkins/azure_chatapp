@@ -15,6 +15,7 @@ from typing import Optional, Tuple, Union
 from enum import Enum
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
+from fastapi.responses import JSONResponse  # NEW
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, select, true
@@ -98,7 +99,7 @@ class ProjectFilter(str, Enum):
 # ============================
 
 
-@router.post("/", response_model=dict, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_class=JSONResponse, status_code=status.HTTP_201_CREATED)
 async def create_project(
     project_data: ProjectCreate,
     current_user_tuple: Tuple[User, str] = Depends(get_current_user_and_token),
@@ -239,7 +240,7 @@ async def create_project(
         ) from e
 
 
-@router.get("/", response_model=dict)
+@router.get("/", response_class=JSONResponse)
 async def list_projects(
     request: Request,
     filter_type: ProjectFilter = Query(
@@ -331,7 +332,7 @@ async def list_projects(
             ) from e
 
 
-@router.get("/{project_id}/", response_model=dict)
+@router.get("/{project_id}/", response_class=JSONResponse)
 async def get_project(
     project_id: str,
     current_user_tuple: Tuple[User, str] = Depends(get_current_user_and_token),
@@ -397,7 +398,7 @@ async def get_project(
         ) from e
 
 
-@router.patch("/{project_id}/", response_model=dict)
+@router.patch("/{project_id}/", response_class=JSONResponse)
 async def update_project(
     project_id: str,
     update_data: ProjectUpdate,
@@ -482,7 +483,7 @@ async def update_project(
         ) from e
 
 
-@router.delete("/{project_id}/", response_model=dict)
+@router.delete("/{project_id}/", response_class=JSONResponse)
 async def delete_project(
     project_id: str,
     current_user_tuple: Tuple[User, str] = Depends(get_current_user_and_token),
@@ -627,7 +628,7 @@ async def delete_project(
         ) from e
 
 
-@router.patch("/{project_id}/archive", response_model=dict)
+@router.patch("/{project_id}/archive", response_class=JSONResponse)
 async def toggle_archive_project(
     project_id: str,
     current_user_tuple: Tuple[User, str] = Depends(get_current_user_and_token),
@@ -687,7 +688,7 @@ async def toggle_archive_project(
             ) from e
 
 
-@router.post("/{project_id}/pin", response_model=dict)
+@router.post("/{project_id}/pin", response_class=JSONResponse)
 async def toggle_pin_project(
     project_id: str,
     current_user_tuple: Tuple[User, str] = Depends(get_current_user_and_token),
@@ -747,7 +748,7 @@ async def toggle_pin_project(
             ) from e
 
 
-@router.get("/{project_id}/stats", response_model=dict)
+@router.get("/{project_id}/stats", response_class=JSONResponse)
 async def get_project_stats(
     project_id: str,
     current_user_tuple: Tuple[User, str] = Depends(get_current_user_and_token),
