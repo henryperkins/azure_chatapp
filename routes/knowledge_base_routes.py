@@ -45,7 +45,6 @@ from services.knowledgebase_service import (
     update_knowledge_base as kb_service_update_kb,
     delete_knowledge_base as kb_service_delete_kb,
     toggle_project_kb,
-    upload_file_to_project,
     attach_github_repository as kb_attach_repository,
     detach_github_repository as kb_detach_repository,
 )
