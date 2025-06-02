@@ -140,7 +140,7 @@ async def create_project(
             from services.conversation_service import ConversationService
 
             conv_service = ConversationService(db)
-            default_conversation = await conv_service.create_conversation(
+            await conv_service.create_conversation(
                 user_id=current_user.id,
                 title="Default Conversation",
                 model_id="claude-3-sonnet-20240229",
@@ -153,7 +153,7 @@ async def create_project(
             )
             metrics.incr("project.create.success")
 
-            with configure_scope() as scope:
+            with configure_scope():
                 set_tag("user.id", str(current_user.id))
                 set_tag("project.id", str(project.id))
                 if getattr(project, "knowledge_base", None):
@@ -320,10 +320,6 @@ async def list_projects(
         # If underlying logic raised an HTTPException (e.g., project is archived
         # or permission denied) propagate it as-is so the client receives the
         # intended 4xx status instead of an internal-server error.
-        except HTTPException:
-            raise
-        except HTTPException:
-            raise
         except Exception as e:
             span.set_tag("error", True)
             capture_exception(e)
@@ -391,9 +387,6 @@ async def get_project(
                 serialize_project(project), span_or_transaction=span
             )
 
-    except HTTPException:
-        # Propagate HTTP errors untouched so FastAPI can build the response.
-        raise
     except Exception as e:
         logger.exception("Unhandled error in get_project")
         capture_exception(e)
@@ -442,7 +435,7 @@ async def update_project(
 
             with sentry_span_context(
                 op="db.update", description="Update project record"
-            ) as span:
+            ):
                 for key, value in updates.items():
                     if getattr(project, key) != value:
                         old_val = getattr(project, key)
@@ -523,13 +516,17 @@ async def delete_project(
 
             with sentry_span_context(
                 op="storage", description="Delete project files"
-            ) as span:
+            ):
                 files = await get_all_by_condition(
                     db, ProjectFile, ProjectFile.project_id == project_id
                 )
                 for f in files:
                     try:
-                        await fs.delete_file(project_uuid, f.id)
+                        # Ensure both arguments are proper UUIDs (enforce type safety)
+                        from uuid import UUID
+                        pid = project_uuid if isinstance(project_uuid, UUID) else UUID(str(project_uuid))
+                        fid = f.id if isinstance(f.id, UUID) else UUID(str(f.id))
+                        await fs.delete_file(pid, fid)
                         files_deleted += 1
                         total_size += f.file_size
                     except Exception as file_err:
@@ -581,7 +578,7 @@ async def delete_project(
 
             with sentry_span_context(
                 op="db.delete", description="Delete project record"
-            ) as span:
+            ):
                 await db.delete(project)
                 await db.commit()
 

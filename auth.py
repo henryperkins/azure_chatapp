@@ -38,6 +38,16 @@ DEFAULT_ADMIN = {
 ACCESS_TOKEN_EXPIRE_MIN = 24 * 60  # 1 day in minutes
 REFRESH_TOKEN_EXPIRE_DAYS = 30
 
+# ----------------------------------------------------------------------------
+# Simple in-memory login rate-limiter (dev-only)
+# ----------------------------------------------------------------------------
+# Blocks more than MAX_ATTEMPTS within WINDOW_SECONDS per remote address OR
+# username.  Not suitable for production – replace with Redis when scaling.
+
+LOGIN_RATE_LIMIT: dict[str, list[float]] = {}
+MAX_ATTEMPTS = 10
+WINDOW_SECONDS = 60
+
 router = APIRouter()
 
 
@@ -184,8 +194,33 @@ def set_secure_cookie(
 
 
 def rate_limit_login(_: Request, __: str) -> None:
-    """Disabled in local debug mode."""
-    return
+    """Very small in-memory rate-limiter good enough for local demo.
+
+    Raises HTTPException 429 when a client exceeds MAX_ATTEMPTS in WINDOW_SECONDS.
+    Identifies client by combination of IP and username (lower-cased).
+    """
+    from time import time
+
+    request: Request = _
+    username: str = __.lower() if __ else ""
+
+    ident = f"{request.client.host if request.client else 'unknown'}|{username}"
+    now_ts = time()
+
+    attempts = LOGIN_RATE_LIMIT.get(ident, [])
+    # trim old
+    attempts = [ts for ts in attempts if now_ts - ts < WINDOW_SECONDS]
+    attempts.append(now_ts)
+    LOGIN_RATE_LIMIT[ident] = attempts
+
+    if len(attempts) > MAX_ATTEMPTS:
+        logger.warning(
+            "[RATE_LIMIT] Too many login attempts for %s (count=%s)", ident, len(attempts)
+        )
+        raise HTTPException(
+            status_code=429,
+            detail="Too many login attempts. Try again later.",
+        )
 
 
 def aware_utc_now() -> datetime:
@@ -643,6 +678,21 @@ async def get_auth_settings(request: Request):
         },
         "note": env_note,
     }
+
+# -----------------------------------------------------------------------------
+#  Compatibility alias – Front-end expects `/api/auth/settings`
+# -----------------------------------------------------------------------------
+#  The JS bundle (static/js/appConfig.js) is wired to call `AUTH_SETTINGS` which
+#  resolves to `/api/auth/settings`.  During several refactors the Python side
+#  kept the handler at `/settings/auth` leading to 404s.  We expose a slim
+#  wrapper that re-uses the existing implementation to avoid touching the
+#  front-end bundle right now.  Remove once the constant is updated everywhere.
+
+
+@router.get("/settings", response_model=dict, include_in_schema=False)
+async def get_auth_settings_alias(request: Request):
+    """Alias route kept for backward compatibility with older front-end."""
+    return await get_auth_settings(request)
 
 
 @router.get("/timestamp", response_model=dict[str, float])

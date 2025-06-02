@@ -134,6 +134,7 @@ async def get_starred_conversations(
 
 @router.patch("/api/user/preferences")
 async def update_user_preferences(
+    request: Request,
     preferences: dict,
     db: AsyncSession = Depends(get_async_session),
     current_user_tuple: tuple = Depends(get_current_user_and_token),
@@ -141,6 +142,11 @@ async def update_user_preferences(
     """
     Update user preferences
     """
+    # CSRF protection for state-changing request
+    from utils.auth_utils import validate_csrf_token
+
+    validate_csrf_token(request)
+
     # Unpack the (User, token) tuple
     current_user, _ = current_user_tuple
 
