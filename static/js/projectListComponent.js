@@ -102,6 +102,12 @@ export function createProjectListComponent(deps) {
         });
     }
 
+    // Helper to remove all skeleton elements globally
+    function _removeAllSkeletons() {
+        const allSkeletons = domAPI.querySelectorAll('.animate-pulse');
+        allSkeletons.forEach(skeleton => skeleton.remove());
+    }
+
     // ----- Initialization/Readiness -----
     async function initialize() {
         try {
@@ -325,7 +331,21 @@ export function createProjectListComponent(deps) {
                 const newGrid = parent ? domAPI.querySelector('.mobile-grid', parent) : null;
 
                 if (newGrid && newGrid !== gridElement) {
+                    // CRITICAL FIX: Remove the old grid element to prevent orphaned skeletons
+                    const oldGrid = gridElement;
                     gridElement = newGrid;
+                    
+                    // Remove old grid if it exists and has no parent (orphaned)
+                    if (oldGrid && oldGrid !== newGrid) {
+                        // Clean up any skeletons in the old grid before removal
+                        const oldSkeletons = domAPI.querySelectorAll('.animate-pulse', oldGrid);
+                        oldSkeletons.forEach(skeleton => skeleton.remove());
+                        
+                        // If old grid is orphaned (no parent), remove it entirely
+                        if (!oldGrid.parentNode) {
+                            oldGrid.remove();
+                        }
+                    }
 
                     // Attach the click listener to the newly injected grid
                     eventHandlers.trackListener(
@@ -452,6 +472,10 @@ export function createProjectListComponent(deps) {
             _setState({ projects: projects || [], loading: false }); // Clear loading state when data arrives
 
             if (!gridElement) return;
+            
+            // CRITICAL FIX: Remove ALL skeleton elements globally before rendering
+            _removeAllSkeletons();
+            
             if (!projects?.length) {
                 _setState({ loading: false }); // Clear loading state for empty results
                 _showEmptyState();
@@ -793,6 +817,10 @@ export function createProjectListComponent(deps) {
     }
     function _showLoadingState() {
         if (!gridElement) return;
+        
+        // CRITICAL FIX: Remove any existing skeletons globally before creating new ones
+        _removeAllSkeletons();
+        
         _clearElement(gridElement);
         gridElement.classList.add("mobile-grid");
         for (let i = 0; i < 6; i++) {

@@ -226,6 +226,8 @@ async def create_project(
                 span_or_transaction=transaction,
             )
 
+    except HTTPException:
+        raise
     except Exception as e:
         transaction.set_tag("error", True)
         capture_exception(e)
@@ -310,6 +312,18 @@ async def list_projects(
                 },
             }
 
+        # Allow explicit HTTPExceptions (e.g. 4xx coming from permission /
+        # archived-project checks) to bubble up untouched so the client
+        # receives the correct status-code.
+        except HTTPException:
+            raise
+        # If underlying logic raised an HTTPException (e.g., project is archived
+        # or permission denied) propagate it as-is so the client receives the
+        # intended 4xx status instead of an internal-server error.
+        except HTTPException:
+            raise
+        except HTTPException:
+            raise
         except Exception as e:
             span.set_tag("error", True)
             capture_exception(e)
@@ -327,88 +341,67 @@ async def get_project(
     current_user_tuple: Tuple[User, str] = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
-    """Get project details with robust error handling and diagnostics"""
-    current_user, _token = current_user_tuple
+    """Return a single project object as a dictionary.
+
+    The function follows the strict error-handling pattern:
+
+        • Catch and immediately re-raise `HTTPException` instances so that
+          FastAPI can turn them into the correct 4xx/5xx response without
+          further processing.
+        • Catch every other `Exception`, log it, and wrap it in a new
+          `HTTPException(status_code=500)` so that we never end the handler
+          without either returning a dictionary or raising an `HTTPException`.
+    """
+
     try:
-        logger.info(f"Project details request: ID={project_id}, User={current_user.id}")
+        current_user, _token = current_user_tuple
 
         try:
             proj_id: Union[str, int, UUID] = coerce_project_id(project_id)
         except Exception as coercion_err:
-            logger.exception(
-                f"Project ID coercion failed for {project_id}: {coercion_err}"
-            )
+            logger.exception("Project ID coercion failed for %s", project_id)
             metrics.incr("project.view.failure", tags={"reason": "id_coercion"})
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Invalid project ID: {project_id}",
             ) from coercion_err
 
-        with sentry_span_context(
-            op="project", description=f"Get project {proj_id}"
-        ) as span:
-            try:
-                span.set_tag("project.id", str(proj_id))
-                span.set_tag("user.id", str(current_user.id))
+        with sentry_span_context(op="project", description=f"Get project {proj_id}") as span:
+            span.set_tag("project.id", str(proj_id))
+            span.set_tag("user.id", str(current_user.id))
 
-                project = await _lookup_project(db, proj_id)
-                if not project:
-                    logger.warning(f"Project not found: {proj_id}")
-                    metrics.incr("project.view.failure", tags={"reason": "not_found"})
-                    raise HTTPException(status_code=404, detail="Project not found")
+            project = await _lookup_project(db, proj_id)
+            if not project:
+                metrics.incr("project.view.failure", tags={"reason": "not_found"})
+                raise HTTPException(status_code=404, detail="Project not found")
 
-                # Eager-load knowledge_base before serialization to avoid async I/O in sync context
-                await db.refresh(project, ["knowledge_base"])
+            # Eager-load knowledge_base to avoid additional I/O later on
+            await db.refresh(project, ["knowledge_base"])
 
-                try:
-                    await check_project_permission(
-                        proj_id, current_user, db, ProjectAccessLevel.READ
-                    )
-                except HTTPException as perm_err:
-                    logger.warning(
-                        f"Permission denied for user {current_user.id} on project {proj_id}: {perm_err}"
-                    )
-                    metrics.incr(
-                        "project.view.failure", tags={"reason": "permission_denied"}
-                    )
-                    raise
-                except Exception as perm_err:
-                    logger.error(
-                        f"Unexpected permission check error for project {proj_id}: {perm_err}"
-                    )
-                    metrics.incr(
-                        "project.view.failure",
-                        tags={"reason": "permission_check_error"},
-                    )
-                    raise HTTPException(
-                        status_code=403, detail="Permission check failed"
-                    ) from perm_err
+            # Permission check -------------------------------------------------
+            await check_project_permission(
+                proj_id, current_user, db, ProjectAccessLevel.READ
+            )
 
-                with configure_scope() as scope:
-                    scope.set_context("project", serialize_project(project))
+            with configure_scope() as scope:
+                scope.set_context("project", serialize_project(project))
 
-                metrics.incr("project.view.success")
-                return await create_standard_response(
-                    serialize_project(project), span_or_transaction=span
-                )
-            except HTTPException:
-                raise
-            except Exception as e:
-                span.set_tag("error", True)
-                capture_exception(e)
-                metrics.incr("project.view.failure", tags={"reason": "exception"})
-                logger.exception(f"Detailed error in get_project for {proj_id}: {e}")
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Failed to retrieve project",
-                ) from e
-    except Exception as outer_e:
-        logger.exception(f"Unhandled exception in get_project outer block: {outer_e}")
-        metrics.incr("project.view.failure", tags={"reason": "unhandled_exception"})
+            metrics.incr("project.view.success")
+            return await create_standard_response(
+                serialize_project(project), span_or_transaction=span
+            )
+
+    except HTTPException:
+        # Propagate HTTP errors untouched so FastAPI can build the response.
+        raise
+    except Exception as e:
+        logger.exception("Unhandled error in get_project")
+        capture_exception(e)
+        metrics.incr("project.view.failure", tags={"reason": "exception"})
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred",
-        )
+            detail="Internal server error while retrieving the project",
+        ) from e
 
 
 @router.patch("/{project_id}/", response_model=dict)
@@ -685,6 +678,8 @@ async def toggle_archive_project(
                 span_or_transaction=span,
             )
 
+        except HTTPException:
+            raise
         except Exception as e:
             span.set_tag("error", True)
             capture_exception(e)
@@ -762,20 +757,22 @@ async def get_project_stats(
     current_user_tuple: Tuple[User, str] = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
-    """Get project statistics with performance tracing."""
-    current_user, _token = current_user_tuple
-    proj_id: Union[str, int, UUID] = coerce_project_id(project_id)
-    with sentry_span_context(
-        op="project",
-        description=f"Get stats for project {proj_id}",
-    ) as span:
-        try:
+    """Return usage statistics for a single project as a dictionary."""
+
+    try:
+        current_user, _token = current_user_tuple
+        proj_id: Union[str, int, UUID] = coerce_project_id(project_id)
+
+        with sentry_span_context(
+            op="project", description=f"Get stats for project {proj_id}"
+        ) as span:
             span.set_tag("project.id", str(proj_id))
             span.set_tag("user.id", str(current_user.id))
 
             await check_project_permission(
                 proj_id, current_user, db, ProjectAccessLevel.READ
             )
+
             project = await db.get(Project, proj_id)
             if not project:
                 raise HTTPException(status_code=404, detail="Project not found")
@@ -783,6 +780,9 @@ async def get_project_stats(
             metrics.incr("project.stats.requested")
             start_time = time.time()
 
+            # ------------------------------------------------------------------
+            # Conversations
+            # ------------------------------------------------------------------
             conversations = await get_all_by_condition(
                 db,
                 Conversation,
@@ -790,6 +790,9 @@ async def get_project_stats(
                 Conversation.is_deleted.is_(False),
             )
 
+            # ------------------------------------------------------------------
+            # Files
+            # ------------------------------------------------------------------
             files_result = await db.execute(
                 select(func.count(ProjectFile.id), func.sum(ProjectFile.file_size))
                 .select_from(ProjectFile)
@@ -797,10 +800,16 @@ async def get_project_stats(
             )
             file_count, total_size = files_result.first() or (0, 0)
 
+            # ------------------------------------------------------------------
+            # Artifacts
+            # ------------------------------------------------------------------
             artifacts = await get_all_by_condition(
                 db, Artifact, Artifact.project_id == project_id
             )
 
+            # ------------------------------------------------------------------
+            # Knowledge-base details (ignore errors gracefully)
+            # ------------------------------------------------------------------
             kb_info = None
             try:
                 kb_query = await db.execute(
@@ -808,11 +817,6 @@ async def get_project_stats(
                 )
                 kb = kb_query.scalars().first()
                 if kb:
-                    kb_info = {
-                        "id": str(kb.id),
-                        "is_active": kb.is_active,
-                        "indexed_files": 0,
-                    }
                     processed_result = await db.execute(
                         select(func.count(ProjectFile.id)).where(
                             ProjectFile.project_id == project_id,
@@ -821,7 +825,11 @@ async def get_project_stats(
                         )
                     )
                     processed = processed_result.scalar() or 0
-                    kb_info["indexed_files"] = processed
+                    kb_info = {
+                        "id": str(kb.id),
+                        "is_active": kb.is_active,
+                        "indexed_files": processed,
+                    }
             except Exception as kb_err:
                 capture_exception(kb_err)
                 kb_info = {
@@ -852,12 +860,13 @@ async def get_project_stats(
                 "knowledge_base": kb_info,
             }
 
-        except Exception as e:
-            span.set_tag("error", True)
-            capture_exception(e)
-            metrics.incr("project.stats.failure")
-            logger.error(f"Failed to get project stats: {str(e)}")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to retrieve project statistics",
-            ) from e
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Unhandled error while computing project stats")
+        capture_exception(e)
+        metrics.incr("project.stats.failure")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error while retrieving project statistics",
+        ) from e

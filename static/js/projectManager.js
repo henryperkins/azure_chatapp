@@ -223,6 +223,69 @@ export function createProjectManager({
       return this.apiRequest(url, mergedOpts, contextLabel);
     }
 
+    /**
+     * Centralized error handler used by various load/save helpers.
+     * Ensures we always:
+     *   1. Log the error through the provided logger (if any)
+     *   2. Emit the supplied event so that UI components can react
+     *   3. Return a safe fallback value so callers can continue gracefully
+     *
+     * The signature intentionally mirrors existing call-sites:
+     *   _handleErr(eventName, err, fallbackValue, meta?)
+     *
+     * @param {string} eventName - Event that should be emitted on both the local bus and DOM
+     * @param {*} err - The caught error/exception
+     * @param {*} fallbackVal - Value to return so upstream logic can proceed
+     * @param {object} [meta={}] - Additional metadata to attach to the emitted event
+     * @returns {*} The provided fallbackVal
+     */
+    _handleErr(eventName, err, fallbackVal, meta = {}) {
+      if (this.logger?.error) {
+        this.logger.error(`[ProjectManager][_handleErr] Event: ${eventName}`, err, {
+          context: MODULE,
+          ...meta
+        });
+      }
+
+      // Emit an event carrying details about the failure so interested
+      // subscribers (e.g. UI components) can display notices.
+      try {
+        let message;
+        if (typeof err?.data === 'string') message = err.data;
+        else if (typeof err?.response?.data === 'string') message = err.response.data;
+        else if (err?.data?.message) message = String(err.data.message);
+        else if (err?.response?.data?.message) message = String(err.response.data.message);
+        else if (err?.data?.detail) message = String(err.data.detail);
+        else if (err?.response?.data?.detail) message = String(err.response.data.detail);
+        else if (err?.detail) message = String(err.detail);
+        else if (typeof err === 'string') message = err;
+        else if (err?.message) message = err.message;
+        else message = 'Unknown error';
+
+        const eventDetail = {
+          error: message,
+          exception: err,
+          ...meta
+        };
+
+        // Provide a sensible payload for list endpoints so UI components
+        // that rely on them (e.g. ProjectListComponent) can still render
+        // gracefully even when an error occurs.
+        if (eventName === 'projectsLoaded') {
+          eventDetail.projects = Array.isArray(fallbackVal) ? fallbackVal : [];
+        }
+
+        this._emit(eventName, eventDetail);
+      } catch (emitErr) {
+        // Emitting should never crash the flow; log and swallow.
+        this.logger?.warn?.(`[ProjectManager][_handleErr] Failed to emit "${eventName}"`, emitErr, {
+          context: MODULE
+        });
+      }
+
+      return fallbackVal;
+    }
+
     _emit(event, detail) {
       /* dispatch on local bus (keeps module-internal listeners) */
       this.eventBus.dispatchEvent(new CustomEvent(event, { detail }));

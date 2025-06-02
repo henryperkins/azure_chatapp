@@ -358,19 +358,43 @@ def sentry_span_context(
     Lightweight context-manager for a nested span or a root transaction
     when none exists (never starts a blocking `asyncio.run()`).
     """
+    # Short-circuit entirely when Sentry is disabled to avoid noisy error logs
+    if str(os.getenv("SENTRY_ENABLED", "")).lower() not in {"1", "true", "yes"}:
+
+        class _NoopSpan:  # Mimic minimal API used elsewhere
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False  # do not suppress exceptions
+
+            def set_tag(self, *_args, **_kwargs):
+                pass
+
+            def set_data(self, *_args, **_kwargs):
+                pass
+
+        try:
+            yield _NoopSpan()
+        finally:
+            return
+
+    # Sentry enabled – proceed with real span creation
     parent = sentry_sdk.get_current_span()
     desc = description or op
     try:
         if parent is None:
-            with sentry_sdk.start_transaction(op=op, name=desc) as tx:  # root span
+            with sentry_sdk.start_transaction(op=op, name=desc) as tx:
                 _set_span_data(tx, data)
                 yield tx
-        else:  # child span
+        else:
             with parent.start_child(op=op, description=desc) as sp:
                 _set_span_data(sp, data)
                 yield sp
     except Exception:  # pragma: no cover
-        logging.exception("Failed to create Sentry span")
+        if str(os.getenv("SENTRY_ENABLED", "")).lower() in {"1", "true", "yes"}:
+            logging.exception("Failed to create Sentry span")
+        # Re-raise to let caller’s with-block propagate the original error
         raise
 
 
@@ -461,15 +485,23 @@ def make_sentry_trace_response(
 ) -> JSONResponse:
     """Convenience for REST endpoints that return raw dicts."""
     resp = JSONResponse(content=payload, status_code=status_code)
-    try:
-        resp.headers["sentry-trace"] = transaction.to_traceparent()
-        if hasattr(transaction, "containing_transaction"):
-            # py-right: ignore[reportAttributeAccessIssue]
-            parent = transaction.containing_transaction  # type: ignore
-            if parent and getattr(parent, "_baggage", None):
-                resp.headers["baggage"] = parent._baggage.serialize()
-    except Exception:  # pragma: no cover
-        pass
+
+    # Gracefully handle no-op span objects when Sentry is disabled.
+    if hasattr(transaction, "to_traceparent"):
+        try:
+            resp.headers["sentry-trace"] = transaction.to_traceparent()
+
+            if hasattr(transaction, "containing_transaction"):
+                # py-right: ignore[reportAttributeAccessIssue]
+                parent = transaction.containing_transaction  # type: ignore[attr-defined]
+                if (
+                    parent is not None
+                    and hasattr(parent, "_baggage")
+                    and hasattr(parent._baggage, "serialize")
+                ):
+                    resp.headers["baggage"] = parent._baggage.serialize()
+        except Exception:  # pragma: no cover – never fail the response
+            pass
     return resp
 
 

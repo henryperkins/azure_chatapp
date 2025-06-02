@@ -147,6 +147,7 @@ class ProjectDetailsComponent {
     this.bus = new EventTarget();
     this.fileUploadComponent = null;
     this.elements = {};
+    // Keep auth module ref for AuthBus only; auth state comes from appModule.state
     this.auth = this.eventHandlers.DependencySystem?.modules?.get("auth");
     // Utilities injected via factory (globalUtils) for consistent formatting
     this.formatDate = typeof deps.formatDate === 'function' ? deps.formatDate.bind(this) : undefined;
@@ -155,6 +156,8 @@ class ProjectDetailsComponent {
     this.safeHandler = getSafeHandler(this.DependencySystem);
     // Track single KBC bootstrap log/noise
     this._kbcFirstWarned = false;
+
+    this._isAuthenticated = () => Boolean(this.DependencySystem?.modules?.get('appModule')?.state?.isAuthenticated);
   }
 
   setProjectManager(pm) {
@@ -552,8 +555,9 @@ class ProjectDetailsComponent {
           };
 
           // Only initialise after authentication; otherwise defer once.
+          // Single source of truth – appModule.state.isAuthenticated
+          const isAuthed = this._isAuthenticated();
           const authModule = this.eventHandlers.DependencySystem?.modules?.get?.('auth');
-          const isAuthed = authModule?.isAuthenticated?.() ?? this.auth?.isAuthenticated?.();
 
           if (isAuthed) {
             _initKbc();
@@ -639,7 +643,7 @@ class ProjectDetailsComponent {
           return false;
         };
 
-        const isAuthed = this.auth?.isAuthenticated?.();
+        const isAuthed = this._isAuthenticated();
 
         /* 1️⃣ Attempt immediate initialisation only if authenticated */
         if (isAuthed && !tryInit()) {
@@ -1028,7 +1032,7 @@ class ProjectDetailsComponent {
       this.projectData.knowledge_base.is_active !== false;
     const ready =
       this.state.projectDataLoaded &&
-      (this.auth?.isAuthenticated?.() ?? false) &&
+      this._isAuthenticated() &&
       kbActive;
     newChatBtn.disabled = !ready;
     newChatBtn.classList.toggle("btn-disabled", !ready);
