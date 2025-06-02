@@ -44,7 +44,7 @@ from typing import (
 )
 
 from fastapi import Response
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse   # NEW
 from fastapi import Request as FastAPIRequest
 import sentry_sdk
 
@@ -480,29 +480,42 @@ def inject_sentry_trace_headers(response: Response) -> None:
 
 def make_sentry_trace_response(
     payload: dict[str, Any],
-    transaction: Span | Transaction,
+    transaction: Span | Transaction | None = None,
     status_code: int = 200,
-) -> JSONResponse:
-    """Convenience for REST endpoints that return raw dicts."""
-    resp = JSONResponse(content=payload, status_code=status_code)
+) -> JSONResponse | dict[str, Any]:
+    """
+    Return `payload` as either a plain dict (for FastAPI validation)
+    or a JSONResponse carrying Sentry trace headers when available.
 
-    # Gracefully handle no-op span objects when Sentry is disabled.
-    if hasattr(transaction, "to_traceparent"):
+    This helper MUST never return `None`.
+    """
+    headers: dict[str, str] = {}
+
+    if transaction and hasattr(transaction, "to_traceparent"):
         try:
-            resp.headers["sentry-trace"] = transaction.to_traceparent()
+            headers["sentry-trace"] = transaction.to_traceparent()
 
             if hasattr(transaction, "containing_transaction"):
-                # py-right: ignore[reportAttributeAccessIssue]
-                parent = transaction.containing_transaction  # type: ignore[attr-defined]
+                parent = transaction.containing_transaction()
                 if (
                     parent is not None
                     and hasattr(parent, "_baggage")
                     and hasattr(parent._baggage, "serialize")
                 ):
-                    resp.headers["baggage"] = parent._baggage.serialize()
-        except Exception:  # pragma: no cover – never fail the response
-            pass
-    return resp
+                    headers["baggage"] = parent._baggage.serialize()
+        except Exception:          # absolutely never break main flow
+            headers = {}
+
+    # ─── Return type chosen to satisfy FastAPI validation ───
+    if headers:
+        return JSONResponse(
+            content=payload,
+            status_code=status_code,
+            headers=headers,
+        )
+
+    # No Sentry headers → plain dict matches `response_model=dict`
+    return payload
 
 
 # ------------------------------------------------------------------------- #
