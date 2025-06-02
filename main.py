@@ -163,10 +163,16 @@ def setup_middlewares_insecure(app: FastAPI) -> None:
         "\nSet a robust SESSION_SECRET in your env file for any real usage."
     )
 
+    # Use a non-generic cookie name so that developers do not confuse this
+    # debug-only session with application/identity cookies that might be set
+    # elsewhere (e.g. "sessionid", "session", etc.). The more explicit
+    # "debug_session" name makes it clear where it originates from and
+    # avoids accidental collisions when the backend is proxied alongside a
+    # production instance.
     app.add_middleware(
         SessionMiddleware,
         secret_key=session_secret,
-        session_cookie="session",
+        session_cookie="debug_session",
         same_site="lax",  # Use "lax" for local dev, or "strict" if you prefer
         https_only=False,  # Do not require HTTPS for local dev
         max_age=60 * 60 * 24 * 7,  # 7 days
