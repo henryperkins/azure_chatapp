@@ -3,12 +3,10 @@ routes/logs.py - Client log ingestion endpoint
 Focused on receiving and routing logs, not processing
 """
 
-import json
 import logging
 from typing import Optional, List
 from fastapi import APIRouter, Request, Response, status, Depends
 from pydantic import BaseModel, Field
-import sentry_sdk
 
 from utils.auth_utils import get_current_user
 from utils.logging_config import request_id_var, trace_id_var

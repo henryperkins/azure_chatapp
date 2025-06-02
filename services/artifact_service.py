@@ -88,7 +88,7 @@ async def create_artifact(
     """
     # ----- canonical access check -------------------------------------
     user = await db.get(User, user_id) if user_id is not None else None
-    project = await validate_project_access(
+    await validate_project_access(
         project_id=project_id,
         user=user,
         db=db,
@@ -141,8 +141,7 @@ async def get_artifact(
         user=user,
         db=db,
         resource_name="Artifact",
-        additional_filters=[Artifact.project_id == project_id],
-        require_ownership=user is not None,
+        additional_conditions=[Artifact.project_id == project_id],
     )
     return artifact
 

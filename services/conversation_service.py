@@ -133,7 +133,6 @@ class ConversationService:
 
         # Ensure project has an associated knowledge base when KB is requested
         if kb_enabled:
-            from sqlalchemy.future import select  # local import to avoid cycles
             from sqlalchemy.orm import selectinload
             from models.project import Project
 
