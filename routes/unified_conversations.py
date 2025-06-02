@@ -112,22 +112,35 @@ async def list_project_conversations(
     limit: int = Query(100, ge=1, le=500),
     conv_service: ConversationService = Depends(get_conversation_service),
 ):
-    """List all conversations for a project with full monitoring"""
-    with sentry_span_context(
-        op="conversation",
-        description=f"List Project Conversations: List all conversations for project {project_id}",
-    ) as span:
-        try:
+    """Return a paginated list of conversations for a project.
+
+    Implements the unified error-handling contract so that the handler never
+    completes without either returning a dictionary or raising an
+    `HTTPException`. This prevents FastAPI from emitting a
+    `ResponseValidationError` when the function would otherwise have returned
+    `None`.
+    """
+
+    try:
+        with sentry_span_context(
+            op="conversation",
+            description=f"List conversations for project {project_id}",
+        ) as span:
             current_user = current_user_tuple[0]
+
             span.set_tag("project.id", str(project_id))
             span.set_tag("user.id", str(current_user.id))
             span.set_data("pagination.skip", skip)
             span.set_data("pagination.limit", limit)
 
-            # Validate access
+            # ------------------------------------------------------------------
+            # Access control
+            # ------------------------------------------------------------------
             await validate_project_access(project_id, current_user, db)
 
-            # Get conversations
+            # ------------------------------------------------------------------
+            # Fetch conversations
+            # ------------------------------------------------------------------
             start_time = time.time()
             conversations = await conv_service.list_conversations(
                 user_id=current_user.id, project_id=project_id, skip=skip, limit=limit
@@ -135,9 +148,7 @@ async def list_project_conversations(
             duration = (time.time() - start_time) * 1000
 
             span.set_data("db_query_time_ms", duration)
-            metrics.distribution(
-                "conversation.list.duration", duration, unit="millisecond"
-            )
+            metrics.distribution("conversation.list.duration", duration, unit="millisecond")
 
             payload = {
                 "status": "success",
@@ -151,17 +162,19 @@ async def list_project_conversations(
                 ],
                 "count": len(conversations),
             }
+
             return make_sentry_trace_response(payload, span)
-        except HTTPException:
-            raise
-        except Exception as e:
-            span.set_tag("error", True)
-            capture_exception(e)
-            metrics.incr("conversation.list.failure")
-            logger.error(f"Failed to list conversations: {str(e)}")
-            raise HTTPException(
-                status_code=500, detail="Failed to retrieve conversations"
-            ) from e
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Unhandled error while listing conversations")
+        capture_exception(e)
+        metrics.incr("conversation.list.failure")
+        raise HTTPException(
+            status_code=500,
+            detail="Internal server error while retrieving conversations",
+        ) from e
 
 
 @router.post("/{project_id}/conversations", response_model=dict)

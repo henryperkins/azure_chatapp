@@ -35,15 +35,43 @@ async def create_standard_response(
     }
     resp_headers = dict(headers) if headers else {}
 
-    # Add Sentry trace headers if span_or_transaction provided
-    if span_or_transaction:
+    # ------------------------------------------------------------------
+    # Propagate Sentry trace headers when available
+    # ------------------------------------------------------------------
+    # In normal operation `span_or_transaction` is an actual Sentry
+    # `Span`/`Transaction` instance exposing `to_traceparent()` as well as
+    # `containing_transaction()`.  When Sentry is disabled however the
+    # helper `utils.sentry_utils.sentry_span_context()` yields a lightweight
+    # no-op dummy object that **does not** implement the full interface.
+    #
+    # Attempting to unconditionally call `to_traceparent()` therefore raises
+    # an `AttributeError` which bubbles up and is ultimately caught by the
+    # application-wide *generic* exception handler – resulting in the very
+    # opaque 500 responses we have been seeing on every `/api/projects/*`
+    # request.
+    #
+    # To avoid this class of failure altogether we now guard every access
+    # with `hasattr()` checks so that, when Sentry is disabled, we simply
+    # skip header propagation instead of erroring out.
+    # ------------------------------------------------------------------
+
+    if span_or_transaction and hasattr(span_or_transaction, "to_traceparent"):
         try:
             resp_headers["sentry-trace"] = span_or_transaction.to_traceparent()
+
+            # The baggage header lives on the *containing* transaction –
+            # make sure all helper attributes exist before using them.
             if hasattr(span_or_transaction, "containing_transaction"):
                 containing_transaction = span_or_transaction.containing_transaction()
-                if hasattr(containing_transaction, "_baggage") and hasattr(containing_transaction._baggage, "serialize"):
+                if (
+                    containing_transaction is not None
+                    and hasattr(containing_transaction, "_baggage")
+                    and hasattr(containing_transaction._baggage, "serialize")
+                ):
                     resp_headers["baggage"] = containing_transaction._baggage.serialize()
         except Exception:
+            # Never let tracing header logic break the main response path –
+            # it is purely additive.
             pass
 
     json_ready = jsonable_encoder(

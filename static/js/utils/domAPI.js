@@ -164,7 +164,25 @@ export function createDomAPI({
     setInnerHTML: (el, html) => {
       if (!el) return;
       if (sanitizer && typeof sanitizer.sanitize === 'function') {
-        el.innerHTML = sanitizer.sanitize(html);
+        /*
+         * DOMPurify (our default sanitizer) removes non-standard / less common
+         * interactive elements such as <dialog> unless they are explicitly
+         * allowed.  The application injects the complete modals template
+         * (static/html/modals.html) at runtime which relies heavily on
+         * <dialog> elements.  Once stripped, ModalManager cannot locate
+         * `#loginModal`, `#projectModal`, … and any call to
+         *   modalManager.show('login')
+         * quietly fails — the user never sees the Login dialog.
+         *
+         * To fix this we extend the allow-list with the HTML5 <dialog> tag
+         * plus its `open` attribute before delegating to DOMPurify.
+         *
+         * NOTE: This is a global relaxation but still safe because <dialog>
+         * does not execute scripts and keeping it blocked offers no concrete
+         * XSS protection advantage.
+         */
+        const dialogAllowCfg = { ADD_TAGS: ['dialog'], ADD_ATTR: ['open', 'method'] };
+        el.innerHTML = sanitizer.sanitize(html, dialogAllowCfg);
       } else {
         _logger.warn('[domAPI] setInnerHTML called without sanitizer (auto-escaped)', { context: 'domAPI:setInnerHTML' });
         el.textContent = String(html).replace(/<[^>]*>?/gm, '');

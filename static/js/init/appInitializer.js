@@ -1898,6 +1898,29 @@ if (handlers?.dispatch) {
                     await eventHandlers.init();
                     logger.log('[uiInit] eventHandlers init complete', { context: 'uiInit' });
                 }
+
+                /* ------------------------------------------------------------------
+                 * Emit the global readiness signal **before** late components like
+                 * ProjectDashboard or ProjectListComponent call waitForEvent('app:ready').
+                 * At this point:
+                 *   – Core UI DOM exists
+                 *   – Templates are injected
+                 *   – EventHandlers are wired (keyboard, modals, etc.)
+                 *   – No module that relies on AccessibilityUtils.init has run yet
+                 *
+                 * This is therefore the earliest safe moment to broadcast the
+                 * application-level readiness event without risking consumers
+                 * interacting with incomplete DOM.
+                 * ------------------------------------------------------------------ */
+                try {
+                    domReadinessService.emitReplayable('app:ready');
+                    appModule.setAppLifecycleState({ isReady: true, currentPhase: 'ui_ready_partial' });
+                } catch (earlyEmitErr) {
+                    logger.warn('[uiInit] Early app:ready emit failed', earlyEmitErr, {
+                        context: 'uiInit:earlyAppReady'
+                    });
+                }
+
                 domReadinessService.emitReplayable('ui:templates:ready');
                 await createAndRegisterUIComponents();
                 await registerNavigationViews();
@@ -2071,14 +2094,23 @@ if (handlers?.dispatch) {
             currentPhase: 'initialized_idle',
             isReady: true
         });
-        // Emit as replay-capable so late listeners using domReadinessService.waitForEvent
-        // can instantly resolve without waiting (prevents 8000 ms timeout)
-        if (domReadinessService?.emitReplayable) {
-            domReadinessService.emitReplayable('app:ready');
+        // Emit the replay-capable "app:ready" only if it has **not** been
+        // dispatched earlier by initializeUIComponents().  Duplicate dispatches
+        // could lead to listeners firing twice; we therefore guard by
+        // inspecting the lifecycle flag we already set.
+
+        if (!appModule.state.isReady) {
+            if (domReadinessService?.emitReplayable) {
+                domReadinessService.emitReplayable('app:ready');
+            } else {
+                // Fallback – standard dispatch (should not normally be used)
+                eventHandlers.dispatch('app:ready');
+                logger.warn('[appInitializer] domReadinessService.emitReplayable unavailable – used fallback dispatch', {
+                    context: 'appInitializer'
+                });
+            }
         } else {
-            // Fallback – standard dispatch (should not normally be used)
-            eventHandlers.dispatch('app:ready');
-            logger.warn('[appInitializer] domReadinessService.emitReplayable unavailable – used fallback dispatch', {
+            logger.debug('[appInitializer] app:ready was emitted earlier; skipping duplicate dispatch', {
                 context: 'appInitializer'
             });
         }

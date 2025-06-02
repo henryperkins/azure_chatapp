@@ -1109,8 +1109,8 @@ function readCookie(name) {
   };
 
   return publicAuth;
-}
+ }
 
-/* guard-rail: default & named export */
-export default createAuth;
-export { createAuth, createAuth as createAuthModule };
+ /* guard-rail: default & named export */
+ export default createAuth;
+ export { createAuth as createAuthModule };
