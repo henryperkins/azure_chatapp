@@ -4,7 +4,7 @@
   <!-- Header -->
   <div class="flex items-center justify-between mb-6 mobile-p-safe">
     <h1 class="text-responsive-2xl font-bold">Projects</h1>
-    <button id="createProjectBtn" class="btn btn-primary flex items-center gap-2" aria-label="Create new project">
+    <button id="createProjectBtn" class="btn btn-primary" aria-label="Create new project">
       <svg class="icon-sm" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
         <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
       </svg>
@@ -38,26 +38,35 @@
 
   <!-- Enhanced Search -->
   <div class="relative mb-6 mobile-p-safe">
-    <div class="relative">
-      <svg class="icon-sm absolute left-3 top-1/2 -translate-y-1/2 text-base-content/50 pointer-events-none" fill="none"
-        stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-      </svg>
-      <input id="projectSearchInput" type="search" class="input w-full pl-10 pr-10 placeholder:text-base-content/60 focus:outline-none focus:ring-2 focus:ring-primary" placeholder="Search projects..."
-        inputmode="search" enterkeyhint="search" aria-label="Search projects">
-      <button
-        id="clearSearchBtn"
-        type="button"
-        class="btn btn-ghost btn-square btn-sm absolute right-1 top-1/2 -translate-y-1/2 hidden"
-        aria-label="Clear search"
-        tabindex="-1"
-        style="pointer-events: auto;"
-        title="Clear the project search input"
-      >
-        <svg class="icon-sm" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+    <div class="relative w-full">
+      <!-- Left: Magnifier, fixed width padded -->
+      <span class="absolute left-0 inset-y-0 flex items-center pl-3 pointer-events-none">
+        <svg class="w-5 h-5 text-base-content/50" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
         </svg>
-      </button>
+      </span>
+      <input id="projectSearchInput"
+        type="search"
+        class="input w-full pl-12 pr-12 placeholder:text-base-content/60 focus:outline-none focus:ring-2 focus:ring-primary"
+        placeholder="Search projects..."
+        inputmode="search"
+        enterkeyhint="search"
+        aria-label="Search projects">
+      <!-- Right: Clear button, fixed width padded -->
+      <span class="absolute right-0 inset-y-0 flex items-center pr-3">
+        <button
+          id="clearSearchBtn"
+          type="button"
+          class="btn btn-ghost btn-xs btn-circle"
+          aria-label="Clear search"
+          tabindex="-1"
+          title="Clear the project search input"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </span>
     </div>
   </div>
 
@@ -137,7 +146,7 @@
           </span>
         </div>
         <div class="project-card-badges">
-          <span class="project-card-badge">Active</span>
+          <span class="badge badge-ghost">Active</span>
         </div>
       </div>
     </div>

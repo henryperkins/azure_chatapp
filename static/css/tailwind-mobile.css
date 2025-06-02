@@ -264,3 +264,14 @@
 /* Import focused component files */
 @import "./mobile-components.css";
 @import "./mobile-layouts.css";
+
+/* UI Avatar/Button Sizing Hotfix – Upstream DaisyUI Circle Errors */
+.btn-circle {
+  border-radius: 50% !important;
+}
+.h-10 {
+  height: 40px !important;
+}
+.w-10 {
+  width: 40px !important;
+}

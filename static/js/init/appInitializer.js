@@ -1449,13 +1449,19 @@ if (handlers?.dispatch) {
                     }
                 }
 
-                if (isAuth && userMenu && userInitialsEl) {
-                    const initials = user?.name
-                        ? user.name.trim().split(/\s+/).map(p => p[0]).join('').toUpperCase()
-                        : (user?.username ? user.username.slice(0, 2).toUpperCase() : 'U');
+                if (userMenu && userInitialsEl) {
+                    let initials = 'U';
+                    if (isAuth) {
+                        if (typeof user?.name === 'string' && user.name.trim().length > 0) {
+                            initials = user.name.trim().split(/\s+/).map(p => p[0]).join('').toUpperCase();
+                        } else if (typeof user?.username === 'string' && user.username.trim().length > 0) {
+                            initials = user.username.slice(0, 2).toUpperCase();
+                        }
+                    }
+                    if (!initials || initials.trim().length === 0) {
+                        initials = 'U';
+                    }
                     domAPI.setTextContent(userInitialsEl, initials);
-                } else if (userMenu && userInitialsEl) {
-                    domAPI.setTextContent(userInitialsEl, '');
                 }
 
                 if (authStatus) {

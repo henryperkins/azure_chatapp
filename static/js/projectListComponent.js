@@ -885,8 +885,11 @@ export function createProjectListComponent(deps) {
         }
     }
     function _showLoginRequired() {
-        if (!element) return;
-        _clearElement(element);
+         if (!element) return;
+         // Preserve header, filters, and search; only reset the project grid contents
+         if (gridElement) {
+             _clearElement(gridElement);
+         }
 
         // ──────────────────────────────────────────────────────────────
         // Guarantee #projectCardsPanel exists at ALL times.
