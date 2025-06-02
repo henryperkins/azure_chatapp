@@ -25,6 +25,44 @@
   --btn-height-xs: 32px;
 }
 
+/* === Searchbar Icon/Clear Button Stacking Fix === */
+.input[type="search"], .input {
+  display: block !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  position: relative !important;
+  box-sizing: border-box !important;
+}
+.relative > .absolute.left-0,
+.relative > .absolute.right-0 {
+  width: 40px !important;
+  min-width: 40px !important;
+  max-width: 40px !important;
+  pointer-events: none;
+}
+.relative > .absolute.right-0 {
+  pointer-events: auto;
+}
+
+/* === Avatar/User Circle Hotfix for Header === */
+#userMenu .avatar > div {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 40px !important;
+  height: 40px !important;
+}
+#userMenu .avatar #userInitials {
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  font-size: 1.1rem !important;
+  font-weight: 500 !important;
+  text-align: center !important;
+  line-height: 40px !important;
+}
+
+
 /* Enhanced Touch Target Compliance */
 .btn, button, [role="button"], a[href],
 input[type="button"], input[type="submit"],
