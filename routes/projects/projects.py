@@ -523,7 +523,6 @@ async def delete_project(
                 for f in files:
                     try:
                         # Ensure both arguments are proper UUIDs (enforce type safety)
-                        from uuid import UUID
                         pid = project_uuid if isinstance(project_uuid, UUID) else UUID(str(project_uuid))
                         fid = f.id if isinstance(f.id, UUID) else UUID(str(f.id))
                         await fs.delete_file(pid, fid)
