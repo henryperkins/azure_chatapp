@@ -1,6 +1,8 @@
 <!-- Mobile-First Project Details Template (Complete) -->
-<div id="projectDetailsContainer" class="project-details-container">
-  <div class="project-details">
+<div id="projectDetailsPageShell" class="min-h-[calc(100vh_-_var(--header-height)_-_32px)] flex flex-col items-center w-full px-2 md:px-0 pt-4 pb-8">
+  <div id="projectDetailsContainer"
+       class="project-details-container w-full max-w-3xl mx-auto bg-base-100 rounded-2xl shadow-md border border-base-200">
+    <div class="project-details">
 
     <!-- HEADER & STATS -->
     <header class="project-header p-4 border-b border-base-200">
@@ -67,17 +69,15 @@
     <!-- ENHANCED TAB NAVIGATION -->
     <div class="project-tabs border-b border-base-200 flex overflow-x-auto"
          role="tablist" aria-label="Project sections">
-      <button class="tab project-tab active flex-1" data-tab="chat"
-              role="tab" aria-selected="true" aria-controls="chatTab"
+      <button class="tab project-tab active flex-1" data-tab="details"
+              role="tab" aria-selected="true" aria-controls="detailsTab"
               tabindex="0">
         <svg class="icon-sm" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
           <path stroke-linecap="round" stroke-linejoin="round"
-                d="M8 12h.01M12 12h.01M16 12h.01
-                   M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20
-                   l1.395-3.72C3.512 15.042 3 13.574 3 12
-                   c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                d="M13 16h-1v-4h-1m1-4h.01
+                   M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
-        <span>Chat</span>
+        <span>Details</span>
       </button>
       <button class="tab project-tab flex-1" data-tab="files"
               role="tab" aria-selected="false" aria-controls="filesTab"
@@ -90,15 +90,17 @@
         </svg>
         <span>Files</span>
       </button>
-      <button class="tab project-tab flex-1" data-tab="details"
-              role="tab" aria-selected="false" aria-controls="detailsTab"
+      <button class="tab project-tab flex-1" data-tab="chat"
+              role="tab" aria-selected="false" aria-controls="chatTab"
               tabindex="-1">
         <svg class="icon-sm" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
           <path stroke-linecap="round" stroke-linejoin="round"
-                d="M13 16h-1v-4h-1m1-4h.01
-                   M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                d="M8 12h.01M12 12h.01M16 12h.01
+                   M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20
+                   l1.395-3.72C3.512 15.042 3 13.574 3 12
+                   c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
         </svg>
-        <span>Details</span>
+        <span>Chat</span>
       </button>
       <button class="tab project-tab flex-1" data-tab="knowledge"
               role="tab" aria-selected="false" aria-controls="knowledgeTab"
@@ -133,6 +135,214 @@
 
     <!-- TAB CONTENT PANELS -->
     <div class="project-tab-content p-4">
+
+      <!-- DETAILS TAB -->
+      <div id="detailsTab" class="tab-pane" role="tabpanel" aria-labelledby="tab-details">
+        <div class="space-y-4">
+          <!-- Expandable Section -->
+          <div class="expandable-section" aria-expanded="false">
+            <button class="expandable-header flex items-center justify-between w-full p-3 bg-base-100 rounded"
+                    onclick="this.parentElement.setAttribute('aria-expanded',
+                      this.parentElement.getAttribute('aria-expanded') === 'true' ? 'false' : 'true')">
+              <h3 class="font-semibold">Project Information</h3>
+              <svg class="icon-sm expandable-indicator" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                      d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            <div class="expandable-content p-3 space-y-4 hidden">
+              <div>
+                <label class="block text-sm font-medium mb-1">Project Name</label>
+                <div id="projectNameDisplay"
+                     class="p-3 bg-base-200 rounded-lg text-base-content">
+                  Loading...
+                </div>
+              </div>
+              <div>
+                <label class="block text-sm font-medium mb-1">Description</label>
+                <div id="projectDescriptionDisplay"
+                     class="p-3 bg-base-200 rounded-lg text-base-content min-h-[80px]">
+                  Loading...
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Statistics with Visual Enhancements -->
+          <div class="card p-3 bg-base-100 rounded shadow">
+            <h3 class="font-semibold mb-3">Project Statistics</h3>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <!-- Files -->
+              <div class="stat bg-base-200 rounded-lg p-4 text-center">
+                <svg class="icon-md mx-auto mb-2 text-primary"
+                     fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M9 12h6m-6 4h6m2 5H7
+                           a2 2 0 01-2-2V5a2 2 0 012-2h5.586
+                           a1 1 0 01.707.293l5.414 5.414
+                           a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <div class="stat-title text-sm">Files</div>
+                <div id="fileCountDetail" class="stat-value text-2xl font-bold">0</div>
+              </div>
+              <!-- Conversations -->
+              <div class="stat bg-base-200 rounded-lg p-4 text-center">
+                <svg class="icon-md mx-auto mb-2 text-secondary"
+                     fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M8 12h.01M12 12h.01M16 12h.01
+                           M21 12c0 4.418-4.03 8-9 8
+                           a9.863 9.863 0 01-4.255-.949L3 20
+                           l1.395-3.72C3.512 15.042 3 13.574 3 12
+                           c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+                <div class="stat-title text-sm">Conversations</div>
+                <div id="conversationCountDetail" class="stat-value text-2xl font-bold">0</div>
+              </div>
+              <!-- Artifacts -->
+              <div class="stat bg-base-200 rounded-lg p-4 text-center">
+                <svg class="icon-md mx-auto mb-2 text-accent"
+                     fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M19.428 15.428a2 2 0 00-1.022-.547
+                           l-2.387-.477a6 6 0 00-3.86.517l-.318.158
+                           a6 6 0 01-3.86.517L6.05 15.21
+                           a2 2 0 00-1.806.547M8 4h8l-1 1v5.172
+                           a2 2 0 00.586 1.414l5 5
+                           c1.26 1.26.367 3.414-1.415 3.414H4.828
+                           c-1.782 0-2.674-2.154-1.414-3.414l5-5
+                           A2 2 0 009 10.172V5L8 4z" />
+                </svg>
+                <div class="stat-title text-sm">Artifacts</div>
+                <div id="artifactCountDetail" class="stat-value text-2xl font-bold">0</div>
+              </div>
+              <!-- Created -->
+              <div class="stat bg-base-200 rounded-lg p-4 text-center">
+                <svg class="icon-md mx-auto mb-2 text-success"
+                     fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M8 7V3m8 4V3m-9 8h10
+                           M5 21h14a2 2 0 002-2V7
+                           a2 2 0 00-2-2H5a2 2 0 00-2 2v12
+                           a2 2 0 002 2z" />
+                </svg>
+                <div class="stat-title text-sm">Created</div>
+                <div id="projectCreatedDate" class="stat-value text-lg font-bold">-</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- FILES TAB -->
+      <div id="filesTab" class="tab-pane hidden" role="tabpanel" aria-labelledby="tab-files">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="font-semibold">Project Files</h3>
+          <button id="uploadFileBtn" class="btn btn-primary btn-sm min-w-[44px] min-h-[44px] focus:outline-none focus:ring-2 focus:ring-primary" aria-label="Upload file">
+            <svg class="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6
+                       a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
+            Upload
+          </button>
+        </div>
+
+        <!-- File Upload Component -->
+        <div id="dragDropZone" class="file-upload-container border border-dashed border-base-300 rounded p-4"
+             tabindex="0"
+             aria-labelledby="file-upload-title"
+             aria-describedby="file-upload-instructions">
+
+          <!-- Upload area -->
+          <div class="text-center">
+            <div class="file-upload-icon mb-3">
+              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" class="w-10 h-10 mx-auto text-base-content/50" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6
+                         L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3
+                         m3-3v12" />
+              </svg>
+            </div>
+            <h3 id="file-upload-title" class="file-upload-title text-lg font-medium">Upload Files</h3>
+            <p id="file-upload-instructions" class="file-upload-instructions text-sm text-base-content/60">
+              Drag and drop files here, or
+              <label for="fileInput" class="file-upload-browse-btn text-primary underline cursor-pointer">
+                browse
+              </label>
+            </p>
+            <div class="text-xs text-base-content/60 mt-1">
+              Supports: TXT, MD, CSV, JSON, PDF, DOC, DOCX, PY, JS, HTML, CSS
+            </div>
+          </div>
+
+          <!-- Hidden file input -->
+          <input id="fileInput"
+                 type="file"
+                 class="file-upload-input hidden"
+                 multiple
+                 aria-label="File upload"
+                 accept=".txt,.md,.csv,.json,.pdf,.doc,.docx,.py,.js,.html,.css" />
+
+          <!-- Progress area (hidden by default) -->
+          <div id="filesUploadProgress" class="file-upload-progress hidden mt-4">
+            <div class="file-upload-progress-label text-sm mb-2" aria-live="polite">
+              Uploading files... <span id="file-upload-progress-percent">0%</span>
+            </div>
+            <div class="file-upload-progress-bar mb-1">
+              <progress id="fileProgressBar" value="0" max="100"
+                        class="progress progress-primary w-full"></progress>
+            </div>
+            <p id="uploadStatus" class="text-xs text-base-content/60">Uploading...</p>
+          </div>
+
+          <!-- Error message (hidden by default) -->
+          <div id="file-upload-error" class="file-upload-error hidden text-error mt-4" role="alert" aria-live="assertive"></div>
+
+          <!-- File preview list (hidden by default) -->
+          <ul id="file-preview-list" class="file-preview-list hidden mt-4 space-y-2" aria-label="Selected files"></ul>
+        </div>
+
+        <!-- File preview item template -->
+        <template id="file-preview-template">
+          <li class="file-preview-item flex items-center gap-2 p-2 bg-base-200 rounded">
+            <div class="file-preview-icon text-base-content/50">
+              <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" class="h-5 w-5" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M9 12h6m-6 4h6m2 5H7
+                         a2 2 0 01-2-2V5a2 2 0 012-2h5.586
+                         a1 1 0 01.707.293l5.414 5.414
+                         a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </div>
+            <div class="file-preview-details flex-1">
+              <div class="file-preview-name truncate font-medium" title="${filename}">${filename}</div>
+              <div class="file-preview-info text-xs text-base-content/60">
+                <span class="file-preview-type">${filetype}</span>
+                <span class="file-preview-size">• ${filesize}</span>
+              </div>
+            </div>
+            <div class="file-preview-actions">
+              <button type="button" class="file-preview-delete btn btn-ghost btn-square btn-xs" aria-label="Remove file">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" class="h-4 w-4">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </li>
+        </template>
+
+        <!-- Status icons template -->
+        <template id="upload-status-icons">
+          <!-- Various icons for success, error, PDF, etc. -->
+        </template>
+
+        <!-- Files list (loaded from server) -->
+        <div id="filesList" class="grid gap-3 mt-6">
+          <!-- Display existing files here -->
+        </div>
+      </div>
 
       <!-- CHAT TAB -->
       <div id="chatTab" class="tab-pane" role="tabpanel" aria-labelledby="tab-chat">
@@ -522,6 +732,9 @@
   </div>
 </div>
 
+    </div>
+  </div>
+</div>
 <!-- Enhanced FAB with Context-Aware Icons (Mobile Only) -->
 <button id="projectFab"
   class="fixed bottom-20 right-4 w-14 h-14 bg-primary text-primary-content rounded-full shadow-lg lg:hidden"
