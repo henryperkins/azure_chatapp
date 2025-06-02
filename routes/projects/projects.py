@@ -301,17 +301,20 @@ async def list_projects(
                 tags={"count": len(projects), "filter": filter_type.value},
             )
 
-            return {
-                "projects": [serialize_project(p) for p in projects],
-                "count": len(projects),
-                "filter": {
-                    "type": filter_type.value,
-                    "applied": {
-                        "archived": filter_type == ProjectFilter.archived,
-                        "pinned": filter_type == ProjectFilter.pinned,
+            return await create_standard_response(
+                {
+                    "projects": [serialize_project(p) for p in projects],
+                    "count": len(projects),
+                    "filter": {
+                        "type": filter_type.value,
+                        "applied": {
+                            "archived": filter_type == ProjectFilter.archived,
+                            "pinned": filter_type == ProjectFilter.pinned,
+                        },
                     },
                 },
-            }
+                span_or_transaction=span,
+            )
 
         # Allow explicit HTTPExceptions (e.g. 4xx coming from permission /
         # archived-project checks) to bubble up untouched so the client
@@ -846,16 +849,19 @@ async def get_project_stats(
             metrics.distribution("project.stats.duration", duration, unit="millisecond")
             metrics.incr("project.stats.success")
 
-            return {
-                "token_usage": project.token_usage,
-                "max_tokens": project.max_tokens,
-                "usage_percentage": usage_percentage,
-                "conversation_count": len(conversations),
-                "file_count": file_count,
-                "total_file_size": total_size or 0,
-                "artifact_count": len(artifacts),
-                "knowledge_base": kb_info,
-            }
+            return await create_standard_response(
+                {
+                    "token_usage": project.token_usage,
+                    "max_tokens": project.max_tokens,
+                    "usage_percentage": usage_percentage,
+                    "conversation_count": len(conversations),
+                    "file_count": file_count,
+                    "total_file_size": total_size or 0,
+                    "artifact_count": len(artifacts),
+                    "knowledge_base": kb_info,
+                },
+                span_or_transaction=span,
+            )
 
     except HTTPException:
         raise
