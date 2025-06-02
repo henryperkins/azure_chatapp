@@ -15,6 +15,7 @@ from uuid import UUID
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
+from fastapi.responses import JSONResponse  # NEW
 from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 # Removed unused SQLAlchemy project imports after refactor
@@ -101,7 +102,7 @@ class BatchConversationIds(BaseModel):
 # =============================================================================
 
 
-@router.get("/{project_id}/conversations", response_model=dict)
+@router.get("/{project_id}/conversations", response_class=JSONResponse)
 async def list_project_conversations(
     project_id: UUID,
     current_user_tuple: tuple = Depends(get_current_user_and_token),
@@ -175,7 +176,7 @@ async def list_project_conversations(
         ) from e
 
 
-@router.post("/{project_id}/conversations", response_model=dict)
+@router.post("/{project_id}/conversations", response_class=JSONResponse)
 async def create_conversation(
     project_id: UUID,
     conversation_data: ConversationCreate,
@@ -266,7 +267,7 @@ async def create_conversation(
         ) from e
 
 
-@router.get("/{project_id}/conversations/{conversation_id}", response_model=dict)
+@router.get("/{project_id}/conversations/{conversation_id}", response_class=JSONResponse)
 async def get_project_conversation(
     project_id: UUID,
     conversation_id: UUID,
@@ -318,7 +319,7 @@ async def get_project_conversation(
             ) from e
 
 
-@router.patch("/{project_id}/conversations/{conversation_id}", response_model=dict)
+@router.patch("/{project_id}/conversations/{conversation_id}", response_class=JSONResponse)
 async def update_project_conversation(
     project_id: UUID,
     conversation_id: UUID,
@@ -400,7 +401,7 @@ async def update_project_conversation(
         ) from e
 
 
-@router.delete("/{project_id}/conversations/{conversation_id}", response_model=dict)
+@router.delete("/{project_id}/conversations/{conversation_id}", response_class=JSONResponse)
 async def delete_project_conversation(
     project_id: UUID,
     conversation_id: UUID,
@@ -459,7 +460,7 @@ async def delete_project_conversation(
 
 @router.post(
     "/{project_id}/conversations/{conversation_id}/messages",
-    response_model=dict,
+    response_class=JSONResponse,
     status_code=status.HTTP_201_CREATED,
 )
 async def create_project_conversation_message(
@@ -659,7 +660,7 @@ async def create_project_conversation_message(
 
 
 @router.post(
-    "/{project_id}/conversations/{conversation_id}/summarize", response_model=dict
+    "/{project_id}/conversations/{conversation_id}/summarize", response_class=JSONResponse
 )
 async def summarize_conversation(
     project_id: UUID,
@@ -765,7 +766,7 @@ async def summarize_conversation(
 # =============================================================================
 
 
-@router.post("/{project_id}/conversations/batch-delete", response_model=dict)
+@router.post("/{project_id}/conversations/batch-delete", response_class=JSONResponse)
 async def batch_delete_conversations(
     project_id: UUID,
     batch_data: BatchConversationIds,
@@ -1003,7 +1004,7 @@ async def get_conversation_token_stats(
 
 
 @router.get(
-    "/{project_id}/conversations/{conversation_id}/messages", response_model=dict
+    "/{project_id}/conversations/{conversation_id}/messages", response_class=JSONResponse
 )
 async def list_project_conversation_messages(
     project_id: UUID,
