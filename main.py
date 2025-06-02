@@ -445,6 +445,12 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
 
 @app.exception_handler(Exception)
 async def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """
+    Generic catch-all exception handler for debug builds.
+    Returns the exception class name and message so that frontend
+    developers receive actionable errors instead of the canned
+    “Internal server error (insecure debug)” placeholder.
+    """
     rid = getattr(request.state, "request_id", "n/a")
     logger.error("[%s] Unhandled exception: %s", rid, exc, exc_info=True)
 
@@ -454,9 +460,16 @@ async def generic_exception_handler(request: Request, exc: Exception) -> JSONRes
         scope.set_extra("query_params", dict(request.query_params))
         sentry_sdk.capture_exception(exc)
 
-    return JSONResponse(
-        status_code=500, content={"detail": "Internal server error (insecure debug)"}
+    # Provide richer debug information in development environments.
+    # This file should never be deployed to production, but we still
+    # gate the detailed message for safety.
+    detail_msg = (
+        f"{type(exc).__name__}: {exc}"
+        if getattr(settings, "ENV", "development").lower() != "production"
+        else "Internal server error"
     )
+
+    return JSONResponse(status_code=500, content={"detail": detail_msg})
 
 
 # Uvicorn Entry

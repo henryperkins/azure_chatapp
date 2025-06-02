@@ -377,130 +377,92 @@ def extract_token(request_or_websocket, token_type="access"):
         request_or_websocket: The request or websocket object
         token_type: The type of token to extract ('access' or 'refresh')
     """
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
     cookie_name = f"{token_type}_token"
-    token = None
-    source = None
-    raw_cookie_header = "[Not Available]"
 
-    debugging = hasattr(settings, "DEBUG") and settings.DEBUG
+    debugging: bool = bool(getattr(settings, "DEBUG", False))
 
-    # Log incoming request details
-    if hasattr(request_or_websocket, "headers"):
-        raw_cookie_header = request_or_websocket.headers.get(
-            "cookie", "[No Cookie Header]"
+    def _debug(event: str, **extra):  # type: ignore[no-redef]
+        """Helper to emit structured debug logs only when DEBUG is on."""
+        if not debugging:
+            return
+        logger.debug(
+            event,
+            extra={
+                "event_type": event,
+                "token_type": token_type,
+                **extra,
+                "request_id": request_id_var.get(),
+                "trace_id": trace_id_var.get(),
+            },
         )
-        if debugging:
-            logger.debug(
-                "Extracting token from request headers",
-                extra={
-                    "event_type": "token_extraction_start",
-                    "token_type": token_type,
-                    "has_cookie_header": bool(
-                        raw_cookie_header != "[No Cookie Header]"
-                    ),
-                    "request_id": request_id_var.get(),
-                    "trace_id": trace_id_var.get(),
-                },
-            )
 
-    # First check standard cookies (HTTP)
-    if hasattr(request_or_websocket, "cookies") and request_or_websocket.cookies:
-        token = request_or_websocket.cookies.get(cookie_name)
-        if token:
-            source = "cookie"
-            if debugging:
-                logger.debug(
-                    "Token found in parsed cookies",
-                    extra={
-                        "event_type": "token_found_in_cookies",
-                        "cookie_name": cookie_name,
-                        "token_type": token_type,
-                        "request_id": request_id_var.get(),
-                        "trace_id": trace_id_var.get(),
-                    },
-                )
+    # --------------------------------------------------------------
+    # Extraction strategies (ordered)
+    # --------------------------------------------------------------
 
-    # Then check Authorization header (for access tokens)
-    if not token and hasattr(request_or_websocket, "headers"):
+    def _from_parsed_cookies() -> tuple[Optional[str], str]:
+        if not hasattr(request_or_websocket, "cookies") or not request_or_websocket.cookies:
+            return None, ""
+        token_val = request_or_websocket.cookies.get(cookie_name)
+        if token_val:
+            _debug("token_found_in_cookies", cookie_name=cookie_name)
+            return token_val, "cookie"
+        return None, ""
+
+    def _from_auth_header() -> tuple[Optional[str], str]:
+        if token_type != "access" or not hasattr(request_or_websocket, "headers"):
+            return None, ""
         auth_header = request_or_websocket.headers.get("authorization", "")
-        if auth_header.lower().startswith("bearer ") and token_type == "access":
-            token = auth_header[7:]
-            source = "auth_header"
-            if debugging:
-                logger.debug(
-                    "Token found in Authorization header",
-                    extra={
-                        "event_type": "token_found_in_auth_header",
-                        "token_type": token_type,
-                        "request_id": request_id_var.get(),
-                        "trace_id": trace_id_var.get(),
-                    },
-                )
+        if auth_header.lower().startswith("bearer "):
+            token_val = auth_header[7:]
+            _debug("token_found_in_auth_header")
+            return token_val, "auth_header"
+        return None, ""
 
-    # For WebSockets, parse cookie header if still no token found
-    if not token and hasattr(request_or_websocket, "headers"):
+    def _from_raw_cookie_header() -> tuple[Optional[str], str]:
+        if not hasattr(request_or_websocket, "headers"):
+            return None, ""
         cookie_header = request_or_websocket.headers.get("cookie", "")
-        if cookie_header:
-            # Use SimpleCookie for robust cookie parsing
-            try:
-                parsed_cookies = http.cookies.SimpleCookie()
-                parsed_cookies.load(cookie_header)
-                if cookie_name in parsed_cookies:
-                    token = parsed_cookies[cookie_name].value
-                    source = "ws_cookie_header"
-                    if debugging:
-                        logger.debug(
-                            "Token found via manual cookie header parsing",
-                            extra={
-                                "event_type": "token_found_in_ws_header",
-                                "cookie_name": cookie_name,
-                                "token_type": token_type,
-                                "request_id": request_id_var.get(),
-                                "trace_id": trace_id_var.get(),
-                            },
-                        )
-            except Exception as parse_err:
-                if debugging:
-                    logger.warning(
-                        "Error parsing cookie header for token extraction",
-                        extra={
-                            "event_type": "cookie_header_parse_error",
-                            "error": str(parse_err),
-                            "token_type": token_type,
-                            "request_id": request_id_var.get(),
-                            "trace_id": trace_id_var.get(),
-                        },
-                    )
+        if not cookie_header:
+            return None, ""
+        try:
+            parsed = http.cookies.SimpleCookie()
+            parsed.load(cookie_header)
+            if cookie_name in parsed:
+                token_val = parsed[cookie_name].value  # type: ignore[index]
+                _debug("token_found_in_ws_header", cookie_name=cookie_name)
+                return token_val, "ws_cookie_header"
+        except Exception as exc:  # Pragmatic: don't let parse errors explode
+            _debug("cookie_header_parse_error", error=str(exc))
+        return None, ""
 
-    # Log outcome in debug mode
-    if debugging:
-        if token:
-            logger.debug(
-                "Token extraction successful",
-                extra={
-                    "event_type": "token_extraction_success",
-                    "token_type": token_type,
-                    "source": source,
-                    "token_preview": token[:10] + "..." if token else None,
-                    "request_id": request_id_var.get(),
-                    "trace_id": trace_id_var.get(),
-                },
-            )
-        else:
-            logger.debug(
-                "Token extraction failed - no token found",
-                extra={
-                    "event_type": "token_extraction_failure",
-                    "token_type": token_type,
-                    "has_cookie_header": bool(
-                        raw_cookie_header != "[No Cookie Header]"
-                    ),
-                    "request_id": request_id_var.get(),
-                    "trace_id": trace_id_var.get(),
-                },
-            )
+    # --------------------------------------------------------------
+    # Attempt extraction in priority order
+    # --------------------------------------------------------------
 
-    return token
+    _debug(
+        "token_extraction_start",
+        has_cookie_header=bool(
+            hasattr(request_or_websocket, "headers") and request_or_websocket.headers.get("cookie")
+        ),
+    )
+
+    for extractor in (
+        _from_parsed_cookies,
+        _from_auth_header,
+        _from_raw_cookie_header,
+    ):
+        token_val, src = extractor()
+        if token_val:
+            _debug("token_extraction_success", source=src, token_preview=token_val[:10] + "...")
+            return token_val
+
+    _debug("token_extraction_failure")
+    return None
 
 
 # -----------------------------------------------------------------------------

@@ -125,9 +125,31 @@ class ConversationService:
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
 
-        # Validate project access
+        # ------------------------------------------------------------------
+        # Project & permission validation
+        # ------------------------------------------------------------------
         user = await self.db.get(User, user_id)
         await validate_project_access(project_id, user, self.db)
+
+        # Ensure project has an associated knowledge base when KB is requested
+        if kb_enabled:
+            from sqlalchemy.future import select  # local import to avoid cycles
+            from sqlalchemy.orm import selectinload
+            from models.project import Project
+
+            stmt = (
+                select(Project)
+                .options(selectinload(Project.knowledge_base))
+                .where(Project.id == project_id)
+            )
+            result = await self.db.execute(stmt)
+            project = result.scalar_one_or_none()
+            from fastapi import HTTPException as _HTTPExc
+
+            if not project:
+                raise _HTTPExc(status_code=404, detail="Project not found")
+            if not getattr(project, "knowledge_base", None):
+                raise _HTTPExc(status_code=400, detail="Project has no knowledge base")
 
         conv = Conversation(
             user_id=user_id,

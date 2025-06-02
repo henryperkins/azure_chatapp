@@ -853,6 +853,8 @@ export function createEventHandlers({
 
     // fast-path if modals already present
     if (domAPI.getElementById('modalsContainer')?.childElementCount > 0) {
+      // Ensure the login button delegation is wired up immediately
+      bindAuthButtonDelegate();
       setupLoginModalTabs();
     }
 
