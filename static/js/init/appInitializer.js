@@ -1745,16 +1745,19 @@ if (handlers?.dispatch) {
                 // are present.  Without this call the project list remains
                 // in the loading state because ProjectDashboard never
                 // triggers showProjectList / _loadProjects.
-                if (typeof pdDashboard.initialize === 'function' && !pdDashboard.__initialized) {
-                    try {
-                        await pdDashboard.initialize();
-                        pdDashboard.__initialized = true; // prevent double-init
-                    } catch (err) {
-                        logger.error('[UIInit] ProjectDashboard.initialize failed', err, {
-                            context: 'uiInit:projectDashboardInit'
-                        });
-                    }
-                }
+if (typeof pdDashboard.initialize === 'function' && !pdDashboard.__initialized) {
+    try {
+        await domReadinessService.waitForEvent('authReady', { timeout: 30000 });
+        if (!pdDashboard.__initialized) {
+            await pdDashboard.initialize();
+            pdDashboard.__initialized = true;
+        }
+    } catch (err) {
+        logger.error('[UIInit] ProjectDashboard.initialize failed', err, {
+            context: 'uiInit:projectDashboardInit'
+        });
+    }
+}
             }
             logger.log('[UIInit] Late-stage UI components registered', {
                 context: 'uiInit:createAndRegisterUIComponents'

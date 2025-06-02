@@ -17,9 +17,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
 from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select  # Add this import
-from sqlalchemy.orm import selectinload  # Add this import
-from models.project import Project  # ADDED
+# Removed unused SQLAlchemy project imports after refactor
 from sentry_sdk import (
     capture_exception,
     configure_scope,
@@ -203,65 +201,17 @@ async def create_conversation(
             transaction.set_tag("user.id", str(current_user.id))
             transaction.set_tag("model.id", conversation_data.model_id)
 
-            # Validate project access
-            with sentry_span_context(op="access.check", description="Validate project access"):
-                await validate_project_access(project_id, current_user, db)
-
-            # Fetch Project and eagerly load its knowledge_base
-            stmt = (
-                select(Project)
-                .options(selectinload(Project.knowledge_base))
-                .where(Project.id == project_id)
-            )
-            result = await db.execute(stmt)
-            project = result.scalar_one_or_none()
-            if not project:
-                transaction.set_tag("error.type", "project_retrieval")
-                metrics.incr(
-                    "conversation.create.failure",
-                    tags={"reason": "project_not_found_post_validation"},
-                )
-                logger.error(f"Project {project_id} not found after access validation.")
-                raise HTTPException(
-                    status_code=404,
-                    detail="Project not found despite access validation.",
-                )
-
-            # Knowledge Base Validation
-            if not project.knowledge_base:
-                transaction.set_tag("error.type", "validation")
-                metrics.incr(
-                    "conversation.create.failure", tags={"reason": "kb_missing"}
-                )
-                raise HTTPException(
-                    status_code=400, detail="Project has no knowledge base"
-                )
-            # Create conversation
+            # Create conversation (ConversationService handles all validations)
             with sentry_span_context(op="db.create", description="Create conversation record"):
-                from sqlalchemy.exc import IntegrityError
-
-                try:
-                    conv = await conv_service.create_conversation(
-                        user_id=current_user.id,
-                        title=conversation_data.title,
-                        model_id=conversation_data.model_id,
-                        project_id=project_id,
-                        model_config=conversation_data.model_params,  # ← CHANGED
-                        kb_enabled=conversation_data.kb_enabled or False,
-                    )
-                    transaction.set_tag("conversation.id", str(conv.id))
-                except IntegrityError as db_exc:
-                    logger.exception(
-                        f"[create_conversation route] Database error with project_id={project_id}, user_id={current_user.id}"
-                    )
-                    metrics.incr(
-                        "conversation.create.failure",
-                        tags={"reason": "db_integrity_error"},
-                    )
-                    raise HTTPException(
-                        status_code=500,
-                        detail="Database error. Possibly a foreign key violation or concurrency issue.",
-                    ) from db_exc
+                conv = await conv_service.create_conversation(
+                    user_id=current_user.id,
+                    title=conversation_data.title,
+                    model_id=conversation_data.model_id,
+                    project_id=project_id,
+                    model_config=conversation_data.model_params,
+                    kb_enabled=conversation_data.kb_enabled or False,
+                )
+                transaction.set_tag("conversation.id", str(conv.id))
 
             # Set user context
             with configure_scope() as scope:

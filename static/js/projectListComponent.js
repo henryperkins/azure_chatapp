@@ -106,6 +106,13 @@ export function createProjectListComponent(deps) {
     function _removeAllSkeletons() {
         const allSkeletons = domAPI.querySelectorAll('.animate-pulse');
         allSkeletons.forEach(skeleton => skeleton.remove());
+
+        // Hide global loading grid if present
+        const loadingGrid = domAPI.getElementById('loadingState');
+        if (loadingGrid) {
+            domAPI.addClass(loadingGrid, 'hidden');
+            loadingGrid.style.display = 'none';
+        }
     }
 
     // ----- Initialization/Readiness -----
@@ -334,13 +341,13 @@ export function createProjectListComponent(deps) {
                     // CRITICAL FIX: Remove the old grid element to prevent orphaned skeletons
                     const oldGrid = gridElement;
                     gridElement = newGrid;
-                    
+
                     // Remove old grid if it exists and has no parent (orphaned)
                     if (oldGrid && oldGrid !== newGrid) {
                         // Clean up any skeletons in the old grid before removal
                         const oldSkeletons = domAPI.querySelectorAll('.animate-pulse', oldGrid);
                         oldSkeletons.forEach(skeleton => skeleton.remove());
-                        
+
                         // If old grid is orphaned (no parent), remove it entirely
                         if (!oldGrid.parentNode) {
                             oldGrid.remove();
@@ -472,10 +479,10 @@ export function createProjectListComponent(deps) {
             _setState({ projects: projects || [], loading: false }); // Clear loading state when data arrives
 
             if (!gridElement) return;
-            
+
             // CRITICAL FIX: Remove ALL skeleton elements globally before rendering
             _removeAllSkeletons();
-            
+
             if (!projects?.length) {
                 _setState({ loading: false }); // Clear loading state for empty results
                 _showEmptyState();
@@ -610,6 +617,14 @@ export function createProjectListComponent(deps) {
         if (!isAuthenticated) {
             _showLoginRequired();
             return;
+        }
+
+        /* ------------------------------------------------------------------
+         * Authenticated path – ensure any login-required fallback is removed
+         * ------------------------------------------------------------------ */
+        const fallbackEl = domAPI.querySelector('.project-list-fallback', element);
+        if (fallbackEl) {
+            fallbackEl.remove();
         }
 
         _makeVisible();
@@ -817,10 +832,17 @@ export function createProjectListComponent(deps) {
     }
     function _showLoadingState() {
         if (!gridElement) return;
-        
+
         // CRITICAL FIX: Remove any existing skeletons globally before creating new ones
         _removeAllSkeletons();
-        
+
+        // Show global loading grid during load
+        const loadingGrid = domAPI.getElementById('loadingState');
+        if (loadingGrid) {
+            domAPI.removeClass(loadingGrid, 'hidden');
+            loadingGrid.style.display = '';
+        }
+
         _clearElement(gridElement);
         gridElement.classList.add("mobile-grid");
         for (let i = 0; i < 6; i++) {
