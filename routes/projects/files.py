@@ -22,6 +22,7 @@ from fastapi import (
     Response,
 )
 from fastapi.responses import FileResponse
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db import get_async_session
@@ -41,7 +42,7 @@ router = APIRouter()
 # =======================================================
 
 
-@router.post("", response_model=dict)
+@router.post("", response_class=JSONResponse)
 async def handle_upload_project_file(
     project_id: UUID,
     background_tasks: BackgroundTasks,
@@ -115,7 +116,7 @@ async def handle_upload_project_file(
             )
 
 
-@router.get("", response_model=dict)
+@router.get("", response_class=JSONResponse)
 async def list_project_files(
     project_id: UUID,
     current_user_and_token: Tuple[User, str] = Depends(get_current_user_and_token),
@@ -173,7 +174,7 @@ async def list_project_files(
             ) from e
 
 
-@router.get("/{file_id}", response_model=dict)
+@router.get("/{file_id}", response_class=JSONResponse)
 async def get_project_file_metadata(
     project_id: UUID,
     file_id: UUID,
@@ -219,7 +220,7 @@ async def get_project_file_metadata(
             ) from e
 
 
-@router.delete("/{file_id}", response_model=dict)
+@router.delete("/{file_id}", response_class=JSONResponse)
 async def delete_project_file(
     project_id: UUID,
     file_id: UUID,
