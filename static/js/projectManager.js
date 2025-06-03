@@ -52,6 +52,11 @@ export function createProjectManager({
   const MODULE = 'ProjectManager';
 
   function normalizeProjectResponse(res) {
+    // Defensive patch: handle null, HTML, and project-not-found cases up front
+    if (!res || (typeof res === "string" && (res.trim() === "" || res.trim().startsWith("<!DOCTYPE html") || res.trim().startsWith("<html")))) {
+      logger?.error?.('[ProjectManager] normalizeProjectResponse – empty, null, or HTML response', { context: MODULE, payload: res });
+      throw new Error("Empty, null, or invalid (HTML) response received from server");
+    }
     // Enhanced resolution – handle responses where the project object is nested
     // under `data.project` or `project` keys (observed in some backend versions).
     let data = Array.isArray(res)
@@ -65,6 +70,7 @@ export function createProjectManager({
             : res?.id
               ? res
               : null;
+
     if (data) {
       data = { ...data, id: String(data.id ?? data.uuid ?? data.project_id ?? data.projectId ?? '').trim() };
       // Robust frontend field mapping for key project details
@@ -89,7 +95,14 @@ export function createProjectManager({
         data.project_instructions ??
         "";
     }
+
     if (!isValidProjectId(data?.id)) {
+      // If we see a backend-style error, surface as a 404 for downstream handling
+      if ((res?.detail || data?.detail) === "Project not found") {
+        const err = new Error('not_found');
+        err.status = 404;
+        throw err;
+      }
       // Provide detailed diagnostic before throwing so that Sentry / console
       // capture the *exact* payload shape that violated the contract.  This
       // will allow faster root-cause analysis should a backend regression or
