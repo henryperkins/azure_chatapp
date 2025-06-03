@@ -1111,7 +1111,10 @@ function readCookie(name) {
     },
     cleanup,
     fetchCurrentUser,
-    fetchAuthSettingsDiagnostic
+    fetchAuthSettingsDiagnostic,
+    // New helper to expose current access token and Authorization header for apiClient
+    getAccessToken: () => accessToken,
+    getAuthHeader: () => (accessToken ? { Authorization: `${tokenType} ${accessToken}` } : {})
   };
 
   return publicAuth;

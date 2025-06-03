@@ -78,6 +78,31 @@ export function createApiClient({
     // Always send cookies unless caller over-rides
     if (!('credentials' in restOpts)) restOpts.credentials = 'include';
 
+    // Inject Authorization header if auth module provides it and caller hasn't set it explicitly
+    if (auth) {
+      try {
+        if (typeof auth.getAuthHeader === 'function') {
+          const authHeaderObj = auth.getAuthHeader();
+          if (
+            authHeaderObj &&
+            authHeaderObj.Authorization &&
+            !restOpts.headers["Authorization"]
+          ) {
+            restOpts.headers["Authorization"] = authHeaderObj.Authorization;
+          }
+        } else if (typeof auth.getAccessToken === 'function') {
+          const token = auth.getAccessToken();
+          if (token && !restOpts.headers["Authorization"]) {
+            restOpts.headers["Authorization"] = `Bearer ${token}`;
+          }
+        }
+      } catch (err) {
+        logger?.warn?.('[apiClient] Failed to inject Authorization header', err, {
+          context: 'apiClient:authHeader'
+        });
+      }
+    }
+
     // CSRF token injection
     if (["POST", "PUT", "PATCH", "DELETE"].includes(method) && auth?.getCSRFToken) {
       // Set log delivery context if this is a request to /api/logs
