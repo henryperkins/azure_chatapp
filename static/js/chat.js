@@ -110,6 +110,13 @@ export function createChatManager(deps = {}) {
   if (!logger) throw new Error('Missing logger in createChatManager');
   if (!APP_CONFIG) throw new Error('Missing APP_CONFIG in createChatManager');
 
+  /* NEW – ensure late-failing deps are present _before_ projectDetails,
+     chatUIEnhancements and projectManager get access to ChatManager      */
+  if (!navAPI)                    throw new Error('Missing navAPI (NavigationService) in createChatManager');
+  if (!browserService)           throw new Error('Missing browserService in createChatManager');
+  if (typeof isValidProjectId !== 'function')
+      throw new Error('Missing isValidProjectId(fn) in createChatManager');
+
   // --- Dependency-injected global replacements with defaults (moved up) ---
   const _domAPI = domAPI || createDefaultDomAPI();
   const _navAPI = navAPI || createDefaultNavAPI();
