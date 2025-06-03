@@ -1123,7 +1123,9 @@ class ProjectDetailsComponent {
             // After template is loaded, initialize the chat manager
             await this.chatManager.initialize({
               projectId: this.projectId,
-              containerSelector: "#chatUIContainer .chat-container",
+              /* container is the #chatUIContainer element itself – no inner
+                 .chat-container required (template only has the outer div) */
+              containerSelector: "#chatUIContainer",
               messageContainerSelector: "#chatMessages",
               inputSelector: "#chatInput",
               sendButtonSelector: "#chatSendBtn",

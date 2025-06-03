@@ -1234,20 +1234,31 @@ export function createChatManager(deps = {}) {
     }
 
     async _setupUIElements() {
-      await domReadinessService.elementsReady(
-        [
-          this.containerSelector,
-          this.messageContainerSelector,
-          this.inputSelector,
-          this.sendButtonSelector
-        ],
-        {
-          timeout: this.APP_CONFIG?.TIMEOUTS?.CHAT_UI_READY ?? 8000,
-          context: "chatManager::_setupUIElements"
-        }
-      );
+      const requiredSelectors = [
+        this.messageContainerSelector,
+        this.inputSelector,
+        this.sendButtonSelector
+      ];
+      if (this.containerSelector) requiredSelectors.unshift(this.containerSelector);
 
-      this.container = this.domAPI.querySelector(this.containerSelector);
+      await domReadinessService.elementsReady(requiredSelectors, {
+        timeout: this.APP_CONFIG?.TIMEOUTS?.CHAT_UI_READY ?? 8000,
+        context: "chatManager::_setupUIElements"
+      });
+
+      this.container = this.containerSelector
+        ? this.domAPI.querySelector(this.containerSelector)
+        : null;
+
+      // Fallback: if not found, use the parent of the message container
+      if (!this.container) {
+        const msgEl = this.domAPI.querySelector(this.messageContainerSelector);
+        this.container =
+          msgEl?.closest?.('#chatUIContainer')
+          || msgEl?.parentNode
+          || null;
+      }
+
       this.messageContainer = this.domAPI.querySelector(this.messageContainerSelector);
       this.inputField = this.domAPI.querySelector(this.inputSelector);
       this.sendButton = this.domAPI.querySelector(this.sendButtonSelector);
@@ -1258,9 +1269,13 @@ export function createChatManager(deps = {}) {
         ? this.domAPI.querySelector(this.minimizeButtonSelector)
         : null;
 
-      if (!this.container || !this.messageContainer ||
-        !this.inputField || !this.sendButton) {
+      if (!this.messageContainer || !this.inputField || !this.sendButton) {
         throw new Error("[ChatManager] Chat UI elements not found. Check selectors/template.");
+      }
+      if (!this.container) {
+        // Log but do not abort – not critical for functionality
+        logger.warn("[ChatManager] Chat container element not found – continuing without it",
+                    { context: "chatManager" });
       }
 
       this.domAPI.removeClass(this.container, "hidden");
