@@ -103,6 +103,16 @@ export function createApiClient({
       }
     }
 
+// Diagnostic: warn only if the header is missing *and* no auth cookies exist
+if (
+  !restOpts.headers["Authorization"] &&
+  !(auth?.hasAuthCookies?.() === true)
+) {
+  logger.warn('[apiClient] Authorization header missing and no auth cookies present', {
+    url: normUrl,
+    context: 'apiClient:authHeader:missing:noCookie'
+  });
+}
     // CSRF token injection
     if (["POST", "PUT", "PATCH", "DELETE"].includes(method) && auth?.getCSRFToken) {
       // Set log delivery context if this is a request to /api/logs
