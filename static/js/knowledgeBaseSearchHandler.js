@@ -49,6 +49,7 @@ export function createKnowledgeBaseSearchHandler(ctx) {
     }
 
     const pid = ctx._getCurrentProjectId();
+    const kbId = ctx.state.knowledgeBase?.id;
     if (!pid) {
       return;
     }
@@ -63,8 +64,11 @@ export function createKnowledgeBaseSearchHandler(ctx) {
     _showSearchLoading();
 
     try {
+      const endpoint = kbId
+        ? `/api/projects/${pid}/knowledge-bases/${kbId}/search`
+        : `/api/projects/${pid}/knowledge-bases/search`;
       const resp = await ctx.apiRequest(
-        `/api/projects/${pid}/knowledge-bases/search`,
+        endpoint,
         {
           method: "POST",
           body: { query: trimmed, top_k: _getSelectedTopKValue() },
