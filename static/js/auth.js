@@ -359,19 +359,12 @@ function readCookie(name) {
         const evt = eventHandlers.createCustomEvent('authStateChanged', { detail: eventDetail });
         AuthBus.dispatchEvent(evt);
 
-        /* -----------------------------------------------------------------
-         * ALSO broadcast via domAPI.getDocument() so components listening
-         * for document-level authStateChanged events (before AuthBus DI) will
-         * receive updates.
-         * ----------------------------------------------------------------- */
+        // Now create a NEW event for the document target
         try {
           const docObj = domAPI?.getDocument?.();
           if (docObj) {
-            if (typeof domAPI.dispatchEvent === 'function') {
-              domAPI.dispatchEvent(docObj, evt);
-            } else {
-              domAPI.dispatchEvent(docObj, evt);
-            }
+            const docEvt = eventHandlers.createCustomEvent('authStateChanged', { detail: eventDetail });
+            domAPI.dispatchEvent(docObj, docEvt);
           }
         } catch (docErr) {
           logger.error('[AuthModule][broadcastAuth] Failed to dispatch authStateChanged on document',
