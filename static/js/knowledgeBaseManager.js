@@ -417,7 +417,11 @@ export function createKnowledgeBaseManager(ctx) {
     await waitForAppReady();
     logger.debug(`[${MODULE}][showKnowledgeBaseModal] App is ready. Proceeding.`, { context: MODULE });
 
-    const modal = ctx.elements.settingsModal;
+    if (!ctx.elements.settingsModal) {
+      ctx.elements.settingsModal =
+        ctx.domAPI.getElementById?.('knowledgeBaseSettingsModal');
+    }
+    let modal = ctx.elements.settingsModal;
     if (!modal || typeof modal.showModal !== "function") {
       logger.warn(`[${MODULE}][showKnowledgeBaseModal] Settings modal element not found or not a dialog. Aborting.`, { context: MODULE });
       return;
@@ -513,7 +517,16 @@ export function createKnowledgeBaseManager(ctx) {
 
     if (form) form.dataset.projectId = projectId; // Set projectId on form
 
-    modal.showModal();
+    if (ctx.modalManager?.show) {
+      /* preferred: let central ModalManager handle scroll-lock, backdrop, etc. */
+      ctx.modalManager.show('knowledge');           // alias maps to #knowledgeBaseSettingsModal
+    } else if (typeof modal.showModal === 'function') {
+      /* native <dialog> support */
+      modal.showModal();
+    } else {
+      /* last-resort fallback for browsers without <dialog> */
+      ctx.domAPI.removeClass(modal, 'hidden');
+    }
     validateSelectedModelDimensions();
     logger.debug(`[${MODULE}][showKnowledgeBaseModal] Modal shown.`, { context: MODULE });
   }
@@ -524,10 +537,12 @@ export function createKnowledgeBaseManager(ctx) {
   function hideKnowledgeBaseModal() {
     logger.info(`[${MODULE}][hideKnowledgeBaseModal] Hiding KB settings modal.`, { context: MODULE });
     const modal = ctx.elements.settingsModal;
-    if (modal && typeof modal.close === "function") {
+    if (ctx.modalManager?.hide) {
+      ctx.modalManager.hide('knowledge');
+    } else if (modal && typeof modal.close === "function") {
       modal.close();
-    } else {
-      logger.warn(`[${MODULE}][hideKnowledgeBaseModal] Settings modal element not found or not a dialog.`, { context: MODULE });
+    } else if (modal) {
+      ctx.domAPI.addClass(modal, 'hidden');
     }
   }
 
