@@ -6,6 +6,7 @@ Ensures consistent response formats across endpoints.
 """
 
 from datetime import datetime, date
+import logging
 from typing import Any, Optional, List, Sequence, Union, Mapping
 from sqlalchemy import MetaData
 from uuid import UUID
@@ -60,8 +61,14 @@ def serialize_project(project: Project) -> dict[str, Any]:
     kb_obj = getattr(project, "knowledge_base", None)
     knowledge_base = serialize_knowledge_base(kb_obj) if kb_obj is not None else None
 
+    # Validate id: should never be None or missing; log error for diagnostics
+    serialized_id = serialize_uuid(project.id)
+    if not serialized_id or not isinstance(serialized_id, str) or serialized_id.strip() == "":
+        logging.error(f"[serialize_project] Project object missing or invalid 'id': {project!r}")
+        raise ValueError("serialize_project: Project is missing a valid 'id'")
+
     return {
-        "id": serialize_uuid(project.id),
+        "id": serialized_id,
         "name": project.name,
         "description": project.description,
         "goals": project.goals,

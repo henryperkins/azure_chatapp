@@ -1112,9 +1112,23 @@ function readCookie(name) {
     cleanup,
     fetchCurrentUser,
     fetchAuthSettingsDiagnostic,
-    // New helper to expose current access token and Authorization header for apiClient
-    getAccessToken: () => accessToken,
-    getAuthHeader: () => (accessToken ? { Authorization: `${tokenType} ${accessToken}` } : {})
+    // New helper to expose current access token and Authorization header for apiClient.
+    // Falls back to the `access_token` cookie on first call after page load so that
+    // apiClient can still send Bearer auth on refresh without an explicit login call.
+    getAccessToken: () => {
+      if (accessToken) return accessToken;
+      const cookieToken = readCookie('access_token');
+      if (cookieToken) {
+        accessToken = cookieToken;
+        return accessToken;
+      }
+      return null;
+    },
+    getAuthHeader: () => {
+      const tok = accessToken || readCookie('access_token');
+      if (tok && !accessToken) accessToken = tok;   // sync in-memory cache
+      return tok ? { Authorization: `${tokenType} ${tok}` } : {};
+    }
   };
 
   return publicAuth;
