@@ -142,10 +142,14 @@ def setup_middlewares_insecure(app: FastAPI) -> None:
     if not allowed_origins:
         # Allow multiple common local development origins
         allowed_origins = [
+            # --- Common local dev backends ---
             "http://localhost:8000",
-            "http://localhost:3000",
             "http://127.0.0.1:8000",
+            # --- Front-end dev servers (Vite/React/etc.) ---
+            "http://localhost:3000",
             "http://127.0.0.1:3000",
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
         ]
 
     if is_production:

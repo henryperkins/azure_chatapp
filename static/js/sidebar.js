@@ -719,7 +719,9 @@ export function createSidebar({
       });
 
       // Auth forms
-      // (moved: sidebarAuth.init() and setupInlineAuthForm() are now orchestrator-owned)
+      // Ensure sidebarAuth always initializes itself for state and event listeners
+      sidebarAuth.init();
+      sidebarAuth.setupInlineAuthForm();
 
       // Listen for authentication state changes and update sidebar UI
       // Prefer AuthBus if available, otherwise fall back to document

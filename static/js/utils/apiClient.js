@@ -103,16 +103,27 @@ export function createApiClient({
       }
     }
 
-// Diagnostic: warn only if the header is missing *and* no auth cookies exist
-if (
-  !restOpts.headers["Authorization"] &&
-  !(auth?.hasAuthCookies?.() === true)
-) {
-  logger.warn('[apiClient] Authorization header missing and no auth cookies present', {
-    url: normUrl,
-    context: 'apiClient:authHeader:missing:noCookie'
-  });
-}
+    // Diagnostic: warn only if the header is missing *and* no auth cookies exist
+    // Suppress warning for CSRF and login/verify endpoints (expected to be unauthenticated)
+    const isCsrfOrAuthInit =
+      /\/api\/auth\/csrf\b/.test(normUrl) ||
+      /\/api\/auth\/(login|register|verify)\b/.test(normUrl);
+    if (
+      !restOpts.headers["Authorization"] &&
+      !(auth?.hasAuthCookies?.() === true)
+    ) {
+      if (isCsrfOrAuthInit) {
+        logger.info(
+          '[apiClient] Authorization header/cookie missing (this is normal for CSRF/login/register/verify endpoints)',
+          { url: normUrl, context: 'apiClient:authHeader:missing:init' }
+        );
+      } else {
+        logger.warn(
+          '[apiClient] Authorization header missing and no auth cookies present',
+          { url: normUrl, context: 'apiClient:authHeader:missing:noCookie' }
+        );
+      }
+    }
     // CSRF token injection
     if (["POST", "PUT", "PATCH", "DELETE"].includes(method) && auth?.getCSRFToken) {
       // Set log delivery context if this is a request to /api/logs
@@ -212,11 +223,33 @@ if (
         }
 
         if (resp.ok) { // 2xx
+          // --------------------------------------------------------------
+          // Enforce JSON responses for all `/api/` endpoints unless the
+          // caller explicitly opts-in via `opts.allowNonJsonResponse`.
+          // This prevents HTML redirect pages (added by browsers or
+          // extensions) from being handed to business-logic code that expects
+          // JSON and subsequently fails deep down the stack.
+          // --------------------------------------------------------------
+
+          const expectsJson = /\/api\//.test(normUrl) && !restOpts.allowNonJsonResponse;
+
+          if (expectsJson && !contentType.includes('application/json')) {
+            const err = new Error('Non-JSON payload received for API endpoint');
+            err.status = resp.status;
+            err.data = payload;
+            logger.error('[apiClient] Expected application/json but received', err, {
+              context: 'apiClient:unexpectedContentType',
+              url: normUrl,
+              contentType,
+            });
+            throw err;
+          }
+
           if (returnFullResponse) {
             return {
               data: payload,
               status: resp.status,
-              headers: Object.fromEntries(resp.headers.entries())
+              headers: Object.fromEntries(resp.headers.entries()),
             };
           }
           return payload;

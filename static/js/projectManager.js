@@ -52,13 +52,19 @@ export function createProjectManager({
   const MODULE = 'ProjectManager';
 
   function normalizeProjectResponse(res) {
+    // Enhanced resolution – handle responses where the project object is nested
+    // under `data.project` or `project` keys (observed in some backend versions).
     let data = Array.isArray(res)
       ? res[0]
-      : res?.data?.id
-        ? res.data
-        : res?.id
-          ? res
-          : null;
+      : res?.data?.project?.id
+        ? res.data.project
+        : res?.data?.id
+          ? res.data
+          : res?.project?.id
+            ? res.project
+            : res?.id
+              ? res
+              : null;
     if (data) {
       data = { ...data, id: String(data.id ?? data.uuid ?? data.project_id ?? data.projectId ?? '').trim() };
       // Robust frontend field mapping for key project details
@@ -84,6 +90,15 @@ export function createProjectManager({
         "";
     }
     if (!isValidProjectId(data?.id)) {
+      // Provide detailed diagnostic before throwing so that Sentry / console
+      // capture the *exact* payload shape that violated the contract.  This
+      // will allow faster root-cause analysis should a backend regression or
+      // proxy misconfiguration surface similar problems in future.
+      logger?.error?.('[ProjectManager] normalizeProjectResponse – invalid ID', {
+        context: MODULE,
+        payload: res,
+        extracted: data
+      });
       throw new Error('Invalid project ID in server response');
     }
     return data;
@@ -400,6 +415,7 @@ export function createProjectManager({
       }
 
       try {
+        logger.info(`[${MODULE}] GET project details`, { url: detailUrl, context: MODULE });
         const detailRes = await this._req(detailUrl, undefined, 'loadProjectDetails');
         const currentProjectObj = normalizeProjectResponse(detailRes);
 

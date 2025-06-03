@@ -387,8 +387,29 @@ async def get_project(
                 scope.set_context("project", serialize_project(project))
 
             metrics.incr("project.view.success")
+
+            # ------------------------------------------------------------------
+            # Align *single-project* response layout with the collection endpoint
+            # (`/api/projects/`) which wraps the data inside an object keyed by
+            # `projects`.  Returning the raw project dict at `data` introduced a
+            # subtle client-side mismatch because the frontend normalisation
+            # helper (`normalizeProjectResponse` in `static/js/projectManager.js`)
+            # expects **all** project payloads to be provided under either
+            # `data.projects[]` **or** `data.project`.  Without this wrapper the
+            # helper received an object whose direct `id` property is undefined
+            # (`res.data.id === undefined`) and subsequently threw the
+            # “Invalid project ID in server response” error observed in Sentry
+            # and browser logs.
+            #
+            # To keep the public contract consistent we now wrap the serialized
+            # record in `{ "project": … }` – mirroring the plural endpoint and
+            # making it trivial for the client to extract the ID regardless of
+            # whether it is dealing with a list or a single entity.
+            # ------------------------------------------------------------------
+
             return await create_standard_response(
-                serialize_project(project), span_or_transaction=span
+                {"project": serialize_project(project)},
+                span_or_transaction=span,
             )
 
     except Exception as e:
