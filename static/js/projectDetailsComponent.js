@@ -981,6 +981,18 @@ class ProjectDetailsComponent {
     this._logInfo("Fetching project data", { projectId });
     await this._fetchProjectData(this.projectId);
     this._renderProjectData();
+
+    /* ── Ensure KB is fetched early so Chat UI can initialise ── */
+    try {
+      if (this.projectManager?.loadProjectKnowledgeBase) {
+        await this.projectManager.loadProjectKnowledgeBase(this.projectId);
+      }
+    } catch (err) {
+      this._logError('Error loading knowledge base during show()', err);
+    }
+
+    // (moved above, after KB load)
+
     this._logInfo("Initializing subcomponents", { projectId });
     await this._initSubComponents();
 
@@ -1021,9 +1033,6 @@ class ProjectDetailsComponent {
     } catch (err) {
       this._logError('Error reloading conversations after listener bind', err);
     }
-    this._updateNewChatButtonState();
-    this._logInfo("Restoring chat manager for project details view", { projectId });
-    this._restoreChatAndModelConfig();
     this._restoreKnowledgeTab();
     this._restoreStatsCounts();
     this.switchTab(activeTab || "chat");
