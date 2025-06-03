@@ -652,7 +652,7 @@ export function createKnowledgeBaseManager(ctx) {
 
     try {
       const response = await ctx.apiRequest(
-        `/api/projects/${projectId}/knowledge-bases/files-list`, // Assuming this is the correct endpoint for a specific KB's files or all project files for KB context
+        `/api/projects/${projectId}/knowledge-bases/${kbId}/files`,
         { method: "GET" }
       );
       logger.debug(`[${MODULE}][loadKnowledgeBaseFiles] API response for files list:`, { response: response, context: MODULE });
@@ -767,9 +767,10 @@ export function createKnowledgeBaseManager(ctx) {
     }
     logger.debug(`[${MODULE}][_handleDeleteKnowledgeBaseFile] User confirmed deletion for file ${fileId}.`, { context: MODULE });
 
+    const kbId = ctx.state.knowledgeBase?.id;
     try {
       const response = await ctx.apiRequest(
-        `/api/projects/${projectId}/knowledge-bases/files/${fileId}`,
+        `/api/projects/${projectId}/knowledge-bases/${kbId}/files/${fileId}`,
         { method: "DELETE" }
       );
       logger.debug(`[${MODULE}][_handleDeleteKnowledgeBaseFile] API response for delete file ${fileId}:`, { response, context: MODULE });
@@ -844,6 +845,7 @@ export function createKnowledgeBaseManager(ctx) {
     ctx._setButtonLoading(attachButton, true, "Attaching...");
     logger.debug(`[${MODULE}][handleAttachGitHubRepo] Attach button loading state set.`, { context: MODULE });
 
+    const kbId = ctx.state.knowledgeBase?.id;
     try {
       const payload = { repo_url: repoUrl, branch };
       if (filePaths && filePaths.length > 0) {
@@ -852,7 +854,7 @@ export function createKnowledgeBaseManager(ctx) {
       logger.debug(`[${MODULE}][handleAttachGitHubRepo] API payload:`, { payload, context: MODULE });
 
       const response = await ctx.apiRequest(
-        `/api/projects/${projectId}/knowledge-bases/github/attach`,
+        `/api/projects/${projectId}/knowledge-bases/${kbId}/github/attach`,
         { method: "POST", body: payload }
       );
       logger.debug(`[${MODULE}][handleAttachGitHubRepo] API response:`, { response, context: MODULE });
@@ -921,9 +923,10 @@ export function createKnowledgeBaseManager(ctx) {
     ctx._setButtonLoading(detachButton, true, "Detaching...");
     logger.debug(`[${MODULE}][handleDetachGitHubRepo] Detach button loading state set.`, { context: MODULE });
 
+    const kbId = ctx.state.knowledgeBase?.id;
     try {
       const response = await ctx.apiRequest(
-        `/api/projects/${projectId}/knowledge-bases/github/detach`,
+        `/api/projects/${projectId}/knowledge-bases/${kbId}/github/detach`,
         { method: "POST", body: { repo_url: repoUrl } }
       );
       logger.debug(`[${MODULE}][handleDetachGitHubRepo] API response:`, { response, context: MODULE });
