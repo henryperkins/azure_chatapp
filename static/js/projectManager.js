@@ -1,4 +1,4 @@
- // VENDOR-EXEMPT-SIZE: Core module pending refactor in Q3-25
+// VENDOR-EXEMPT-SIZE: Core module pending refactor in Q3-25
 // Refactored to comply with factory export, pure imports, domReadinessService usage, event bus for module events,
 // and logger-based error handling per guardrails. No top-level logic is executed here; all initialization occurs inside createProjectManager.
 
@@ -47,6 +47,9 @@ export function createProjectManager({
   }
   if (!logger) {
     throw new Error('[createProjectManager] Missing logger');
+  }
+  if (!otherDeps.apiEndpoints) {
+    throw new Error('[createProjectManager] Missing apiEndpoints');
   }
 
   const MODULE = 'ProjectManager';
@@ -113,17 +116,7 @@ export function createProjectManager({
         extracted: data
       });
       /* Additional diagnostic with full expansion & safe stringify */
-      logger?.error?.('[ProjectManager] normalizeProjectResponse – raw payload expanded', {
-        context: MODULE,
-        rawPayload: res,
-        stringified: (() => {
-          try {
-            return JSON.stringify(res, null, 2);
-          } catch {
-            return String(res);
-          }
-        })()
-      });
+
       /* Force visible inline dump (non-object) so DevTools can’t collapse it */
       try {
         const safeStr = typeof res === 'string' ? res : JSON.stringify(res);
@@ -407,7 +400,7 @@ export function createProjectManager({
             this._emit('projectsLoaded', { projects: list, filter });
             resolve(list);
           } catch (err) {
-            logger.error('[ProjectManager][loadProjects]', err, { context: MODULE });
+            this.logger.error('[ProjectManager][loadProjects]', err, { context: MODULE });
             resolve(this._handleErr('projectsLoaded', err, []));
           } finally {
             this._loadingProjects = false;
@@ -432,13 +425,7 @@ export function createProjectManager({
       }
       let detailUrl;
       if (detailUrlTemplate) {
-        if (
-          detailUrlTemplate.includes('{id}') &&
-          !detailUrlTemplate.endsWith('/') &&
-          detailUrlTemplate.substring(detailUrlTemplate.indexOf('{id}') + '{id}'.length).length === 0
-        ) {
-          detailUrlTemplate += '/';
-        }
+        // Remove logic that forcibly adds a trailing slash; use exactly as configured.
         detailUrl = detailUrlTemplate.replace('{id}', id);
       } else if (typeof this.apiEndpoints.DETAIL === 'function') {
         detailUrl = this.apiEndpoints.DETAIL(id);
@@ -447,8 +434,9 @@ export function createProjectManager({
       }
 
       try {
-        logger.info(`[${MODULE}] GET project details`, { url: detailUrl, context: MODULE });
+        logger.info(`[${MODULE}] GET project details → URL: ${detailUrl}`, { context: MODULE });
         const detailRes = await this._req(detailUrl, undefined, 'loadProjectDetails');
+        logger.debug(`[${MODULE}] RAW loadProjectDetails response:`, detailRes, { context: MODULE });
         const currentProjectObj = normalizeProjectResponse(detailRes);
 
         // Race condition check: Only update global state if the loaded project is still the active one.
@@ -1145,7 +1133,6 @@ export function createProjectManager({
     if (eventHandlers?.cleanupListeners) {
       eventHandlers.cleanupListeners({ context: MODULE });
     }
-    DependencySystem.modules.get('eventHandlers')?.cleanupListeners?.({ context: "ProjectManager" });
     instance.destroy();
   }
 
