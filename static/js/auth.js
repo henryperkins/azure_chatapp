@@ -371,6 +371,19 @@ function readCookie(name) {
             docErr,
             { context: 'broadcastAuth:docDispatch' });
         }
+
+        // ── NEW: make the event replayable for late listeners ───────────
+        try {
+          const drs = DependencySystem?.modules?.get?.('domReadinessService');
+          if (drs?.emitReplayable) {
+            drs.emitReplayable('authStateChanged', eventDetail);
+            drs.emitReplayable('auth:stateChanged', eventDetail); // legacy alias
+          }
+        } catch (emitErr) {
+          logger.error('[AuthModule][broadcastAuth] emitReplayable failed',
+                       emitErr,
+                       { context: 'broadcastAuth:emitReplayable' });
+        }
       } catch (busErr) {
         logger.error('[DIAGNOSTIC][auth.js][broadcastAuth] AuthBus dispatch failed', busErr, { context: 'broadcastAuth' });
       }
