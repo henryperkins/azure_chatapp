@@ -593,6 +593,37 @@ class ProjectDetailsComponent {
       ),
       { context: 'ProjectDetailsComponent', description: "KnowledgeLoaded" }
     );
+
+    /* ───────── Auth state synchronisation ───────── */
+    {
+      // Resolve AuthBus (preferred) or fall back to document
+      const authMod = this.eventHandlers.DependencySystem?.modules?.get?.('auth');
+      const authTarget = authMod?.AuthBus || this.domAPI.getDocument();
+
+      const _handleAuth = this.safeHandler((ev) => {
+        const authed = ev?.detail?.authenticated ?? this._isAuthenticated();
+
+        // 1️⃣ (always) refresh New-Chat button state
+        this._updateNewChatButtonState();
+
+        // 2️⃣ toggle chat UI availability
+        if (!authed) {
+          this.disableChatUI('Sign-in required');
+        } else if (this.state.activeTab === 'chat' || this.state.activeTab === 'conversations') {
+          // re-enable / re-initialise chat when user logs in
+          this._restoreChatAndModelConfig();
+        }
+      }, 'AuthStateChanged');
+
+      ['authStateChanged', 'auth:stateChanged'].forEach((evt) =>
+        this.eventHandlers.trackListener(
+          authTarget,
+          evt,
+          _handleAuth,
+          { context: 'ProjectDetailsComponent', description: `Auth sync → ${evt}` }
+        )
+      );
+    }
   }
 
   switchTab(tabName) {
