@@ -70,6 +70,18 @@ export function createChatManager(deps = {}) {
   function _ensureChatUIEnhancements(chatManagerInstance) {
     if (!DependencySystem?.modules?.get('chatUIEnhancements')) {
       try {
+        // Resolve ModalManager (may not be registered yet during early bootstrap)
+        const modalMgr =
+            DependencySystem?.modules?.get('modalManager') || {
+              /* minimal no-op stub so chatUIEnhancements can bootstrap */
+              showModal   () {},
+              closeModal  () {},
+              confirmDelete  : () => Promise.resolve(false),
+              confirmAction  : () => Promise.resolve(false),
+              show       () {},
+              isReadyPromise : () => Promise.resolve()
+            };
+
         createChatUIEnhancements({
           domAPI              : _domAPI,
           eventHandlers       : _EH,
@@ -78,7 +90,7 @@ export function createChatManager(deps = {}) {
           logger,
           sanitizer           : DOMPurify,
           chatManager         : chatManagerInstance,
-          modalManager        : DependencySystem?.modules?.get('modalManager'),
+          modalManager        : modalMgr,        // ← use stub/final instance
           DependencySystem
         });
         logger.info('[ChatManager] chatUIEnhancements module instantiated on-demand');
@@ -384,12 +396,17 @@ export function createChatManager(deps = {}) {
         // Ensure enhancements module is ready then attach its event handlers
         _ensureChatUIEnhancements(this);
         const chatUIEnh = DependencySystem.modules.get('chatUIEnhancements');
-        chatUIEnh.attachEventHandlers({
-          inputField        : this.inputField,
-          sendButton        : this.sendButton,
-          messageContainer  : this.messageContainer,
-          onSend            : (txt)=>this.sendMessage(txt)
-        });
+        if (chatUIEnh?.attachEventHandlers) {
+          chatUIEnh.attachEventHandlers({
+            inputField       : this.inputField,
+            sendButton       : this.sendButton,
+            messageContainer : this.messageContainer,
+            onSend           : (txt) => this.sendMessage(txt)
+          });
+        } else {
+          logger.warn('[ChatManager] chatUIEnhancements module not ready – UI handlers deferred',
+                      { context: 'chatManager' });
+        }
 
         // If already initialized for this same project, could be a UI refresh or re-bind.
         if (this._uiAttached && this.projectId === targetProjectId) {
