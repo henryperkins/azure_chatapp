@@ -557,7 +557,7 @@ export function createKnowledgeBaseManager(ctx) {
       logger.debug(`[${MODULE}][loadKnowledgeBaseHealth] Project ID: ${projectId}`, { context: MODULE });
 
       const healthResp = await ctx.apiRequest(
-        `/api/projects/${projectId}/knowledge-bases/status?detailed=true`, // Assuming this endpoint provides health for a specific KB or all for project
+        `/api/projects/${projectId}/knowledge-bases/${kbId}/status?detailed=true`,
         { method: "GET" }
       );
       logger.debug(`[${MODULE}][loadKnowledgeBaseHealth] API response for KB ${kbId}:`, { response: healthResp, context: MODULE });
@@ -845,7 +845,6 @@ export function createKnowledgeBaseManager(ctx) {
     ctx._setButtonLoading(attachButton, true, "Attaching...");
     logger.debug(`[${MODULE}][handleAttachGitHubRepo] Attach button loading state set.`, { context: MODULE });
 
-    const kbId = ctx.state.knowledgeBase?.id;
     try {
       const payload = { repo_url: repoUrl, branch };
       if (filePaths && filePaths.length > 0) {
@@ -923,7 +922,6 @@ export function createKnowledgeBaseManager(ctx) {
     ctx._setButtonLoading(detachButton, true, "Detaching...");
     logger.debug(`[${MODULE}][handleDetachGitHubRepo] Detach button loading state set.`, { context: MODULE });
 
-    const kbId = ctx.state.knowledgeBase?.id;
     try {
       const response = await ctx.apiRequest(
         `/api/projects/${projectId}/knowledge-bases/${kbId}/github/detach`,
