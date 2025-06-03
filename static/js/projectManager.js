@@ -1,3 +1,4 @@
+import { safeParseJSON } from './utils/globalUtils.js';
 // VENDOR-EXEMPT-SIZE: Core module pending refactor in Q3-25
 // Refactored to comply with factory export, pure imports, domReadinessService usage, event bus for module events,
 // and logger-based error handling per guardrails. No top-level logic is executed here; all initialization occurs inside createProjectManager.
@@ -55,10 +56,29 @@ export function createProjectManager({
   const MODULE = 'ProjectManager';
 
   function normalizeProjectResponse(res) {
-    // Defensive patch: handle null, HTML, and project-not-found cases up front
-    if (!res || (typeof res === "string" && (res.trim() === "" || res.trim().startsWith("<!DOCTYPE html") || res.trim().startsWith("<html")))) {
-      logger?.error?.('[ProjectManager] normalizeProjectResponse – empty, null, or HTML response', { context: MODULE, payload: res });
-      throw new Error("Empty, null, or invalid (HTML) response received from server");
+    /* Attempt to salvage a string response.
+       ‑ If it looks like JSON parse it.
+       ‑ Leave it untouched when parse fails. */
+    if (typeof res === 'string') {
+      const t = res.trim();
+      if (t.startsWith('{') || t.startsWith('[')) {
+        try   { res = safeParseJSON(t); }
+        catch { /* keep original string */ }
+      }
+    }
+    if (
+      !res ||
+      (typeof res === 'string' &&
+        (res.trim() === '' ||
+         res.trim().startsWith('<!DOCTYPE html') ||
+         res.trim().startsWith('<html')))
+    ) {
+      logger?.error?.('[ProjectManager] normalizeProjectResponse – empty, null, or HTML response',
+                      { context: MODULE, payload: res });
+      const err = new Error('Empty, null, or invalid (HTML) response received from server');
+      // Best-guess status for downstream handlers / _handleErr
+      err.status = /404|not found/i.test(String(res)) ? 404 : 500;
+      throw err;
     }
     // Enhanced resolution – handle responses where the project object is nested
     // under `data.project` or `project` keys (observed in some backend versions).
