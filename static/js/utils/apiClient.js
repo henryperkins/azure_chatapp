@@ -231,7 +231,11 @@ export function createApiClient({
           // JSON and subsequently fails deep down the stack.
           // --------------------------------------------------------------
 
-          const expectsJson = /\/api\//.test(normUrl) && !restOpts.allowNonJsonResponse;
+          /* Hardened: also match URLs where “/api/” appears after a leading
+             run of “?” characters or additional query params (e.g. “??project=…”). */
+          const expectsJson =
+            /([?&].*?)?\/api\//.test(normUrl) &&
+            !restOpts.allowNonJsonResponse;
 
           if (expectsJson && !contentType.includes('application/json')) {
             const err = new Error('Non-JSON payload received for API endpoint');

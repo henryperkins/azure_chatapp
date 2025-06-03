@@ -99,6 +99,25 @@ export function createProjectManager({
         payload: res,
         extracted: data
       });
+      /* Additional diagnostic with full expansion & safe stringify */
+      logger?.error?.('[ProjectManager] normalizeProjectResponse – raw payload expanded', {
+        context: MODULE,
+        rawPayload: res,
+        stringified: (() => {
+          try {
+            return JSON.stringify(res, null, 2);
+          } catch {
+            return String(res);
+          }
+        })()
+      });
+      /* Force visible inline dump (non-object) so DevTools can’t collapse it */
+      try {
+        const safeStr = typeof res === 'string' ? res : JSON.stringify(res);
+        console.error('[ProjectManager] normalizeProjectResponse payload inline:', safeStr);
+      } catch {
+        console.error('[ProjectManager] normalizeProjectResponse payload inline (fallback)', res);
+      }
       throw new Error('Invalid project ID in server response');
     }
     return data;
