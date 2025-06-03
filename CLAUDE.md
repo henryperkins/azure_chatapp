@@ -13,7 +13,8 @@ This is a full-stack, project-based chat and knowledge management application le
 - **File and artifact management**: Per-project file storage with knowledge base integration
 - **Advanced knowledge base**: Vector search, file indexing, and context retrieval
 - **Modular frontend architecture**: ES6 modules with strict dependency injection
-- **Modern UI/UX**: Tailwind CSS v4 with DaisyUI theming and mobile-responsive design
+- **Modern UI/UX**: Tailwind CSS v4 and DaisyUI v5, fully supported (with mobile-responsive design)
+
 - **Comprehensive monitoring**: Sentry integration for error tracking and performance monitoring
 - **Structured logging**: Correlation IDs, context tracking, and centralized log management
 
@@ -34,9 +35,9 @@ pip install -r requirements.txt
 ### Frontend Setup
 
 ```bash
-# Install frontend dependencies (prefer pnpm)
-pnpm install  # preferred (faster, reproducible)
-# npm ci      # fallback if pnpm unavailable
+# Install frontend dependencies (use npm for canonical installs)
+npm ci  # canonical, reproducible
+# pnpm install   # allowed if syncing lockfiles (see repo policy)
 ```
 
 ### Development
@@ -45,11 +46,14 @@ pnpm install  # preferred (faster, reproducible)
 # Start the FastAPI backend with hot reload
 uvicorn main:app --reload
 
-# Build and watch CSS changes (Tailwind v4)
-pnpm run watch:css  # or: npm run watch:css
+# Build and watch Tailwind CSS via PostCSS
+npm run watch:css
 
-# Start the full development environment
-pnpm run dev  # or: npm run dev
+# (Optional) One-shot CSS build
+npm run build:css
+
+# Run end-to-end Playwright tests
+npm run test:e2e
 
 # Run pattern checker for frontend code quality
 node scripts/patternsChecker.cjs static/js/**/*.js
@@ -59,14 +63,14 @@ node scripts/patternsChecker.cjs static/js/**/*.js
 
 ```bash
 # JavaScript/TypeScript linting
-pnpm run lint  # or: npm run lint
+npm run lint
 # With auto-fix
-pnpm run lint -- --fix  # or: npm run lint -- --fix
+npm run lint -- --fix
 
 # CSS linting
-pnpm run lint:css  # or: npm run lint:css
+npm run lint:css
 # With auto-fix
-pnpm run lint:css -- --fix  # or: npm run lint:css -- --fix
+npm run lint:css -- --fix
 
 # Python linting
 flake8 .
@@ -91,13 +95,17 @@ pytest path/to/test_file.py
 (_CI will block the merge unless every box is ticked; mirrors
 `.github/pull_request_template.md`_)
 
-- [ ] No module except **appModule** tracks initialization state internally  
-- [ ] All module methods are stateless **and** idempotent  
-- [ ] Initialization sequencing is managed **only** from  
-      `static/js/app.js` / `static/js/init/appInitializer.js`  
-- [ ] Every source file exports exactly one factory function (pure DI);  
-      no top-level side-effects  
-- [ ] Every `cleanup()` exists, is idempotent, and calls  
+- [ ] No module except **`static/js/init/appInitializer.js`** tracks lifecycle / initialization flags internally
+- [ ] All public module methods remain stateless and idempotent; internal mutation of the shared state object is allowed
+- [ ] Initialization sequencing is managed **only** from
+      `static/js/init/appInitializer.js` ( `app.js` is a thin wrapper)
+- [ ] Every source file exports exactly one factory function (pure DI);
+      no top-level side-effects
+
+  _Exceptions: canonical root-level DI factories (`logger.js`, `logDeliveryService.js`, `safeHandler.js`, and `constants/*.js`) are allowed._
+  These must **also** follow the factory pattern (e.g. `createLogger`, `createLogDeliveryService`) and _not_ export singleton objects. This ensures strict DI compliance while permitting their special root placement.
+
+- [ ] Every `cleanup()` exists, is idempotent, and calls
       `eventHandlers.cleanupListeners({ context })`
 
 ## Architecture Overview
@@ -147,18 +155,14 @@ The backend follows a layered architecture with clear separation of concerns:
 
 The frontend uses a modular ES6 architecture with strict dependency injection and a sophisticated initialization system:
 
-1. **Main Entrypoint**: `static/js/app.js`
-   - Orchestrates the full initialization sequence
-   - Manages dependency system and service registration
-   - Coordinates authentication, UI, and core system setup
+1. **Bootstrap Entrypoint**: `static/js/init/appInitializer.js`
+   - Performs the full initialization sequence (dependency registration, service wiring, state-store creation)
+   - Coordinates authentication, UI, model configuration, chat, and logging pipelines
+   - **`static/js/app.js`** now acts only as a thin wrapper that instantiates and calls `appInitializer.initializeApp()`
 
 2. **Initialization System** (`static/js/init/`):
-   - `appState.js`: Centralized application state management with single source of truth
-   - `authInit.js`: Authentication system initialization and state change handling
-   - `coreInit.js`: Core systems (modal manager, auth module, model config, chat manager)
-   - `serviceInit.js`: Service registration and dependency wiring
-   - `uiInit.js`: UI component initialization and template loading
-   - `errorInit.js`: Global error handling and unhandled promise rejection tracking
+   - `appInitializer.js`: **Single-file orchestrator** that sets up DependencySystem, registers modules, constructs the shared state container, and kicks off services (auth, UI, model config, chat, logging).
+   _All previous split init files (`authInit.js`, `coreInit.js`, etc.) were merged during the 2025 refactor._
 
 3. **Core Modules**:
    - `auth.js`: Authentication with AuthBus event system and consolidated state management
@@ -168,15 +172,45 @@ The frontend uses a modular ES6 architecture with strict dependency injection an
    - `sidebar.js`: Navigation and UI components
    - `knowledgeBaseComponent.js`: Knowledge base functionality and file management
 
-4. **Utility Modules** (`static/js/utils/`):
+4. **Utility Modules** (`static/js/utils/` and root `static/js/`):
    - `domAPI.js`: Abstracted DOM manipulation with dependency injection
    - `apiClient.js`: Centralized HTTP client with CSRF and error handling
    - `domReadinessService.js`: Unified DOM and dependency readiness management
    - `browserService.js`: Browser API abstraction layer
-   - `logger.js`: Structured logging with correlation IDs and server integration
+   - `logger.js`: Structured logging core (root)
+   - `logDeliveryService.js`: Batched server log delivery (root)
+   - `safeHandler.js`: DI-safe wrapper for error-resilient callbacks (root)
+   - `utils/getSafeHandler.js`: Helper to retrieve the shared SafeHandler instance
    - `eventHandler.js`: Centralized event management with context tracking
 
+> **Tailwind CSS/DaisyUI Note**:
+> The project uses Tailwind CSS v4 and DaisyUI v5. DaisyUI now fully supports Tailwind CSS v4—no pinning or compatibility workarounds are required.
+
+### Frontend Logging Architecture
+
+The client-side logging stack ensures robust, structured diagnostics and seamless server aggregation:
+
+1. **[`logger.js`](static/js/logger.js:1)** – Core logger **factory** (`createLogger`) producing structured log objects, console mirroring, and dispatching `app:log` `CustomEvent`s.
+2. **[`logDeliveryService.js`](static/js/logDeliveryService.js:1)** – Batched server log delivery **factory** (`createLogDeliveryService`). Listens for `app:log`, batches `warn`/`error`/`critical` entries (100 × 5 s default) and POSTs them to `/api/logs` using the DI-injected `apiClient`.
+3. **[`safeHandler.js`](static/js/safeHandler.js:1)** – Provides `safeHandler(fn, description)` to wrap callbacks, capture exceptions, and forward them to the logger without breaking UI flow.
+4. **[`utils/getSafeHandler.js`](static/js/utils/getSafeHandler.js:1)** – Convenience helper that retrieves the active `safeHandler` instance from `DependencySystem`.
+5. **[`eventHandler.js`](static/js/eventHandler.js:1)** – Central listener orchestrator that automatically wraps handlers with `safeHandler`, tags events with context, and propagates logs.
+6. **[`init/appInitializer.js`](static/js/init/appInitializer.js:21)** – Wires the logging pipeline: creates the logger, injects it into `eventHandlers`, upgrades the stub `safeHandler`, and boots `logDeliveryService` during `serviceInit`.
+
+_Log Flow:_
+`module → safeHandler → logger (dispatch ⟶ app:log) → logDeliveryService → /api/logs`
+
+Logging behaviour is configurable via `APP_CONFIG.LOGGING` (levels, console echo, backend toggle).
+
+---
+
 ## Code Guardrails
+
+### Guardrails (Actual Implementation)
+
+#### Adding New Modules
+
+The repository uses `allowed-modules.json` to enforce the "no new modules except by allow-list" policy. When adding a necessary new module, update `allowed-modules.json` in the same PR.
 
 ### Frontend Guardrails (Actual Implementation)
 
@@ -204,7 +238,8 @@ The frontend uses a modular ES6 architecture with strict dependency injection an
    eventHandlers.cleanupListeners({ context: 'ModuleName' });
    ```
 
-5. **Authentication State**: Single source of truth is `appModule.state.isAuthenticated` and `appModule.state.currentUser`. No local auth state variables.
+5. **Authentication State**: Do **not** create local auth state variables. Retrieve canonical auth state via
+   `DependencySystem.modules.get('auth').state` (exposed by `createAuthModule`).
 
 6. **Structured Logging**: Use DI logger with correlation IDs:
    ```js
@@ -264,6 +299,19 @@ The frontend uses a modular ES6 architecture with strict dependency injection an
    })
    ```
 
+5. **ValueError → HTTPException Mapping**
+
+FastAPI automatically converts certain domain exceptions to HTTP errors using an exception handler:
+
+   ```python
+   # utils/middlewares.py
+   from fastapi.responses import JSONResponse
+
+   @app.exception_handler(ValueError)
+   async def value_error_handler(_, exc):
+       return JSONResponse(status_code=400, content={"detail": str(exc)})
+   ```
+
 5. **Sentry Integration**: Performance tracing and error monitoring:
    ```python
    with sentry_span_context(op="project", description="Create project") as span:
@@ -307,27 +355,24 @@ node scripts/patternsChecker.cjs --rule=1 static/js/myModule.js
 **Validated Rules** (from actual implementation):
 1. Factory Function Export - `createXyz` pattern with dependency validation
 2. Strict Dependency Injection - No direct `window`, `document`, `console` access
-* **Lifecycle Flags** – No module other than `appModule` may declare or
-  mutate lifecycle / readiness flags (`initialized`, `initializing`,
-  `isReady`, `ready`, etc.).  All such state lives exclusively in
-  `appModule.state` and is orchestrated by
-  `static/js/init/appInitializer.js`.
+* **Lifecycle Flags** – No module other than **`appInitializer.js`** may declare or mutate lifecycle / readiness flags (`initialized`, `initializing`,`isReady`, `ready`, etc.). These flags live exclusively on the shared state object created inside `appInitializer.js`.
 3. Pure Imports - No side effects at import time
 4. Centralized Event Handling - `eventHandlers.trackListener` usage
 5. Context Tags - Required context strings for all listeners/logs
 6. Sanitize All User HTML - `sanitizer.sanitize()` before DOM insertion
 7. domReadinessService Only - No custom DOM readiness patterns
-8. Authentication State Management - Single source via `appModule.state`
+8. Authentication State Management - Single source via `DependencySystem.modules.get('auth').state`
 9. Module Event Bus - Dedicated EventTarget usage
 10. Navigation Service - Centralized routing
-11. Single API Client - No direct fetch usage
+11. Single API Client - Direct fetch calls are discouraged; new code must use `apiClient`. (Legacy direct fetch use remains in some modules.)
 12. Structured Logging - DI logger with context required
 13. Authentication Consolidation - No duplicate auth patterns
-14. Module Size Limit - Maximum 1000 lines per module
+14. Module Size Limit - Maximum 1000 lines per module (static/js/init/appInitializer.js is exempt)
 15. Canonical Implementations - Use approved patterns only
 16. Error Object Structure - Standard `{ status, data, message }` format
-17. Logger Factory Placement - Only in `logger.js` or `app.js`
+17. Logger/Log Delivery Factory Placement - Only in `logger.js`, `logDeliveryService.js`, or `app.js` (see exemption note above). Root-level placement for these factories is canonical and compliant **if** they follow the explicit DI factory pattern.
 18. Obsolete Logger APIs - Deprecated patterns detection
+
 
 **Configuration** (from `package.json`):
 ```json
@@ -340,48 +385,8 @@ node scripts/patternsChecker.cjs --rule=1 static/js/myModule.js
 }
 ```
 
-## Recent Refactoring Progress (app.js)
+<!-- [Removed 'Recent Refactoring Progress' section—see refactor.md for historical details] -->
 
-### Completed Refactoring (24% Size Reduction)
-
-**Original**: 1,611 lines → **Current**: 1,224 lines (**387 lines removed**, 24% reduction)
-
-#### Successful Extractions (Following Guardrails):
-
-1. **authInit.js** (239 lines) - Authentication system initialization
-   - Auth system initialization with dependency validation
-   - Auth state change handling via AuthBus events
-   - Auth header rendering and UI updates
-   - Login modal management and form handling
-
-2. **appState.js** (86 lines) - Centralized application state
-   - Single source of truth for authentication state (`isAuthenticated`, `currentUser`)
-   - Project state management (`currentProjectId`, `currentProject`)
-   - Lifecycle state tracking (`isInitialized`, `isShuttingDown`)
-   - Helper methods for state access and updates
-
-3. **errorInit.js** (108 lines) - Global error handling
-   - Global error handling setup with structured logging
-   - Unhandled promise rejection tracking and reporting
-   - Centralized error logging with correlation IDs
-   - Sentry integration for error monitoring
-
-#### Key Guardrails Compliance Lessons:
-
-- **CRITICAL**: Never create new modules (.clinerules/custominstructions.md Rule #6)
-- **Use existing structure**: Work within `init/` directory modules only
-- **Extend, don't create**: Populate existing empty init files rather than creating new ones
-- **Preserve patterns**: Follow existing factory function exports and DI patterns
-
-#### Remaining Opportunities:
-
-While respecting the "no new modules" rule, further reduction is possible by:
-- Moving utility functions within existing modules
-- Consolidating duplicate patterns (70+ `DependencySystem.modules.get()` calls)
-- Refactoring within the existing init structure
-- Simplifying the main init() function complexity
-
-The refactoring successfully reduced app.js complexity while maintaining all functionality and strictly following project guardrails.
 
 ## Development Workflow
 
