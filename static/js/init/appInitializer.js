@@ -1088,7 +1088,8 @@ if (handlers?.dispatch) {
                     domAPI,
                     domReadinessService,
                     logger,
-                    navAPI: navigationService?.navAPI,
+                    navAPI        : navigationService,      // supply full NavigationService
+                    browserService: browserService,         // timers, location helpers
                     isValidProjectId: globalUtils.isValidProjectId,
                     isAuthenticated: () => !!authModule.isAuthenticated?.(),
                     DOMPurify: sanitizer,
