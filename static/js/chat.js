@@ -1259,8 +1259,9 @@ export function createChatManager(deps = {}) {
       if (this.containerSelector) requiredSelectors.unshift(this.containerSelector);
 
       await domReadinessService.elementsReady(requiredSelectors, {
-        timeout: this.APP_CONFIG?.TIMEOUTS?.CHAT_UI_READY ?? 8000,
-        context: "chatManager::_setupUIElements"
+        timeout : this.APP_CONFIG?.TIMEOUTS?.CHAT_UI_READY ?? 8000,
+        context : 'chatManager::_setupUIElements',
+        observeMutations : true            // <-- allow waiting for template HTML that is injected later
       });
 
       this.container = this.containerSelector
