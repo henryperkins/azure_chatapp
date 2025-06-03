@@ -92,12 +92,24 @@ export function createSidebarAuth({
         await authModule.register({ username, email, password });
         updateAuthFormUI(false);
         domAPI.setTextContent(sidebarAuthErrorEl, 'Registration successful. Please sign in.');
+        try {
+          // hide form immediately; handleGlobalAuthStateChange will also run
+          domAPI.addClass(sidebarAuthFormContainerEl, 'hidden');
+        } catch (hideErr) {
+          logger.warn('[SidebarAuth] Failed to hide sidebarAuthFormContainerEl after register', hideErr, { context: MODULE });
+        }
       } else {
         const loginUsername = email;
         if (!loginUsername || !password) {
           throw new Error('Username and password are required.');
         }
         await authModule.login(loginUsername, password);
+        try {
+          // hide form immediately; handleGlobalAuthStateChange will also run
+          domAPI.addClass(sidebarAuthFormContainerEl, 'hidden');
+        } catch (hideErr) {
+          logger.warn('[SidebarAuth] Failed to hide sidebarAuthFormContainerEl after login', hideErr, { context: MODULE });
+        }
       }
     } catch (err) {
       logger.error('[SidebarAuth][authSubmit]', err, { context: MODULE });
@@ -203,8 +215,47 @@ export function createSidebarAuth({
     }
   }
 
+  function _bindAuthStateListeners() {
+    const doc = domAPI.getDocument?.();
+    const auth = DependencySystem.modules?.get?.('auth');
+
+    const EH = eventHandlers;
+    const SH = safeHandler;
+
+    // Listen on AuthBus (preferred)…
+    if (auth?.AuthBus) {
+      EH.trackListener(
+        auth.AuthBus,
+        'authStateChanged',
+        SH(handleGlobalAuthStateChange, '[SidebarAuth] AuthBus authStateChanged'),
+        { context: MODULE }
+      );
+      EH.trackListener(
+        auth.AuthBus,
+        'authReady',
+        SH(handleGlobalAuthStateChange, '[SidebarAuth] AuthBus authReady'),
+        { context: MODULE, once: true }
+      );
+    }
+
+    // …and fall back to document-level events
+    if (doc) {
+      ['authStateChanged', 'auth:stateChanged', 'authReady', 'auth:ready']
+        .forEach(evt =>
+          EH.trackListener(
+            doc,
+            evt,
+            SH(handleGlobalAuthStateChange, `[SidebarAuth] doc ${evt}`),
+            { context: MODULE }
+          )
+        );
+    }
+  }
+
   function init() {
     initAuthDom();
+    _bindAuthStateListeners();   // <-- NEW
+    forceAuthStateSync();        // <-- ensure UI matches current app state
   }
 
   function cleanup() {
