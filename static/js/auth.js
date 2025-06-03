@@ -1104,10 +1104,15 @@ function readCookie(name) {
     getCSRFTokenAsync,
     getCSRFToken,
     hasAuthCookies: () => {
+      // Checks for any probable authentication/session cookies—the most common are:
+      // - session (for backend session cookies)
+      // - access_token/refresh_token (for JWT auth)
+      // - extendable for 'sid', 'auth_token', etc. in future if needed
       const doc = domAPI.getDocument?.();
       if (!doc || typeof doc.cookie !== 'string') return false;
       const cookieStr = doc.cookie || '';
-      return /(?:^|;\s*)(access_token|refresh_token)=/.test(cookieStr);
+      // This pattern matches session, access_token, or refresh_token cookies
+      return /(?:^|;\s*)(session|access_token|refresh_token)=/.test(cookieStr);
     },
     cleanup,
     fetchCurrentUser,

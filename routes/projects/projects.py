@@ -894,3 +894,29 @@ async def get_project_stats(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error while retrieving project statistics",
         ) from e
+
+# ------------------------------------------------------------------
+# Backwards-compatibility: expose endpoints without the trailing “/”
+# to avoid 307 HTML redirects when the client omits the slash.
+# ------------------------------------------------------------------
+
+router.add_api_route(
+    "/{project_id}",
+    get_project,
+    methods=["GET"],
+    response_class=JSONResponse,
+)
+
+router.add_api_route(
+    "/{project_id}",
+    update_project,
+    methods=["PATCH"],
+    response_class=JSONResponse,
+)
+
+router.add_api_route(
+    "/{project_id}",
+    delete_project,
+    methods=["DELETE"],
+    response_class=JSONResponse,
+)
