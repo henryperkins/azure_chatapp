@@ -649,8 +649,10 @@ export function createKnowledgeBaseComponent(options = {}) {
         el.title = disabled ? (!hasKB ? "Setup Knowledge Base first." : "Knowledge Base must be active.") : "Ready to use Knowledge Base features.";
       });
       if (this.elements.reprocessButton) {
-        const fileCountEl = this.domAPI.getElementById("knowledgeFileCount");
-        const fileCount = parseInt(fileCountEl?.textContent || "0", 10);
+        // use the element already captured during _initElements()
+        const fileCountEl = this.elements.knowledgeFileCount
+                          || this.domAPI.getElementById("kbDocCount"); // fallback
+        const fileCount   = parseInt(fileCountEl?.textContent || "0", 10);
         const reDisabled = !hasKB || !isActive || fileCount === 0;
         this.elements.reprocessButton.disabled = reDisabled;
         this.elements.reprocessButton.classList.toggle("opacity-50", reDisabled);
