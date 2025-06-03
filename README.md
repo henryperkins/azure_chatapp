@@ -1,6 +1,6 @@
-# Azure OpenAI Chat Application
+I get t# Azure OpenAI Chat Application
 
-A full-stack, project-based chat and knowledge management application leveraging Azure OpenAI, Anthropic Claude, JWT authentication, and modular ES6 frontend with Tailwind CSS and DaisyUI.
+A full-stack, project-based chat and knowledge management application leveraging Azure OpenAI, Anthropic Claude, JWT authentication, and a modular ES6 frontend with Tailwind CSS and DaisyUI.
 
 ## Features
 
@@ -20,21 +20,21 @@ A full-stack, project-based chat and knowledge management application leveraging
 azure_chatapp/
 ├── models/                # Database models (User, Project, Conversation, File, Artifact, KnowledgeBase, etc.)
 ├── routes/                # API endpoints (auth, projects, files, artifacts, knowledge base, conversations, preferences, sentry test)
-│   ├── projects/          # Project subroutes (projects.py, files.py, artifacts.py)
+│   ├── projects/
 │   ├── knowledge_base_routes.py
 │   ├── unified_conversations.py
 │   ├── user_preferences.py
 │   ├── sentry_test.py
 │   └── admin.py
-├── services/              # Business logic/services (conversation_service, project_service, file_storage, knowledgebase_service, etc.)
-├── db/                    # Database connection and session management (db.py)
+├── services/              # Business logic/services
+├── db/                    # Database connection/session management
 ├── utils/                 # Shared utilities (auth_utils, db_utils, sentry_utils, serializers, etc.)
 ├── static/                # Frontend assets
-│   ├── html/              # HTML templates (base.html, project_list.html, project_details.html, modals.html)
+│   ├── html/
 │   ├── js/                # ES6 modules (app.js, projectManager.js, chat.js, modelConfig.js, etc.)
 │   └── css/               # Tailwind styles
-├── config.py              # Application configuration (insecure/debug for local/dev)
-├── main.py                # FastAPI application entrypoint
+├── config.py
+├── main.py                # FastAPI entrypoint
 ├── requirements.txt       # Python dependencies
 └── package.json           # Frontend dependencies and scripts
 ```
@@ -42,6 +42,7 @@ azure_chatapp/
 ## Core API Endpoints
 
 ### Authentication
+
 ```http
 POST /api/auth/login
 Content-Type: application/json
@@ -50,8 +51,9 @@ Content-Type: application/json
   "email": "user@example.com",
   "password": "securepassword"
 }
-
+```
 Response:
+```json
 {
   "access_token": "jwt.token.here",
   "refresh_token": "refresh.token.here",
@@ -61,6 +63,7 @@ Response:
 ```
 
 ### Project Management
+
 ```http
 POST /api/projects
 Content-Type: application/json
@@ -70,19 +73,23 @@ Authorization: Bearer {token}
   "name": "AI Research",
   "description": "Market analysis project"
 }
-
+```
 Response:
+```json
 {
   "id": 123,
   "name": "AI Research",
   "description": "Market analysis project",
   "created_at": "2025-03-16T22:38:22Z"
 }
+```
 
+```http
 GET /api/projects/123
 Authorization: Bearer {token}
-
+```
 Response:
+```json
 {
   "id": 123,
   "name": "AI Research",
@@ -93,19 +100,22 @@ Response:
 ```
 
 ### Real-time Chat
+
 ```http
 WebSocket wss://yourapp.com/chat
 Headers:
 Authorization: Bearer {token}
-
-Message Format:
+```
+Message format:
+```json
 {
   "project_id": 123,
   "message": "Analyze Q4 trends",
   "context": {"temperature": 0.7}
 }
-
-Response Stream:
+```
+Response stream:
+```json
 {
   "content": "Q4 shows 15% growth...",
   "tokens_used": 42,
@@ -118,7 +128,7 @@ Response Stream:
 - Modular ES6 codebase with strict dependency injection (`DependencySystem`)
 - Main entrypoint: `static/js/app.js`
 - Core modules: `projectManager.js`, `chat.js`, `modelConfig.js`, `projectDashboard.js`, `projectListComponent.js`, `projectDetailsComponent.js`, `sidebar.js`, `knowledgeBaseComponent.js`
-- UI is dynamically injected/enhanced after DOM and dependencies are ready
+- UI enhancements occur after DOM and dependencies are ready
 - Sentry monitoring for frontend errors and performance
 
 ## Deployment
@@ -151,11 +161,11 @@ npm run watch:css
 uvicorn main:app --reload
 ```
 
-> **WARNING:** This codebase uses insecure/debug configuration by default (relaxed CORS, cookies, and session settings). Do NOT use in production without hardening security settings in `config.py` and environment variables.
+> **WARNING:** This codebase uses insecure/debug configuration by default (relaxed CORS, cookies, and session settings). Do **NOT** use in production without hardening security settings in `config.py` and environment variables.
 
 ## Architectural Diagrams
 
-### Chat Initialization Block Diagram
+### Chat Initialization (Block Diagram)
 
 ```mermaid
 graph TD
@@ -175,7 +185,7 @@ graph TD
     RegListeners --> GlobalHooks(global auth / error hooks)
 ```
 
-### Chat Sequence Diagram: First Page Load → First Message
+### Chat Sequence (First Load → First Message)
 
 ```mermaid
 sequenceDiagram
@@ -235,9 +245,13 @@ sequenceDiagram
 ```
 
 ## Contributing
+
 1. Create feature branch: `git checkout -b feature/your-idea`
 2. Commit changes: `git commit -am 'Add awesome feature'`
 3. Push branch: `git push origin feature/your-idea`
 4. Open pull request
 
-[Response interrupted by a tool use result. Only one tool may be used at a time and should be placed at the end of the message.]
+---
+
+**Looking for development, architecture, or code quality policies?
+See [Code Generation Guardrails – 2025 Update] and [CLAUDE.md] for in-depth guardrails, CI requirements, and contributor onboarding.**
