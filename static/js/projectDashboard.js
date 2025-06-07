@@ -388,6 +388,11 @@ export function createProjectDashboard({
           const isAuthenticated = appModuleRef?.state?.isAuthenticated ?? false;
 
           if (isAuthenticated && this.projectManager?.loadProjectDetails) {
+            logger.info('[ProjectDashboard][showProjectDetails] Calling loadProjectDetails with:', {
+              projectId,
+              source: "showProjectDetails",
+              stack: (new Error().stack || "").split('\n')[2] || "unknown"
+            });
             project = await this.projectManager.loadProjectDetails(projectId);
             if (!project) {
               await this.showProjectList();

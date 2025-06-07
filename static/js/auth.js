@@ -619,6 +619,11 @@ function readCookie(name) {
         accessToken = response.access_token;
         tokenType = response.token_type || 'Bearer';
         refreshToken = response.refresh_token || null;
+        // store token for reload
+        const storageService = DependencySystem?.modules?.get('storageService');
+        if (storageService?.setItem) {
+          storageService.setItem('access_token', accessToken);
+        }
         logger.info('[AuthModule][loginUser] Access and refresh tokens stored from login response.', { context: 'loginUser:tokensStored' });
       }
 
@@ -1104,14 +1109,13 @@ function readCookie(name) {
     getCSRFTokenAsync,
     getCSRFToken,
     hasAuthCookies: () => {
-      // Checks for any probable authentication/session cookies—the most common are:
-      // - session (for backend session cookies)
-      // - access_token/refresh_token (for JWT auth)
-      // - extendable for 'sid', 'auth_token', etc. in future if needed
+      // Robust check: trust appModule DI (single source of truth), fallback to cookie string as legacy
+      if (
+        DependencySystem?.modules?.get('appModule')?.state?.isAuthenticated
+      ) return true;
       const doc = domAPI.getDocument?.();
       if (!doc || typeof doc.cookie !== 'string') return false;
       const cookieStr = doc.cookie || '';
-      // This pattern matches session, access_token, or refresh_token cookies
       return /(?:^|;\s*)(session|access_token|refresh_token)=/.test(cookieStr);
     },
     cleanup,
@@ -1122,6 +1126,13 @@ function readCookie(name) {
     // apiClient can still send Bearer auth on refresh without an explicit login call.
     getAccessToken: () => {
       if (accessToken) return accessToken;
+      // Try localStorage (storageService) fallback for JWT after refresh
+      const storageService = DependencySystem?.modules?.get('storageService');
+      const lsTok = storageService?.getItem?.('access_token');
+      if (lsTok) {
+        accessToken = lsTok;
+        return accessToken;
+      }
       const cookieToken = readCookie('access_token');
       if (cookieToken) {
         accessToken = cookieToken;

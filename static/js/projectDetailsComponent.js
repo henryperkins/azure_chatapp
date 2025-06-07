@@ -717,7 +717,11 @@ class ProjectDetailsComponent {
   }
 
   async _fetchProjectData(projectId) {
-    this._logInfo(`Fetching data for project ${projectId}...`);
+    this._logInfo(`Fetching data for project ${projectId}... (About to call loadProjectDetails)`, {
+      projectId,
+      context: "projectDetailsComponent._fetchProjectData",
+      stack: (new Error().stack || "").split('\n')[2] || "unknown"
+    });
     try {
       const project = await this.projectManager.loadProjectDetails(projectId);
       this.projectData = project || null;

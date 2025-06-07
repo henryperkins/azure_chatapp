@@ -96,6 +96,14 @@ export function createApiClient({
             restOpts.headers["Authorization"] = `Bearer ${token}`;
           }
         }
+        // Fallback: If user appears authenticated but still no Authorization header, check storageService DI
+        if (!restOpts.headers["Authorization"] && ((typeof auth.hasAuthCookies === "function" && auth.hasAuthCookies()) || (DependencySystem?.modules?.get('appModule')?.state?.isAuthenticated))) {
+          const storageService = DependencySystem?.modules?.get?.('storageService');
+          const storageTok = storageService?.getItem?.('access_token');
+          if (storageTok) {
+            restOpts.headers["Authorization"] = `Bearer ${storageTok}`;
+          }
+        }
       } catch (err) {
         logger?.warn?.('[apiClient] Failed to inject Authorization header', err, {
           context: 'apiClient:authHeader'

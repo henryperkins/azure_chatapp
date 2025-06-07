@@ -40,6 +40,8 @@ numpy
 sentence-transformers
 faiss-cpu
 scikit-learn
+# Compatibility for Transformers (TensorFlow backend stub)
+tf-keras
 
 # File processing and text extraction
 python-docx
