@@ -56,97 +56,141 @@ export function createProjectManager({
   const MODULE = 'ProjectManager';
 
   function normalizeProjectResponse(res) {
-    /* Attempt to salvage a string response.
-       ‑ If it looks like JSON parse it.
-       ‑ Leave it untouched when parse fails. */
+    /* ------------------------------------------------------------------------
+     * Diagnostic: capture raw server response for on-device debugging
+     * --------------------------------------------------------------------- */
+    logger?.debug?.('[ProjectManager] normalizeProjectResponse - raw response', {
+      type: typeof res,
+      isString: typeof res === 'string',
+      length: typeof res === 'string' ? res.length : undefined,
+      preview:
+        typeof res === 'string'
+          ? res.substring(0, 200)
+          : JSON.stringify(res ?? {}, null, 0).substring(0, 200)
+    });
+
+    /* ------------------------------------------------------------------------
+     * Handle plain-string responses first
+     * --------------------------------------------------------------------- */
     if (typeof res === 'string') {
-      const t = res.trim();
-      if (t.startsWith('{') || t.startsWith('[')) {
-        try   { res = safeParseJSON(t); }
-        catch { /* keep original string */ }
+      const trimmed = res.trim();
+
+      /* Detect HTML error/redirect pages early (auth redirect, 404 template, …) */
+      if (
+        trimmed.startsWith('<!DOCTYPE') ||
+        trimmed.startsWith('<html') ||
+        trimmed.includes('</html>')
+      ) {
+        logger?.error?.(
+          '[ProjectManager] Received HTML instead of JSON – possible authentication/redirect',
+          {
+            context: MODULE,
+            htmlPreview: trimmed.substring(0, 500)
+          }
+        );
+        const titleMatch = trimmed.match(/<title>([^<]+)<\/title>/i);
+        const errMsg = titleMatch
+          ? `Server returned HTML page: ${titleMatch[1]}`
+          : 'Server returned HTML instead of JSON';
+        const err = new Error(errMsg);
+        err.status = 404; // best guess – adjust upstream when more info available
+        err.isHtmlResponse = true;
+        throw err;
+      }
+
+      /* Try JSON-parsing if payload looks like JSON */
+      if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+        try {
+          res = safeParseJSON(trimmed);
+        } catch (e) {
+          logger?.error?.('[ProjectManager] Failed to parse JSON response', {
+            context: MODULE,
+            error: e.message,
+            responsePreview: trimmed.substring(0, 200)
+          });
+          throw new Error('Invalid JSON response from server');
+        }
+      } else if (trimmed === '') {
+        throw new Error('Empty response from server');
       }
     }
-    if (
-      !res ||
-      (typeof res === 'string' &&
-        (res.trim() === '' ||
-         res.trim().startsWith('<!DOCTYPE html') ||
-         res.trim().startsWith('<html')))
-    ) {
-      logger?.error?.('[ProjectManager] normalizeProjectResponse – empty, null, or HTML response',
-                      { context: MODULE, payload: res });
-      const err = new Error('Empty, null, or invalid (HTML) response received from server');
-      // Best-guess status for downstream handlers / _handleErr
-      err.status = /404|not found/i.test(String(res)) ? 404 : 500;
-      throw err;
-    }
-    // Enhanced resolution – handle responses where the project object is nested
-    // under `data.project` or `project` keys (observed in some backend versions).
-    let data = Array.isArray(res)
-      ? res[0]
-      : res?.data?.project?.id
-        ? res.data.project
-        : res?.data?.id
-          ? res.data
-          : res?.project?.id
-            ? res.project
-            : res?.id
-              ? res
-              : null;
 
-    if (data) {
-      data = { ...data, id: String(data.id ?? data.uuid ?? data.project_id ?? data.projectId ?? '').trim() };
-      // Robust frontend field mapping for key project details
-      data.name =
-        data.name ??
-        data.title ??
-        data.project_name ??
-        "";
-      data.description =
-        data.description ??
-        data.details ??
-        data.project_description ??
-        "";
-      data.goals =
-        data.goals ??
-        data.project_goals ??
-        "";
-      data.customInstructions =
-        data.customInstructions ??
-        data.instructions ??
-        data.custom_instructions ??
-        data.project_instructions ??
-        "";
+    if (!res) {
+      throw new Error('Null or undefined response from server');
     }
 
-    if (!isValidProjectId(data?.id)) {
-      // If we see a backend-style error, surface as a 404 for downstream handling
-      if ((res?.detail || data?.detail) === "Project not found") {
-        const err = new Error('not_found');
+    /* ------------------------------------------------------------------------
+     * Attempt to locate the project object in various known shapes
+     * --------------------------------------------------------------------- */
+    let data = null;
+    const extractionPaths = [
+      () => res.data?.project,
+      () => res.data,
+      () => res.project,
+      () => res,
+      () => (Array.isArray(res) ? res[0] : null)
+    ];
+    for (const fn of extractionPaths) {
+      try {
+        const candidate = fn();
+        if (candidate && (candidate.id || candidate.uuid || candidate.project_id)) {
+          data = candidate;
+          break;
+        }
+      } catch {
+        /* ignore path errors */
+      }
+    }
+
+    /* ------------------------------------------------------------------------
+     * Validate extraction result
+     * --------------------------------------------------------------------- */
+    if (!data) {
+      if (res?.detail === 'Project not found') {
+        const err = new Error('Project not found');
         err.status = 404;
         throw err;
       }
-      // Provide detailed diagnostic before throwing so that Sentry / console
-      // capture the *exact* payload shape that violated the contract.  This
-      // will allow faster root-cause analysis should a backend regression or
-      // proxy misconfiguration surface similar problems in future.
-      logger?.error?.('[ProjectManager] normalizeProjectResponse – invalid ID', {
+      logger?.error?.('[ProjectManager] Could not extract project data from response', {
         context: MODULE,
-        payload: res,
-        extracted: data
+        responseStructure: Object.keys(res || {}),
+        response: res
       });
-      /* Additional diagnostic with full expansion & safe stringify */
-
-      /* Force visible inline dump (non-object) so DevTools can’t collapse it */
-      try {
-        const safeStr = typeof res === 'string' ? res : JSON.stringify(res);
-        console.error('[ProjectManager] normalizeProjectResponse payload inline:', safeStr);
-      } catch {
-        console.error('[ProjectManager] normalizeProjectResponse payload inline (fallback)', res);
-      }
-      throw new Error('Invalid project ID in server response');
+      throw new Error('Invalid response structure – no project data found');
     }
-    return data;
+
+    /* ------------------------------------------------------------------------
+     * Normalise to canonical frontend shape
+     * --------------------------------------------------------------------- */
+    const normalized = {
+      ...data,
+      id: String(
+        data.id || data.uuid || data.project_id || data.projectId || ''
+      ).trim(),
+      name: data.name || data.title || data.project_name || '',
+      description: data.description || data.details || data.project_description || '',
+      goals: data.goals || data.project_goals || '',
+      customInstructions:
+        data.customInstructions ||
+        data.instructions ||
+        data.custom_instructions ||
+        data.project_instructions ||
+        ''
+    };
+
+    /* ------------------------------------------------------------------------
+     * Final ID validity check
+     * --------------------------------------------------------------------- */
+    if (!isValidProjectId(normalized.id)) {
+      logger?.error?.('[ProjectManager] Invalid project ID after normalization', {
+        context: MODULE,
+        providedId: normalized.id,
+        originalData: data
+      });
+      throw new Error(`Invalid project ID: ${normalized.id}`);
+    }
+
+    return normalized;
   }
 
   function extractResourceList(res, keys = ['projects', 'conversations', 'files', 'artifacts']) {
@@ -269,18 +313,50 @@ export function createProjectManager({
           apiEndpoints.ARTIFACT_DOWNLOAD || '/api/projects/{id}/artifacts/{artifact_id}/download/'
       };
     }
-    _req(url, opts = {}, contextLabel = 'n/a') {
+    async _req(url, opts = {}, contextLabel = 'n/a') {
       if (typeof this.apiRequest !== 'function') {
         throw new Error('[ProjectManager] apiRequest missing');
       }
+
       /* Always include cookies so authenticated calls reach the server.
-         Merge with caller-supplied opts without overwriting them.          */
+         Merge with caller-supplied opts without overwriting them. */
       const mergedOpts =
         opts && typeof opts === 'object'
           ? { credentials: 'include', ...opts }
           : { credentials: 'include' };
 
-      return this.apiRequest(url, mergedOpts, contextLabel);
+      try {
+        const response = await this.apiRequest(url, mergedOpts, contextLabel);
+
+        /* Successful response diagnostics */
+        this.logger?.debug?.(`[ProjectManager] API response for ${contextLabel}`, {
+          url,
+          status: response?.status,
+          hasData: !!response
+        });
+
+        return response;
+      } catch (err) {
+        /* Enhanced error logging / re-throw with context */
+        this.logger?.error?.(
+          `[ProjectManager] API request failed for ${contextLabel}`,
+          {
+            url,
+            method: opts?.method || 'GET',
+            status: err?.status ?? err?.response?.status,
+            statusText: err?.statusText ?? err?.response?.statusText,
+            responseData: err?.data ?? err?.response?.data,
+            error: err.message
+          }
+        );
+
+        err.apiContext = {
+          url,
+          method: opts?.method || 'GET',
+          contextLabel
+        };
+        throw err;
+      }
     }
 
     /**
@@ -445,12 +521,15 @@ export function createProjectManager({
       }
       let detailUrl;
       if (detailUrlTemplate) {
-        // Remove logic that forcibly adds a trailing slash; use exactly as configured.
         detailUrl = detailUrlTemplate.replace('{id}', id);
       } else if (typeof this.apiEndpoints.DETAIL === 'function') {
         detailUrl = this.apiEndpoints.DETAIL(id);
       } else {
         throw new Error('Invalid DETAIL endpoint configuration');
+      }
+      // Ensure trailing slash for REST endpoints to avoid unexpected HTML redirects
+      if (typeof detailUrl === 'string' && !detailUrl.endsWith('/') && !detailUrl.includes('?')) {
+        detailUrl += '/';
       }
 
       try {
