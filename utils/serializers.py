@@ -7,6 +7,10 @@ Ensures consistent response formats across endpoints.
 
 from datetime import datetime, date
 import logging
+
+# Initialise module-level logger
+logger = logging.getLogger(__name__)
+
 from typing import Any, Optional, List, Sequence, Union, Mapping
 from sqlalchemy import MetaData
 from uuid import UUID
@@ -323,5 +327,9 @@ def to_serialisable(obj):  # noqa: N802  (keep snake-case for local helper)
             for col in obj.__table__.columns
         }
 
-    # fallback – best-effort string representation
+    # fallback – best-effort string representation with observability
+    logger.warning(
+        "Unserialisable type encountered in to_serialisable: %s; coercing to string",
+        type(obj),
+    )
     return str(obj)

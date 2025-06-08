@@ -94,6 +94,14 @@ async def create_standard_response(
 
     if json_ready is None:
         # This should never happen, but ensures we never emit plain `null`.
+        logger.error(
+            "[create_standard_response] jsonable_encoder returned None, indicating a serialization failure. "
+            "Returning a fallback empty payload to prevent a null response.",
+            extra={
+                "original_payload_type": type(payload),
+                "original_data_type": type(data),
+            },
+        )
         json_ready = {
             "status": payload.get("status", "success"),
             "message": payload.get("message", ""),
