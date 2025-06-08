@@ -224,7 +224,7 @@ export function createKnowledgeBaseComponent(options = {}) {
         'settingsModal', 'settingsForm', 'cancelSettingsBtn', 'deleteKnowledgeBaseBtn',
         'resultModal', 'resultTitle', 'resultSource', 'resultScore', 'resultContent', 'useInChatBtn'
       ]);
-      const reqEl = (key, selector) => {
+      const _reqEl = (key, selector) => {
         // Prioritize elRefs if provided for a key
         const el = this.elRefs[key] || this.domAPI.getElementById(selector);
         if (!el && !OPTIONAL_KEYS.has(key)) {
@@ -382,7 +382,7 @@ export function createKnowledgeBaseComponent(options = {}) {
     _bindEventHandlers() {
       this.logger.debug(`[${MODULE}] Binding event handlers.`, { context: MODULE });
       const EH = this.eventHandlers;
-      const DA = this.domAPI;
+      const _DA = this.domAPI; // underscore-prefixed to satisfy no-unused-vars
       const MODULE_CONTEXT = MODULE; // Defined at the top of the factory
 
       const addListener = (elRef, type, fn, opts = {}) => {
@@ -651,7 +651,7 @@ export function createKnowledgeBaseComponent(options = {}) {
       if (this.elements.reprocessButton) {
         // use the element already captured during _initElements()
         const fileCountEl = this.elements.knowledgeFileCount
-                          || this.domAPI.getElementById("kbDocCount"); // fallback
+                          || this.domAPI.getElementById("kbDocCount"); // fallback
         const fileCount   = parseInt(fileCountEl?.textContent || "0", 10);
         const reDisabled = !hasKB || !isActive || fileCount === 0;
         this.elements.reprocessButton.disabled = reDisabled;
@@ -661,7 +661,7 @@ export function createKnowledgeBaseComponent(options = {}) {
       }
     }
 
-    _updateStatusAlerts(kb) {
+    _updateStatusAlerts(_kb) {
       // notification/logging removed; adjust as needed if visual indicator required
     }
 

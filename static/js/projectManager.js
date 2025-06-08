@@ -59,8 +59,8 @@ export function createProjectManager({
   const MODULE = 'ProjectManager';
 
   function normalizeProjectResponse(res) {
-    // Debug logging to see actual server response
-    logger.error('[ProjectManager] normalizeProjectResponse - raw response:', {
+    // Raw response diagnostic – debug level to avoid Sentry noise
+    logger.debug('[ProjectManager] normalizeProjectResponse - raw response:', {
       type: typeof res,
       keys: res ? Object.keys(res) : [],
       hasData: !!res?.data,
@@ -397,7 +397,7 @@ export function createProjectManager({
       }
 
       try {
-        logger.error(`[${MODULE}] Requesting project details from URL: ${detailUrl}`);
+        logger.info(`[${MODULE}] Requesting project details from URL: ${detailUrl}`);
         
         // Check authentication state first
         const authModule = this.DependencySystem?.modules?.get('auth');
@@ -412,7 +412,7 @@ export function createProjectManager({
         
         // Detect auth state mismatch - user is marked as authenticated but has no token
         if (authState.isAuthenticated && !authState.hasAuthToken) {
-          logger.error(`[${MODULE}] CRITICAL: Auth state mismatch detected - user is authenticated but has no token. This will cause 401 errors.`);
+          logger.warn(`[${MODULE}] Auth state mismatch – user marked authenticated but Authorization header missing. Forcing re-auth to avoid 401.`);
           const error = new Error('Authentication token missing or expired. Please log in again.');
           error.status = 401;
           error.code = 'AUTH_TOKEN_MISSING';

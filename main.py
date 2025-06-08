@@ -213,8 +213,9 @@ def setup_middlewares_insecure(app: FastAPI) -> None:
             "child-src  'self' blob:; "
             # ────────── MEDIA / STYLES ──────────
             "img-src 'self' data: blob: https://*.sentry.io https://*.sentry-cdn.com; "
-            "style-src 'self' 'unsafe-inline'; "
-            "font-src  'self';"
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "font-src  'self' https://fonts.gstatic.com;"
         )
         return response
 

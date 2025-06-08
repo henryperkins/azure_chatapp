@@ -17,6 +17,7 @@ import { createDomWaitHelper } from './utils/initHelpers.js';
 import { createElement } from './utils/globalUtils.js';
 import { createPullToRefresh } from './utils/pullToRefresh.js';
 import { getSafeHandler } from './utils/getSafeHandler.js';
+import { SELECTORS } from './utils/selectorConstants.js';
 
 export function createChatUIEnhancements(deps = {}) {
   // Validate required dependencies
@@ -60,9 +61,9 @@ export function createChatUIEnhancements(deps = {}) {
 
     // Project-only selectors for chat UI
     const CHAT_SELECTORS = [
-      '#chatInput',
-      '#chatMessages',
-      '#chatSendBtn'
+      SELECTORS.chatInput,
+      SELECTORS.chatMessages,
+      SELECTORS.chatSendBtn
     ];
     const context = `${MODULE_CONTEXT}::initialize`;
 
@@ -78,9 +79,9 @@ export function createChatUIEnhancements(deps = {}) {
       return;
     }
 
-    const chatInput = domAPI.getElementById('chatInput');
-    const sendBtn = domAPI.getElementById('chatSendBtn');
-    const chatContainer = domAPI.getElementById('chatMessages');
+    const chatInput = domAPI.getElementById(SELECTORS.chatInput.slice(1));
+    const sendBtn = domAPI.getElementById(SELECTORS.chatSendBtn.slice(1));
+    const chatContainer = domAPI.getElementById(SELECTORS.chatMessages.slice(1));
     const doc = domAPI.getDocument();
 
     // Cache default container
@@ -149,14 +150,14 @@ export function createChatUIEnhancements(deps = {}) {
    */
   function setupMobileEnhancements() {
     // Improve touch targets
-    domAPI.querySelectorAll('#chatHeader button, #chatInput, #chatSendBtn').forEach(el => {
+    domAPI.querySelectorAll(`#chatHeader button, ${SELECTORS.chatInput}, ${SELECTORS.chatSendBtn}`).forEach(el => {
       if (el.tagName === 'BUTTON' && !el.classList.contains('btn-lg')) {
         el.style.minHeight = '44px'; // Ensure minimum touch target size
       }
     });
 
     // Improve keyboard experience for input
-    const chatInput = domAPI.getElementById('chatInput');
+    const chatInput = domAPI.getElementById(SELECTORS.chatInput.slice(1));
     if (chatInput) {
       // Prevent iOS zoom by ensuring font size is at least 16px
       chatInput.style.fontSize = '16px';
@@ -168,7 +169,7 @@ export function createChatUIEnhancements(deps = {}) {
 
     // Setup pull-to-refresh for chat messages
     createPullToRefresh({
-      element        : domAPI.getElementById('chatMessages'),
+      element        : domAPI.getElementById(SELECTORS.chatMessages.slice(1)),
       onRefresh      : ()=> chatManager.loadConversation(chatManager.currentConversationId),
       eventHandlers, domAPI, browserService,
       ctx            : MODULE_CONTEXT
@@ -181,7 +182,7 @@ export function createChatUIEnhancements(deps = {}) {
    */
   function setupProjectChatEnhancements() {
     // Setup "New Conversation" button if available
-    const newConversationBtn = domAPI.getElementById('newConversationBtn');
+    const newConversationBtn = domAPI.getElementById(SELECTORS.newConversationBtn.slice(1));
     if (newConversationBtn && !newConversationBtn.dataset.bound) {
       eventHandlers.trackListener(
         newConversationBtn,
@@ -212,7 +213,7 @@ export function createChatUIEnhancements(deps = {}) {
    * Setup click handlers for conversation list items
    */
   function setupConversationListItemClicks() {
-    const conversationsList = domAPI.getElementById('conversationsList');
+    const conversationsList = domAPI.getElementById(SELECTORS.conversationsList.slice(1));
     if (!conversationsList) return;
 
     // Use event delegation for conversation items
@@ -262,7 +263,7 @@ export function createChatUIEnhancements(deps = {}) {
 
     const { message, sender, timestamp, messageId } = event.detail;
     const messageEl = createMessageElement(message, sender, timestamp, messageId);
-    const chatContainer = state.messageContainer || domAPI.getElementById('chatMessages');
+    const chatContainer = state.messageContainer || domAPI.getElementById(SELECTORS.chatMessages.slice(1));
 
     if (chatContainer && messageEl) {
       domAPI.appendChild(chatContainer, messageEl);
@@ -584,7 +585,7 @@ export function createChatUIEnhancements(deps = {}) {
       return;
     }
 
-    const container = state.messageContainer || domAPI.getElementById('chatMessages');
+    const container = state.messageContainer || domAPI.getElementById(SELECTORS.chatMessages.slice(1));
     if (!container) {
       logger.warn(`[${MODULE_CONTEXT}] Cannot show typing indicator, container not found`, {
         context

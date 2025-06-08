@@ -5,6 +5,7 @@
 // VENDOR-EXEMPT-SIZE: Core module pending refactor in Q3-25
 */
 import { getSafeHandler } from './utils/getSafeHandler.js';
+import { SELECTORS } from './utils/selectorConstants.js';
 const MODULE_CONTEXT = "ProjectDetailsComponent";
 
 export function createProjectDetailsComponent({
@@ -243,7 +244,7 @@ class ProjectDetailsComponent {
         if (this.htmlTemplateLoader?.loadTemplate) {
           await this.htmlTemplateLoader.loadTemplate({
             url: '/static/html/chat_ui.html',
-            containerSelector: '#chatUIContainer',
+            containerSelector: SELECTORS.chatUIContainer,
             eventName: 'chatUITemplatePreloaded',
             timeout: 10_000
           });
@@ -1226,26 +1227,26 @@ class ProjectDetailsComponent {
           if (this.htmlTemplateLoader?.loadTemplate) {
             await this.htmlTemplateLoader.loadTemplate({
               url: '/static/html/chat_ui.html',
-              containerSelector: "#chatUIContainer",
+              containerSelector: SELECTORS.chatUIContainer,
               eventName: 'chatUITemplateLoaded',
               append: false // Replace content instead of appending
             });
 
-            this._logInfo("Chat UI template loaded successfully", { projectId: this.projectId });
+            this._logInfo('Chat UI template loaded successfully', { projectId: this.projectId });
 
             // Wait a moment for DOM to be ready
-            await new Promise(resolve => setTimeout(resolve, 100));
+            await new Promise((resolve) => setTimeout(resolve, 100));
 
             // After template is loaded, initialize the chat manager
             await this.chatManager.initialize({
               projectId: this.projectId,
               /* container is the #chatUIContainer element itself – no inner
                  .chat-container required (template only has the outer div) */
-              containerSelector: "#chatUIContainer",
-              messageContainerSelector: "#chatMessages",
-              inputSelector: "#chatInput",
-              sendButtonSelector: "#chatSendBtn",
-              titleSelector: "#chatTitle"
+              containerSelector: SELECTORS.chatUIContainer,
+              messageContainerSelector: SELECTORS.chatMessages,
+              inputSelector: SELECTORS.chatInput,
+              sendButtonSelector: SELECTORS.chatSendBtn,
+              titleSelector: SELECTORS.chatTitle
             });
 
             // After chatManager is ready, ensure chatUIEnhancements is initialized

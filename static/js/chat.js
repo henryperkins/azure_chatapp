@@ -1,4 +1,6 @@
 import { getSafeHandler } from './utils/getSafeHandler.js';
+// Centralised selector constants
+import { SELECTORS } from './utils/selectorConstants.js';
 import { createChatUIEnhancements } from './chatUIEnhancements.js';
 
 /**

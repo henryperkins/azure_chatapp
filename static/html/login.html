@@ -1,14 +1,24 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="corporate">
 <head>
   <meta charset="utf-8">
   <title>Login</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link href="/static/css/dist/tailwind.css" rel="stylesheet">
+  <!-- Professional font import (Inter) for improved typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <!-- Core dependencies -->
   <!-- DOMPurify (required by appInitializer for sanitization) -->
   <script type="module" src="/static/js/vendor/dompurify-global.js"></script>
   <script type="module" src="/static/js/app.js"></script>
+
+  <style>
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+  </style>
 </head>
 <body class="bg-base-100 text-base-content min-h-screen flex items-center justify-center">
   <!--

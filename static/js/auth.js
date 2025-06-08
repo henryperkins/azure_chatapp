@@ -145,7 +145,21 @@ function readCookie(name) {
   // === 5) CSRF & TOKEN LOGIC ===
   let csrfToken = '';
   let csrfTokenPromise = null;
+  // Track the most recent successful login so that we can avoid aggressive
+  // token-clearing during the immediate redirect sequence that follows a
+  // login flow.  This timestamp is persisted to storageService so that a
+  // subsequent hard-reload (or navigation to another SPA entry-point) still
+  // has access to the value.
+  const storageService = DependencySystem?.modules?.get('storageService');
   let _lastLoginTimestamp = 0;
+  try {
+    const storedTs = storageService?.getItem?.('_lastLoginTimestamp');
+    if (storedTs && !Number.isNaN(Number(storedTs))) {
+      _lastLoginTimestamp = Number(storedTs);
+    }
+  } catch (_) {
+    // best-effort; ignore storage access errors (e.g. disabled cookies)
+  }
 // Logging simplification: always treat as not in log-delivery context
   const _inLogDelivery = false;
 
@@ -294,7 +308,8 @@ function readCookie(name) {
     return tokenRefreshPromise;
   }
   async function clearTokenState(options = { source: 'unknown' }) {
-    logger.error('[AuthModule][clearTokenState] CLEARING TOKENS!', {
+    // Expected reset path; use level 'info' to avoid false-positive error alerts.
+    logger.info('[AuthModule][clearTokenState] Clearing auth tokens', {
       source: options.source,
       hadTokenBefore: !!accessToken,
       tokenLength: accessToken ? accessToken.length : 0,
@@ -531,7 +546,7 @@ function readCookie(name) {
       return false;
 
     } catch (error) {
-      logger.error('[AuthModule][verifyAuthState] Error during verification API call or processing.', { status: error.status, message: error.message, data: error.data ? JSON.parse(JSON.stringify(error.data)) : null, stack: error.stack, context: 'verifyAuthState:catchAllError' });
+      logger.warn('[AuthModule][verifyAuthState] Error during verification API call or processing.', { status: error.status, message: error.message, data: error.data ? JSON.parse(JSON.stringify(error.data)) : null, stack: error.stack, context: 'verifyAuthState:catchAllError' });
 
       if (error.status === 500) {
         logger.warn('[AuthModule][verifyAuthState] Server error (500). Clearing token state.', { context: 'verifyAuthState:error500' });
@@ -554,7 +569,7 @@ function readCookie(name) {
           logger.info('[AuthModule][verifyAuthState] Token refresh successful after 401. Re-verifying.', { context: 'verifyAuthState:postRefreshAttempt' });
           return await verifyAuthState(true); // Force re-verification after refresh
         } catch (refreshErr) {
-          logger.error('[AuthModule][verifyAuthState] Token refresh failed after 401.',
+          logger.warn('[AuthModule][verifyAuthState] Token refresh failed after 401.',
             refreshErr,
             { context: 'verifyAuthState:refreshFailed' });
           await clearTokenState({ source: 'refresh_failed_after_401_in_verify' });
@@ -635,7 +650,7 @@ function readCookie(name) {
         
         // Debug: Immediately test token retrieval
         const testAuthHeader = publicAuth.getAuthHeader();
-        logger.error('[AuthModule][loginUser] DEBUG: Token retrieval test:', {
+      logger.debug('[AuthModule][loginUser] Token retrieval test:', {
           hasStoredToken: !!accessToken,
           tokenLength: accessToken ? accessToken.length : 0,
           hasAuthHeader: !!testAuthHeader?.Authorization,
@@ -670,7 +685,7 @@ function readCookie(name) {
         } else if (response.id && response.username) {
           userObject = response;
         } else if (response.username) { // If only username is directly in response
-          logger.error('[AuthModule][loginUser] Login response missing user_id - this should not happen with updated backend');
+        logger.warn('[AuthModule][loginUser] Login response missing user_id – backend might be outdated');
           userObject = { username: response.username, id: `login-temp-${Date.now()}` };
         }
       }
@@ -687,6 +702,11 @@ function readCookie(name) {
       }
 
       _lastLoginTimestamp = Date.now();
+      try {
+        storageService?.setItem?.('_lastLoginTimestamp', String(_lastLoginTimestamp));
+      } catch (_) {
+        // ignore persistence errors
+      }
       return response; // Return full API response
     } catch (error) {
       logger.error('[AuthModule][loginUser] Login attempt failed.',
@@ -939,7 +959,7 @@ function readCookie(name) {
       try {
         verified = await verifyAuthState(true);
       } catch (verifyErr) {
-        logger.error('[AuthModule] Error during init verifyAuthState:', verifyErr, { context: 'init' });
+          logger.warn('[AuthModule] Error during init verifyAuthState:', verifyErr, { context: 'init' });
         // Don't clear token state if we just had a recent login (within last 10 seconds)
         // This prevents clearing tokens that were just set during login
         const timeSinceLogin = Date.now() - _lastLoginTimestamp;
@@ -1169,10 +1189,31 @@ function readCookie(name) {
       }
       return null;
     },
+    // Returns an Authorization header object if a token is available, otherwise an empty object.
+    //
+    // On first call after a hard reload there may be no in-memory accessToken yet.  In that
+    // situation we want to fall back to the same resolution cascade used in getAccessToken so
+    // that components (e.g. ProjectManager) do not mistakenly detect an "authenticated, but no
+    // token" state which would lead to spurious 401 errors.
     getAuthHeader: () => {
-      const tok = accessToken || readCookie('access_token');
-      if (tok && !accessToken) accessToken = tok;   // sync in-memory cache
-      return tok ? { Authorization: `${tokenType} ${tok}` } : {};
+      if (!accessToken) {
+        // Reuse the logic from getAccessToken (localStorage → cookie) to hydrate the in-memory
+        // cache if needed.  We intentionally duplicate a minimal subset here instead of calling
+        // getAccessToken() directly to avoid an extra function indirection inside hot paths.
+
+        // 1) Try storageService (localStorage wrapper)
+        const storageService = DependencySystem?.modules?.get('storageService');
+        const lsTok = storageService?.getItem?.('access_token');
+        if (lsTok) {
+          accessToken = lsTok;
+        } else {
+          // 2) Fallback to cookie
+          const cookieTok = readCookie('access_token');
+          if (cookieTok) accessToken = cookieTok;
+        }
+      }
+
+      return accessToken ? { Authorization: `${tokenType} ${accessToken}` } : {};
     }
   };
 

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="mobile-safe">
+<html lang="en" class="mobile-safe" data-theme="corporate">
 
 <head>
   <!-- ============================================= -->
@@ -14,7 +14,9 @@
     child-src 'self' blob:;
     connect-src 'self' https://o4508070823395328.ingest.us.sentry.io https://js.sentry-cdn.com https://browser.sentry-cdn.com;
     img-src 'self' data: blob: https://*.sentry.io https://*.sentry-cdn.com;
-    style-src 'self' 'unsafe-inline';
+    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+    style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com;
+    font-src 'self' https://fonts.gstatic.com;
     frame-src 'self';
   ">
 
@@ -32,6 +34,11 @@
   <meta name="description" content="Azure OpenAI Chat - Organize AI conversations into projects">
 
   <title>Azure Chat - AI Project Management</title>
+
+  <!-- Professional font import (Inter) for improved typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
   <!-- Preload critical resources -->
   <link rel="modulepreload" href="/static/js/app.js" crossorigin>
@@ -64,7 +71,7 @@
     body {
       margin: 0;
       padding: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
     }
