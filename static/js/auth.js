@@ -294,6 +294,12 @@ function readCookie(name) {
     return tokenRefreshPromise;
   }
   async function clearTokenState(options = { source: 'unknown' }) {
+    logger.error('[AuthModule][clearTokenState] CLEARING TOKENS!', {
+      source: options.source,
+      hadTokenBefore: !!accessToken,
+      tokenLength: accessToken ? accessToken.length : 0,
+      context: 'clearTokenState:tokenClear'
+    });
     accessToken = null;
     refreshToken = null;
     broadcastAuth(false, null, `clearTokenState:${options.source}`);
@@ -427,6 +433,7 @@ function readCookie(name) {
       }
 
       logger.debug('[AuthModule][verifyAuthState] Proceeding to call AUTH_VERIFY endpoint.', { hasExistingCookies, forceVerify, context: 'verifyAuthState:apiCall' });
+      
       let response = await authRequest(apiEndpoints.AUTH_VERIFY, 'GET');
 
       // Attempt to parse if response is a string (though apiClient should handle JSON)
@@ -625,6 +632,16 @@ function readCookie(name) {
           storageService.setItem('access_token', accessToken);
         }
         logger.info('[AuthModule][loginUser] Access and refresh tokens stored from login response.', { context: 'loginUser:tokensStored' });
+        
+        // Debug: Immediately test token retrieval
+        const testAuthHeader = publicAuth.getAuthHeader();
+        logger.error('[AuthModule][loginUser] DEBUG: Token retrieval test:', {
+          hasStoredToken: !!accessToken,
+          tokenLength: accessToken ? accessToken.length : 0,
+          hasAuthHeader: !!testAuthHeader?.Authorization,
+          authHeaderValue: testAuthHeader?.Authorization ? 'Bearer ***' : 'none',
+          context: 'loginUser:tokenDebug'
+        });
       }
 
       // Log cookie state after login attempt for diagnostics
@@ -647,9 +664,13 @@ function readCookie(name) {
       if (response && typeof response === 'object') {
         if (response.user && typeof response.user === 'object' && response.user.id) {
           userObject = response.user;
+        } else if (response.user_id && response.username) {
+          // Use the new user_id field from LoginResponse
+          userObject = { id: response.user_id, username: response.username };
         } else if (response.id && response.username) {
           userObject = response;
         } else if (response.username) { // If only username is directly in response
+          logger.error('[AuthModule][loginUser] Login response missing user_id - this should not happen with updated backend');
           userObject = { username: response.username, id: `login-temp-${Date.now()}` };
         }
       }
@@ -919,7 +940,15 @@ function readCookie(name) {
         verified = await verifyAuthState(true);
       } catch (verifyErr) {
         logger.error('[AuthModule] Error during init verifyAuthState:', verifyErr, { context: 'init' });
-        await clearTokenState({ source: 'init_verify_error' });
+        // Don't clear token state if we just had a recent login (within last 10 seconds)
+        // This prevents clearing tokens that were just set during login
+        const timeSinceLogin = Date.now() - _lastLoginTimestamp;
+        if (timeSinceLogin > 10000) {
+          logger.info('[AuthModule] Clearing token state due to init verify error (not recent login)', { timeSinceLogin, context: 'init' });
+          await clearTokenState({ source: 'init_verify_error' });
+        } else {
+          logger.info('[AuthModule] Skipping token clear due to recent login', { timeSinceLogin, context: 'init' });
+        }
         verified = false;
       }
 

@@ -1,4 +1,4 @@
- // VENDOR-EXEMPT-SIZE: Core module pending refactor in Q3-25
+// VENDOR-EXEMPT-SIZE: Core module pending refactor in Q3-25
 // Refactored to comply with factory export, pure imports, domReadinessService usage, event bus for module events,
 // and logger-based error handling per guardrails. No top-level logic is executed here; all initialization occurs inside createProjectManager.
 
@@ -7,10 +7,17 @@
 // ----------------------------------------------------------------------------
 export function isValidProjectId(id) {
   if (id == null) return false;
+
   const idStr = String(id).trim();
-  const uuidLike = /^[0-9a-f-]{32,36}$/i.test(idStr);
-  const numeric = /^\d+$/.test(idStr);
-  return uuidLike || numeric;
+
+  if (/^\d+$/.test(idStr)) return true;
+
+  const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (UUID_REGEX.test(idStr)) return true;
+
+  if (/^[0-9a-f]{32}$/i.test(idStr)) return true;
+
+  return false;
 }
 
 // ----------------------------------------------------------------------------
@@ -52,13 +59,35 @@ export function createProjectManager({
   const MODULE = 'ProjectManager';
 
   function normalizeProjectResponse(res) {
+    // Debug logging to see actual server response
+    logger.error('[ProjectManager] normalizeProjectResponse - raw response:', {
+      type: typeof res,
+      keys: res ? Object.keys(res) : [],
+      hasData: !!res?.data,
+      hasProject: !!res?.project,
+      hasDataProject: !!res?.data?.project,
+      dataKeys: res?.data ? Object.keys(res.data) : [],
+      response: JSON.stringify(res, null, 2)
+    });
+
     let data = Array.isArray(res)
       ? res[0]
-      : res?.data?.id
-        ? res.data
-        : res?.id
-          ? res
-          : null;
+      : res?.data?.project?.id
+        ? res.data.project
+        : res?.project?.id
+          ? res.project
+          : res?.data?.id
+            ? res.data
+            : res?.id
+              ? res
+              : null;
+
+    logger.debug('[ProjectManager] normalizeProjectResponse - extracted data:', {
+      data: data,
+      dataId: data?.id,
+      extractedId: data?.id ?? data?.uuid ?? data?.project_id ?? data?.projectId
+    });
+
     if (data) {
       data = { ...data, id: String(data.id ?? data.uuid ?? data.project_id ?? data.projectId ?? '').trim() };
       // Robust frontend field mapping for key project details
@@ -83,7 +112,38 @@ export function createProjectManager({
         data.project_instructions ??
         "";
     }
+
+    // Check if data extraction failed completely
+    if (!data) {
+      // Check if this is an empty response (likely 404 or server error)
+      if (res && typeof res === 'object' && Object.keys(res).length === 0) {
+        logger.error('[ProjectManager] Server returned empty response - likely project not found or access denied');
+        const error = new Error('Project not found or access denied');
+        error.status = 404;
+        throw error;
+      }
+      logger.error('[ProjectManager] Could not extract project data from response:', {
+        rawResponse: res,
+        responseType: typeof res,
+        responseKeys: res ? Object.keys(res) : []
+      });
+      throw new Error('Invalid response structure - no project data found');
+    }
+
+    logger.debug('[ProjectManager] normalizeProjectResponse - final validation:', {
+      finalData: data,
+      finalId: data?.id,
+      idLength: data?.id?.length,
+      isValid: isValidProjectId(data?.id)
+    });
+
     if (!isValidProjectId(data?.id)) {
+      logger.error('[ProjectManager] Invalid project ID detected:', {
+        receivedId: data?.id,
+        idType: typeof data?.id,
+        idLength: data?.id?.length,
+        rawResponse: res
+      });
       throw new Error('Invalid project ID in server response');
     }
     return data;
@@ -337,7 +397,52 @@ export function createProjectManager({
       }
 
       try {
-        const detailRes = await this._req(detailUrl, undefined, 'loadProjectDetails');
+        logger.error(`[${MODULE}] Requesting project details from URL: ${detailUrl}`);
+        
+        // Check authentication state first
+        const authModule = this.DependencySystem?.modules?.get('auth');
+        const authHeader = authModule?.getAuthHeader?.() || this.app?.getAuthHeader?.() || {};
+        
+        const authState = {
+          isAuthenticated: this.app?.state?.isAuthenticated,
+          currentUser: this.app?.state?.currentUser?.id || 'none',
+          hasAuthToken: !!authHeader.Authorization,
+        };
+        logger.debug(`[${MODULE}] Authentication state:`, authState);
+        
+        // Detect auth state mismatch - user is marked as authenticated but has no token
+        if (authState.isAuthenticated && !authState.hasAuthToken) {
+          logger.error(`[${MODULE}] CRITICAL: Auth state mismatch detected - user is authenticated but has no token. This will cause 401 errors.`);
+          const error = new Error('Authentication token missing or expired. Please log in again.');
+          error.status = 401;
+          error.code = 'AUTH_TOKEN_MISSING';
+          throw error;
+        }
+        
+        let detailRes;
+        try {
+          detailRes = await this._req(detailUrl, undefined, 'loadProjectDetails');
+        } catch (apiError) {
+          logger.error(`[${MODULE}] API request failed with error:`, {
+            error: apiError,
+            status: apiError?.status,
+            message: apiError?.message,
+            data: apiError?.data,
+            isAuthError: apiError?.status === 401
+          });
+          
+          // Special handling for auth errors
+          if (apiError?.status === 401) {
+            logger.error(`[${MODULE}] Authentication failed - user may need to re-login`);
+          }
+          
+          throw apiError; // Re-throw to handle in outer catch
+        }
+        logger.debug(`[${MODULE}] Received response from server:`, {
+          type: typeof detailRes,
+          keys: detailRes ? Object.keys(detailRes) : [],
+          hasData: !!(detailRes?.data || detailRes?.project)
+        });
         const currentProjectObj = normalizeProjectResponse(detailRes);
 
         // Race condition check: Only update global state if the loaded project is still the active one.
@@ -1003,6 +1108,13 @@ export function createProjectManager({
         this.logger.debug(`[${MODULE}] User is now authenticated. Project list can be reloaded if necessary.`, { context: MODULE });
         // Example: this.loadProjects(); // If proactive reload is desired.
       }
+    }
+
+    // centralized error handler – simplified per guardrail
+    _handleErr(eventType, error, fallbackValue, additionalDetails = {}) {
+      this.logger.error(`[${this.moduleName}][${eventType}]`, error, additionalDetails);
+      this._emit(eventType, { error, ...additionalDetails });
+      return fallbackValue;
     }
 
     destroy() {

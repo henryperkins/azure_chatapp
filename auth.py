@@ -297,6 +297,7 @@ class LoginResponse(BaseModel):
     token_type: str = "bearer"
     refresh_token: Optional[str] = None
     username: Optional[str] = None
+    user_id: Optional[int] = None  # Added user ID field
     message: Optional[str] = None
     token_version: Optional[int] = None
 
@@ -400,6 +401,7 @@ async def register_user(
         access_token=access_token,
         refresh_token=refresh_token,
         username=user_lower,
+        user_id=new_user.id,  # Added user ID
         token_version=new_user.token_version,
         message=f"Registered user '{user_lower}' successfully.",
     )
@@ -488,6 +490,7 @@ async def login_user(
             access_token=access_token,
             refresh_token=refresh_token,
             username=db_user.username,
+            user_id=db_user.id,  # Added user ID
             token_version=db_user.token_version,
         )
     # ----- keep explicit FastAPI errors unchanged -----
@@ -544,6 +547,7 @@ async def refresh_token(
         return LoginResponse(
             access_token=new_access_token,
             username=locked_user.username,
+            user_id=locked_user.id,  # Added user ID
             token_version=locked_user.token_version,
         )
     except HTTPException as ex:

@@ -772,7 +772,7 @@ class ProjectDetailsComponent {
 
   _renderProjectData() {
     if (!this.elements.container || !this.projectData) return;
-    const { name, description, goals, customInstructions, created_at } = this.projectData;
+    const { name, description, goals, customInstructions, created_at, archived } = this.projectData;
     if (this.elements.title) this.elements.title.textContent = this.sanitizer.sanitize(name || "Untitled Project");
     if (this.elements.projectNameDisplay) {
       this.elements.projectNameDisplay.textContent = this.sanitizer.sanitize(name || "Untitled Project");
@@ -792,8 +792,56 @@ class ProjectDetailsComponent {
     if (this.elements.projectCreatedDate && created_at) {
       this.elements.projectCreatedDate.textContent = this.sanitizer.sanitize(this.formatDate(created_at));
     }
+    
+    // Update archive button and badge based on project status
+    this._updateArchiveButton(archived);
+    this._updateArchiveBadge(archived);
   }
 
+  _updateArchiveButton(isArchived) {
+    const archiveBtn = this.elements.container?.querySelector('#archiveProjectBtn');
+    if (!archiveBtn) return;
+
+    // Update button text and icon based on archive status
+    if (isArchived) {
+      // Project is archived - show unarchive option
+      this.domAPI.setInnerHTML(archiveBtn, this.sanitizer.sanitize(`
+        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4
+                   M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8
+                   m-9 4h4" />
+        </svg>
+        Unarchive Project
+      `));
+      archiveBtn.className = 'btn btn-success w-full';
+      archiveBtn.setAttribute('aria-label', 'Unarchive this project');
+    } else {
+      // Project is active - show archive option
+      this.domAPI.setInnerHTML(archiveBtn, this.sanitizer.sanitize(`
+        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4
+                   M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8
+                   m-9 4h4" />
+        </svg>
+        Archive Project
+      `));
+      archiveBtn.className = 'btn btn-warning w-full';
+      archiveBtn.setAttribute('aria-label', 'Archive this project');
+    }
+  }
+
+  _updateArchiveBadge(isArchived) {
+    const archiveBadge = this.elements.container?.querySelector('#projectArchivedBadge');
+    if (!archiveBadge) return;
+
+    if (isArchived) {
+      archiveBadge.classList.remove('hidden');
+    } else {
+      archiveBadge.classList.add('hidden');
+    }
+  }
 
   disableChatUI(reason = 'Chat unavailable') {
     try {
