@@ -6,6 +6,7 @@ Encapsulates all model resolution and token counting logic.
 """
 
 from uuid import UUID
+from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException
 
@@ -16,8 +17,8 @@ async def estimate_input_tokens(
     conversation_id: UUID,
     input_text: str,
     db: AsyncSession,
-    user_id: int = None,
-    project_id: UUID = None,
+    user_id: Optional[int] = None,
+    project_id: Optional[UUID] = None,
 ) -> int:
     """
     Estimate the number of tokens for a given input in the context of a conversation.
@@ -32,6 +33,12 @@ async def estimate_input_tokens(
     Returns:
         Estimated token count (int)
     """
+    # Validate required identifiers before querying
+    if user_id is None or project_id is None:
+        raise HTTPException(
+            status_code=400,
+            detail="user_id and project_id are required to estimate input tokens.",
+        )
     # Use ConversationService to get conversation metadata (model_id)
     conv_service = ConversationService(db)
     conv = await conv_service.get_conversation(

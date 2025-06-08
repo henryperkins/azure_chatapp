@@ -50,6 +50,9 @@ async def openai_chat(
     messages: List[dict[str, Any]], model_name: str, logger=None, **kwargs
 ) -> Union[dict[str, Any], AsyncGenerator[bytes, None]]:
     """Entry point that routes chat requests to Azure or Anthropic (Claude)."""
+    # Ensure the variable exists for type-checking tools even if an exception is
+    # raised before the ``start_transaction`` context manager is entered.
+    transaction = None  # noqa: F841 – will be reassigned inside the context
     if logger is None:
         logger = logging.getLogger(__name__)
 
@@ -120,7 +123,7 @@ async def openai_chat(
             return result
 
     except HTTPException as http_exc:
-        if "transaction" in locals():
+        if transaction is not None:
             transaction.set_tag("error.type", "http")
             transaction.set_data("status_code", http_exc.status_code)
         metrics.incr(
@@ -133,7 +136,7 @@ async def openai_chat(
         )
         raise
     except Exception as e:
-        if "transaction" in locals():
+        if transaction is not None:
             transaction.set_tag("error", True)
         capture_exception(e)
         metrics.incr("ai.request.failure", tags={"model": model_name, "reason": "exception"})
@@ -155,6 +158,8 @@ async def azure_chat(
     **kwargs,
 ) -> Union[dict[str, Any], AsyncGenerator[bytes, None]]:
     """Entry point for Azure chat or Responses API."""
+    # Declare here so that it is always defined for the ``except`` block below
+    transaction = None  # noqa: F841 – reassigned inside ``start_transaction``
     if logger is None:
         logger = logging.getLogger(__name__)
 
@@ -219,7 +224,10 @@ async def azure_chat(
                             )
                     return response
     except Exception as e:
-        transaction.set_tag("error", True)
+        # ``transaction`` may still be ``None`` if the failure happened before
+        # the context manager was entered.
+        if transaction is not None:
+            transaction.set_tag("error", True)
         capture_exception(e)
         metrics.incr("ai.azure.request.failure", tags={"model": model_name})
         logger.error(
@@ -295,10 +303,11 @@ def _convert_responses_to_chat_format(
     }
     if reasoning_summary:
         chat_response["reasoning_summary"] = reasoning_summary
-    if reasoning_tokens:
+    if reasoning_tokens is not None:
         chat_response["reasoning_tokens"] = reasoning_tokens
-        if isinstance(chat_response.get("usage"), dict):
-            chat_response["usage"]["reasoning_tokens"] = reasoning_tokens
+        usage_dict = chat_response.get("usage")
+        if isinstance(usage_dict, dict):
+            usage_dict["reasoning_tokens"] = reasoning_tokens
     chat_response["raw_response"] = data
     return chat_response
 
@@ -366,7 +375,6 @@ async def validate_azure_params(
     if logger is None:
         logger = logging.getLogger(__name__)
 
-    request_id = get_request_id()
     _validate_model_params(model_name, kwargs)
 
     capabilities = model_config.get("capabilities", [])
@@ -384,7 +392,22 @@ def build_azure_payload(
     logger=None,
     **kwargs,
 ) -> dict[str, Any]:
-    """Construct an Azure request payload with default logic."""
+    """Construct an Azure request payload with default logic.
+
+    The *logger* parameter is optional and is only used for emitting a verbose
+    debug message. Accepting it keeps the public function signature stable so
+    that callers can forward their logger instance without special-casing it
+    out of **kwargs.
+    """
+
+    if logger is None:
+        logger = logging.getLogger(__name__)
+
+    logger.debug(
+        "Building Azure payload",
+        extra={"model_name": model_name, "message_count": len(messages)},
+    )
+
     payload: dict[str, Any] = {"messages": list(messages)}
     model_max_completion = model_config.get("max_completion_tokens")
     model_max_tokens = model_config.get("max_tokens")
@@ -570,6 +593,9 @@ async def claude_chat(
     **kwargs,
 ) -> Union[dict[str, Any], AsyncGenerator[bytes, None]]:
     """Route a chat request to Claude."""
+    # Predeclare for type-checkers; reassigned once the Sentry transaction is
+    # successfully started.
+    transaction = None  # noqa: F841 – reassigned later when available
     logger = kwargs.get("logger", logging.getLogger(__name__))
     try:
         with start_transaction(
@@ -598,16 +624,19 @@ async def claude_chat(
                     response.raise_for_status()
                     return _parse_claude_response(response.json())
     except httpx.RequestError as e:
-        transaction.set_tag("error", True)
+        if transaction is not None:
+            transaction.set_tag("error", True)
         capture_exception(e)
         raise HTTPException(status_code=503, detail="Unable to reach Claude service") from e
     except httpx.HTTPStatusError as e:
         detail = f"Claude request failed ({e.response.status_code}): {e.response.text[:200]}"
-        transaction.set_tag("error", True)
+        if transaction is not None:
+            transaction.set_tag("error", True)
         capture_exception(e)
         raise HTTPException(e.response.status_code, detail=detail) from e
     except Exception as e:
-        transaction.set_tag("error", True)
+        if transaction is not None:
+            transaction.set_tag("error", True)
         capture_exception(e)
         raise HTTPException(status_code=500, detail=f"Claude chat error: {str(e)}") from e
 

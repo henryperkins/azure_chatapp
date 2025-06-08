@@ -36,8 +36,12 @@ boto3 = None
 
 try:
     # Async Azure library
-    from azure.storage.blob.aio import BlobServiceClient as AzureBlobServiceClient
-    from azure.storage.blob import ContentSettings as AzureContentSettings
+    from azure.storage.blob.aio import (  # type: ignore[reportMissingImports]
+        BlobServiceClient as AzureBlobServiceClient,
+    )
+    from azure.storage.blob import (  # type: ignore[reportMissingImports]
+        ContentSettings as AzureContentSettings,
+    )
 except ImportError:
     AZURE_AVAILABLE = False
 else:
@@ -45,7 +49,7 @@ else:
     ContentSettings = AzureContentSettings
 
 try:
-    import boto3 as Boto3
+    import boto3 as Boto3  # type: ignore[reportMissingImports]
 except ImportError:
     AWS_AVAILABLE = False
 else:
@@ -55,7 +59,7 @@ else:
 # Define a clear union for the file content
 # ----------------------------------------------------
 FileContent = Union[bytes, bytearray, memoryview, BinaryIO]
-from utils.io_utils import ensure_bytes
+from utils.io_utils import ensure_bytes  # noqa: E402
 
 
 def format_bytes(size: float) -> str:
@@ -106,7 +110,7 @@ class FileStorage:
                 )
 
             # Import directly to ensure we have the correct class
-            from azure.storage.blob.aio import BlobServiceClient
+            from azure.storage.blob.aio import BlobServiceClient  # type: ignore[reportMissingImports]
 
             self.blob_service_client = BlobServiceClient.from_connection_string(
                 azure_connection_string
@@ -190,7 +194,9 @@ class FileStorage:
         content_type: Optional[str],
         metadata: Optional[dict[str, Any]],
     ) -> str:
-        from azure.storage.blob import ContentSettings as AzureContentSettings
+        from azure.storage.blob import (  # type: ignore[reportMissingImports]
+            ContentSettings as AzureContentSettings,
+        )
 
         blob_client = self.container_client.get_blob_client(filename)
 

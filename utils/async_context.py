@@ -12,7 +12,7 @@ import asyncio
 import functools
 import logging
 from contextvars import copy_context
-from typing import Any, Awaitable, Callable, TypeVar, Optional
+from typing import Any, Awaitable, Callable, TypeVar, Optional, Coroutine
 
 # Import context variables from logging_config
 from utils.logging_config import request_id_var, trace_id_var
@@ -42,8 +42,12 @@ def get_trace_id() -> Optional[str]:
     return trace_id_var.get()
 
 
+# Using ``Coroutine`` in the signature ensures static type checkers accept the
+# value when it's eventually passed to ``asyncio.create_task`` (which expects
+# a real coroutine object, not a generic Awaitable).
+
 def create_context_safe_task(
-    coro_func: Callable[..., Awaitable[T]],
+    coro_func: Callable[..., Coroutine[Any, Any, T]],
     *args: Any,
     **kwargs: Any,
 ) -> asyncio.Task[T]:
@@ -64,9 +68,9 @@ def create_context_safe_task(
     async def _wrapped_coro() -> T:
         try:
             # Run the coroutine within the copied context
-            return await ctx.run(
-                lambda: asyncio.create_task(coro_func(*args, **kwargs))
-            )
+            coro_obj: Coroutine[Any, Any, T] = coro_func(*args, **kwargs)
+            task: asyncio.Task[T] = ctx.run(lambda: asyncio.create_task(coro_obj))
+            return await task
         except Exception as e:
             logger.exception(
                 "Error in context-safe background task",
@@ -103,7 +107,8 @@ def context_preserving_wrapper(
             return await func(*args, **kwargs)
 
         # Run the function in the copied context
-        return await ctx.run(lambda: asyncio.create_task(_run_in_context()))
+        task_inner: asyncio.Task[T] = ctx.run(lambda: asyncio.create_task(_run_in_context()))
+        return await task_inner
 
     return wrapper
 
@@ -116,7 +121,7 @@ class AsyncContextManager:
 
     @staticmethod
     def create_task_with_context(
-        coro: Awaitable[T], name: str | None = None
+        coro: Coroutine[Any, Any, T], name: str | None = None
     ) -> asyncio.Task[T]:
         """
         Create a task that preserves the current context.
@@ -132,7 +137,8 @@ class AsyncContextManager:
         loop = asyncio.get_running_loop()
 
         async def _context_wrapper() -> T:
-            return await ctx.run(lambda: asyncio.create_task(coro))
+            task_inner: asyncio.Task[T] = ctx.run(lambda: asyncio.create_task(coro))
+            return await task_inner
 
         task = loop.create_task(_context_wrapper())
         if name:

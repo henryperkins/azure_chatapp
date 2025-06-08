@@ -44,7 +44,7 @@ from typing import (
 )
 
 from fastapi import Response
-from fastapi.responses import JSONResponse   # NEW
+from fastapi.responses import JSONResponse  # NEW
 from fastapi import Request as FastAPIRequest
 import sentry_sdk
 
@@ -194,8 +194,15 @@ def _attach_log_tail(event: Event, hint: Optional[Hint] = None) -> Event:
             f.seek(start_pos, os.SEEK_SET)
             log_data = f.read()
 
-            event.setdefault("attachments", []).append(
-                {"filename": "tail.log", "data": log_data, "content_type": "text/plain"}
+            # Pylance's narrow Event typing only exposes the "spans" key.
+            # We safely append to an "attachments" list regardless – fine at
+            # runtime but flagged by the type checker.
+            event.setdefault("attachments", []).append(  # type: ignore[arg-type]
+                {
+                    "filename": "tail.log",
+                    "data": log_data,
+                    "content_type": "text/plain",
+                }
             )
     except (FileNotFoundError, OSError, PermissionError):
         # Don't fail the event if log file is unavailable
@@ -353,7 +360,7 @@ def sentry_span_context(
     op: str,
     description: str | None = None,
     **data: Any,
-) -> Generator[Span, None, None]:
+) -> Generator[Any, None, None]:  # Span when enabled; _NoopSpan otherwise
     """
     Lightweight context-manager for a nested span or a root transaction
     when none exists (never starts a blocking `asyncio.run()`).
@@ -495,15 +502,21 @@ def make_sentry_trace_response(
         try:
             headers["sentry-trace"] = transaction.to_traceparent()
 
-            if hasattr(transaction, "containing_transaction"):
-                parent = transaction.containing_transaction()
-                if (
-                    parent is not None
-                    and hasattr(parent, "_baggage")
-                    and hasattr(parent._baggage, "serialize")
-                ):
-                    headers["baggage"] = parent._baggage.serialize()
-        except Exception:          # absolutely never break main flow
+            # ------------------------------------------------------------------
+            # Safely access baggage without static-type warnings
+            # ------------------------------------------------------------------
+            parent_attr = getattr(transaction, "containing_transaction", None)
+            parent = parent_attr() if callable(parent_attr) else parent_attr  # type: ignore[call-arg]
+
+            baggage_obj = getattr(parent, "_baggage", None)
+            serialize_fn = getattr(baggage_obj, "serialize", None)
+            if callable(serialize_fn):
+                try:
+                    headers["baggage"] = str(serialize_fn())
+                except Exception:
+                    # Never break main flow if baggage serialization fails
+                    pass
+        except Exception:  # absolutely never break main flow
             headers = {}
 
     # ─── Return type chosen to satisfy FastAPI validation ───
@@ -657,7 +670,9 @@ def set_sentry_measurements(**measurements: Union[int, float]) -> None:
                 else:
                     unit = "none"
 
-                scope.set_measurement(name, value, unit=unit)
+                # set_measurement is present in the Sentry SDK at runtime but
+                # not yet in type stubs → ignore for static analysis.
+                scope.set_measurement(name, value, unit=unit)  # type: ignore[attr-defined]
     except Exception:
         # Never fail the operation due to measurement issues
         pass
@@ -676,4 +691,8 @@ def traced(op: str, description: str, *, tags=None):
         if tags:
             for k, v in tags.items():
                 span.set_tag(k, v)
-        yield span
+        try:
+            yield span
+        finally:
+            # Context will be properly exited here
+            pass

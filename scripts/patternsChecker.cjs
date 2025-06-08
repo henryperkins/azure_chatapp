@@ -190,24 +190,65 @@ const splitLines = code => code.split(/\r?\n/);
 const getLine = (code, n) => splitLines(code)[n - 1] ?? "";
 
 /**
- * Compute rolling hashes of normalized lines for clone detection (rule 20).
+ * Normalizes a line of code by removing comments and collapsing whitespace so
+ * that trivial formatting differences do not affect hashing results.
+ */
+function normalizeLine(line) {
+  return line
+    .replace(/\/\/.*/, "")        // Strip single-line comments
+    .replace(/\/\*.*?\*\//g, "")  // Strip in-line block comments
+    .trim()
+    .replace(/\s+/g, " ");        // Collapse internal whitespace
+}
+
+/**
+ * Compute robust rolling hashes (Rabin-Karp polynomial) of normalized lines
+ * for clone detection (rule 20).  This is substantially less collision-prone
+ * than the previous simple character-sum approach and is order-sensitive.
  */
 function rollingHashes(code, windowSize) {
-  const lines = splitLines(code);
-  const base = 257, mod = 1000000007;
-  let hash = 0, power = 1;
+  const lines = splitLines(code).map(normalizeLine);
   const hashes = [];
-  for (let i = 0; i < lines.length; i++) {
-    const charSum = [...lines[i]].reduce((s, c) => s + c.codePointAt(0), 0);
-    hash = (hash * base + charSum) % mod;
-    if (i >= windowSize) {
-      const oldSum = [...lines[i - windowSize]].reduce((s, c) => s + c.codePointAt(0), 0);
-      hash = (hash - (oldSum * power) % mod + mod) % mod;
-    } else {
-      power = (power * base) % mod;
+
+  if (lines.length < windowSize) return hashes;
+
+  const BASE = 257;          // Prime base for polynomial
+  const MOD  = 1_000_000_007; // Large prime modulus to avoid overflow
+
+  // Hash each line individually
+  const lineHashes = lines.map(line => {
+    let h = 0;
+    for (let i = 0; i < line.length; i++) {
+      h = (h * BASE + line.charCodeAt(i)) % MOD;
     }
-    if (i >= windowSize - 1) hashes.push([hash, i - windowSize + 1]);
+    return h;
+  });
+
+  // BASE^(windowSize-1)  (pre-computed for rolling removal)
+  let power = 1;
+  for (let i = 0; i < windowSize - 1; i++) {
+    power = (power * BASE) % MOD;
   }
+
+  // Initial window hash
+  let windowHash = 0;
+  for (let i = 0; i < windowSize; i++) {
+    windowHash = (windowHash * BASE + lineHashes[i]) % MOD;
+  }
+  hashes.push([windowHash, 0]);
+
+  // Slide the window through the rest of the file
+  for (let i = 1; i <= lines.length - windowSize; i++) {
+    // Remove the outgoing line
+    const outgoing = (lineHashes[i - 1] * power) % MOD;
+    windowHash = (windowHash - outgoing + MOD) % MOD;
+
+    // Shift and add the incoming line
+    windowHash = (windowHash * BASE + lineHashes[i + windowSize - 1]) % MOD;
+
+    hashes.push([windowHash, i]);
+  }
+
   return hashes;
 }
 function E(file, line, ruleId, msg, hint = "") {

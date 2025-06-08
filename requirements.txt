@@ -43,6 +43,10 @@ scikit-learn
 # Compatibility for Transformers (TensorFlow backend stub)
 tf-keras
 
+# Cloud storage SDKs (optional but required for Azure/S3 backends)
+azure-storage-blob
+boto3
+
 # File processing and text extraction
 python-docx
 PyPDF2
