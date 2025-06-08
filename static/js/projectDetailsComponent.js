@@ -952,6 +952,37 @@ class ProjectDetailsComponent {
   async initialize() {
     await this.domReadinessService.waitForEvent('app:ready');
     this._logInfo("Initializing...");
+
+    /* ──────────────────────────────────────────────────────────────
+     * Browser Back-Forward Cache (bfcache) handling
+     * ──────────────────────────────────────────────────────────── */
+    try {
+      const win = this.domAPI?.getWindow?.();
+      if (win && this.eventHandlers?.trackListener) {
+        this.eventHandlers.trackListener(
+          win,
+          'pageshow',
+          this.safeHandler((event) => {
+            // If the page is restored from the bfcache (`event.persisted === true`)
+            // many runtime connections (e.g., MessagePorts) are severed. Performing
+            // a hard reload ensures the entire application stack is re-initialised
+            // in a clean state.
+            if (event?.persisted) {
+              this._logInfo('Page restored from Back-Forward Cache. Reloading application.');
+              if (typeof this.navigationService?.reload === 'function') {
+                this.navigationService.reload();
+              } else if (typeof win.location?.reload === 'function') {
+                win.location.reload();
+              }
+            }
+          }, 'PageShowBFCacheHandler'),
+          { context: 'ProjectDetailsComponent', description: 'PageShowBFCacheHandler' }
+        );
+      }
+    } catch (err) {
+      this._logError('Failed to register pageshow handler', err);
+    }
+
     this._logInfo("Initialized successfully.");
   }
 

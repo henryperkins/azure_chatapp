@@ -535,6 +535,21 @@ export function createProjectManager({
       try {
         logger.info(`[${MODULE}] GET project details → URL: ${detailUrl}`, { context: MODULE });
         const detailRes = await this._req(detailUrl, undefined, 'loadProjectDetails');
+
+        // ------------------------------------------------------------------
+        // Defensive guard: Some backend failures (e.g., network hiccups, 204
+        // No Content responses incorrectly converted to `null`) may result in
+        // a falsy value here.  `normalizeProjectResponse` will throw in that
+        // situation, but catching it at this layer lets us attach richer
+        // context (projectId, endpoint) and emit a clearer error log.
+        // ------------------------------------------------------------------
+        if (detailRes == null) {
+          const err = new Error(`Null or undefined response from server for project ID: ${id}`);
+          err.status = 500;
+          err.endpoint = detailUrl;
+          throw err;
+        }
+
         logger.debug(`[${MODULE}] RAW loadProjectDetails response:`, detailRes, { context: MODULE });
         const currentProjectObj = normalizeProjectResponse(detailRes);
 

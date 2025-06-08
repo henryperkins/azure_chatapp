@@ -405,6 +405,34 @@ export function createNavigationService({
     getCurrentPathname,
     pushState,
     replaceState,
+
+    /**
+     * Reloads the current browser page. Abstracting this behind the
+     * NavigationService allows callers to remain agnostic of the underlying
+     * browser implementation and avoids direct window access from within
+     * components.
+     *
+     * @param {boolean} [forceReload=true] – When true (default) the browser
+     *   will bypass the HTTP cache (equivalent to location.reload(true) in
+     *   some browsers). The parameter is forwarded to `window.location.reload`.
+     */
+    reload(forceReload = true) {
+      try {
+        const win = browserService.getWindow();
+        if (win && typeof win.location?.reload === 'function') {
+          win.location.reload(forceReload);
+        } else {
+          // Fallback: navigate to the current URL via replaceState which
+          // results in a soft reload without leaving the history stack.
+          const href = browserService.getLocation().href;
+          if (href) {
+            browserService.replaceState({}, '', href);
+          }
+        }
+      } catch (err) {
+        logger.error('[NavigationService] reload failed', err, { context: MODULE_CONTEXT });
+      }
+    },
     navAPI
   };
 }
