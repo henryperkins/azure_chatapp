@@ -101,38 +101,72 @@ async def generate_ai_response(
     knowledge_context = None
 
     if conversation.project_id and conversation.use_knowledge_base:
-        last_user_content = next(
-            (
-                msg.get("content")
-                for msg in reversed(final_messages)
-                if msg.get("role") == "user" and isinstance(msg.get("content"), str)
-            ),
-            None,
-        )
-        if last_user_content:
-            try:
-                if isinstance(conversation.project_id, UUID):
-                    knowledge_context = await retrieve_knowledge_context(
-                        query=last_user_content,
-                        project_id=conversation.project_id,  # type: ignore[arg-type]
-                        db=db,
-                    )
-                else:
-                    logger.warning(f"Invalid project_id type: {type(conversation.project_id)}")
-                if knowledge_context:
-                    system_indices = [
-                        i
-                        for i, m in enumerate(final_messages)
-                        if m.get("role") == "system"
-                    ]
-                    insert_index = system_indices[-1] + 1 if system_indices else 0
-                    final_messages.insert(
-                        insert_index,
-                        {"role": "system", "content": knowledge_context},
-                    )
-                    logger.info("Injected knowledge context into messages.")
-            except Exception as e:
-                logger.error(f"Failed to inject knowledge context: {e}")
+        # ------------------------------------------------------------
+        # Fast KB readiness check (avoid triggering heavy init if KB
+        # is not ready).  If unavailable we gracefully skip KB
+        # augmentation so that chat remains responsive.
+        # ------------------------------------------------------------
+        try:
+            from services.kb_readiness_service import KBReadinessService  # late import to avoid circular deps
+
+            readiness_service = KBReadinessService.get_instance()
+            readiness_status = await readiness_service.check_project_readiness(
+                conversation.project_id  # type: ignore[arg-type]
+            )
+
+            if not readiness_status.available:
+                logger.info(
+                    "Knowledge base not ready for project %s – reason: %s. "
+                    "Proceeding without KB context.",
+                    conversation.project_id,
+                    readiness_status.reason,
+                )
+                # Skip KB retrieval logic
+                raise RuntimeError("KB not ready")
+
+        except Exception as readiness_exc:  # pragma: no cover – best effort
+            logger.debug(
+                "KB readiness check failed or KB unavailable: %s", readiness_exc
+            )
+            # Skip KB retrieval
+            readiness_status = None
+
+        # Only attempt retrieval if readiness check passed and KB is ready
+        if readiness_status is not None and readiness_status.available:
+            last_user_content = next(
+                (
+                    msg.get("content")
+                    for msg in reversed(final_messages)
+                    if msg.get("role") == "user" and isinstance(msg.get("content"), str)
+                ),
+                None,
+            )
+            if last_user_content:
+                try:
+                    if isinstance(conversation.project_id, UUID):
+                        knowledge_context = await retrieve_knowledge_context(
+                            query=last_user_content,
+                            project_id=conversation.project_id,  # type: ignore[arg-type]
+                            db=db,
+                        )
+                    else:
+                        logger.warning(
+                            f"Invalid project_id type: {type(conversation.project_id)}"
+                        )
+                    if knowledge_context:
+                        system_indices = [
+                            i
+                            for i, m in enumerate(final_messages)
+                            if m.get("role") == "system"
+                        ]
+                        insert_index = system_indices[-1] + 1 if system_indices else 0
+                        final_messages.insert(
+                            insert_index,
+                            {"role": "system", "content": knowledge_context},
+                        )
+                        logger.info("Injected knowledge context into messages.")
+                except Exception as e:
+                    logger.error(f"Failed to inject knowledge context: {e}")
 
     # Prepare API parameters (inject reasoning for o-series models)
     api_params: dict[str, Any] = {

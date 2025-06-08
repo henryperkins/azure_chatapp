@@ -9,7 +9,6 @@ uploads/*
 .qodo
 codex/
 tests/
-docs/
 storage/
 alembic/
 # Playwright

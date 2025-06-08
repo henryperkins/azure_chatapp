@@ -59,6 +59,40 @@ from utils.serializers import serialize_knowledge_base
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Knowledge Base"])
 
+# ----------------------------------------------------------------------
+# KB Readiness / Health Endpoint
+# ----------------------------------------------------------------------
+
+from services.kb_readiness_service import KBReadinessService  # noqa: E402  – after router creation
+
+
+@router.get("/health/{project_id}", response_model=dict)
+async def get_kb_health_status(
+    project_id: UUID,
+    current_user_tuple: tuple = Depends(get_current_user_and_token),
+    db: AsyncSession = Depends(get_async_session),
+):
+    """Return a fast readiness / health status for the KB of *project_id*."""
+
+    # We purposely do **not** require a DB dependency because the readiness
+    # service internally opens its own short-lived session on cache miss.
+    current_user, _ = current_user_tuple
+
+    # Optional: access validation – reuse existing validator so that users
+    # cannot probe readiness of projects they cannot see.
+    # Re-use existing validator to ensure user may see this project.
+    await validate_project_access(project_id, current_user, db)
+
+    readiness_service = KBReadinessService.get_instance()
+    status = await readiness_service.check_project_readiness(project_id)
+
+    return {
+        "available": status.available,
+        "reason": status.reason,
+        "fallback_available": status.fallback_available,
+        "missing_dependencies": status.missing_dependencies,
+    }
+
 
 # ----------------------------------------------------------------------
 # Pydantic Schemas
