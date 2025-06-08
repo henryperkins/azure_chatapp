@@ -232,6 +232,29 @@ class ProjectDetailsComponent {
       this.elements.container = container;
       this._setState({ templateLoaded: true, loading: false });
       this._logInfo("Template loaded");
+
+      // ----------------------------------------------------------
+      // Pre-load Chat UI template early so that ChatManager DOM-selector
+      // look-ups do not race against user interaction.  This is done
+      // only once during the initial template load and relies on the
+      // htmlTemplateLoader’s built-in idempotency (data-html-loaded attr).
+      // ----------------------------------------------------------
+      try {
+        if (this.htmlTemplateLoader?.loadTemplate) {
+          await this.htmlTemplateLoader.loadTemplate({
+            url: '/static/html/chat_ui.html',
+            containerSelector: '#chatUIContainer',
+            eventName: 'chatUITemplatePreloaded',
+            timeout: 10_000
+          });
+          this._logInfo('Chat UI template pre-loaded successfully');
+        } else {
+          this._logWarn('htmlTemplateLoader missing when attempting chat UI pre-load');
+        }
+      } catch (err) {
+        this._logWarn('Chat UI template pre-load failed (non-blocking)', { err: err?.message });
+      }
+
       return true;
     } catch (err) {
       this._logError(`Failed to load template`, err);
@@ -1071,18 +1094,10 @@ class ProjectDetailsComponent {
   _updateNewChatButtonState() {
     const newChatBtn = this.elements.container?.querySelector("#newConversationBtn");
     if (!newChatBtn) return;
-    const kbActive =
-      !!this.projectData?.knowledge_base &&
-      this.projectData.knowledge_base.is_active !== false;
-    const ready =
-      this.state.projectDataLoaded &&
-      this._isAuthenticated() &&
-      kbActive;
+    const ready = this.state.projectDataLoaded && this._isAuthenticated();
     newChatBtn.disabled = !ready;
     newChatBtn.classList.toggle("btn-disabled", !ready);
-    newChatBtn.title = ready
-      ? 'Start a new conversation'
-      : (kbActive ? 'Sign-in required' : 'Knowledge Base required');
+    newChatBtn.title = ready ? 'Start a new conversation' : 'Sign-in required';
     // No click handler here; chatUIEnhancements handles it.
   }
 
@@ -1097,12 +1112,10 @@ class ProjectDetailsComponent {
     // initialisation until `projectKnowledgeBaseLoaded` has fired and the
     // KB is confirmed active.
 
-    const kbReady = !!(this.projectData?.knowledge_base && this.projectData.knowledge_base.is_active !== false);
-
-    if (!kbReady) {
-      this._logWarn("Knowledge Base not ready – deferring ChatManager initialisation");
-      return;
-    }
+    // Phase 2 refactor: Chat should initialise even if the Knowledge Base is
+    // inactive or still indexing so that users can at least start a basic
+    // conversation.  Any KB-powered features will gracefully degrade on the
+    // backend / ChatManager side.
 
     if ((tab === "conversations" || tab === "chat") && this.chatManager?.initialize) {
       const chatTabContent = this.elements.tabs.chat;

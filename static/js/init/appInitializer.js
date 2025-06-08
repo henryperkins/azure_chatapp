@@ -13,6 +13,7 @@ import { createSafeHandler } from "../safeHandler.js";
 import { createDomReadinessService } from "../utils/domReadinessService.js";
 import { createLogger } from "../logger.js";
 import { createCustomEventPolyfill } from "../utils/polyfillCustomEvent.js";
+import { createKnowledgeBaseReadinessService } from "../knowledgeBaseReadinessService.js";
 import {
     setBrowserService as registerSessionBrowserService,
     getSessionId as coreGetSessionId
@@ -669,6 +670,32 @@ if (handlers?.dispatch) {
                     DependencySystem.modules.set('apiClientObject', apiClientInstance);
                 } else {
                     safeRegister('apiClientObject', apiClientInstance);
+                }
+
+                // ----------------------------------------------------------
+                // Knowledge-Base Readiness Service (depends on apiRequest)
+                // ----------------------------------------------------------
+                try {
+                    const apiRequestFn = DependencySystem.modules.get('apiRequest');
+                    if (typeof apiRequestFn === 'function') {
+                        const kbReadinessService = createKnowledgeBaseReadinessService({
+                            DependencySystem,
+                            apiClient: apiRequestFn,
+                            logger
+                        });
+                        safeRegister('kbReadinessService', kbReadinessService);
+                        logger.debug('[serviceInit] kbReadinessService registered.', {
+                            context: 'serviceInit:registerAdvancedServices'
+                        });
+                    } else {
+                        logger.warn('[serviceInit] apiRequest not available – skipping kbReadinessService.', {
+                            context: 'serviceInit:registerAdvancedServices'
+                        });
+                    }
+                } catch (err) {
+                    logger.error('[serviceInit] Failed to create kbReadinessService', err, {
+                        context: 'serviceInit:registerAdvancedServices'
+                    });
                 }
 
                 logger.debug('[serviceInit] API client created and registered.', {

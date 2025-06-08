@@ -263,6 +263,9 @@ export function createChatManager(deps = {}) {
       this.APP_CONFIG = APP_CONFIG;
       this._appEventListenersAttached = false; // Flag to ensure app/auth listeners are attached once
       this.browserService = browserService;    // Store browserService in the instance
+
+      // Store last rendered KB status key to avoid duplicate UI messages
+      this._lastKBStatusKey = null;
     }
 
 
@@ -392,6 +395,9 @@ export function createChatManager(deps = {}) {
 
         // UI Setup (ensure elements are present and events are bound)
         await this._setupUIElements(); // Resolves DOM elements based on selectors
+
+        // Update knowledge-base status indicator once UI is attached
+        await this._updateKBStatusIndicator();
 
         // Ensure enhancements module is ready then attach its event handlers
         _ensureChatUIEnhancements(this);
@@ -1316,6 +1322,67 @@ export function createChatManager(deps = {}) {
       this._uiAttached = true;   // UI ready
 
       return true;
+    }
+
+    /**
+     * Refresh the visual KB status indicator and (optionally) append a system
+     * message to the chat when the KB is not available.  Runs asynchronously
+     * and suppresses all errors so that chat functionality never breaks.
+     */
+    async _updateKBStatusIndicator() {
+      try {
+        if (!this.DependencySystem?.modules?.has('kbReadinessService')) return;
+        if (!this.projectId) return;
+
+        const kbReadinessService = this.DependencySystem.modules.get('kbReadinessService');
+        if (typeof kbReadinessService?.checkProjectReadiness !== 'function') return;
+
+        const status = await kbReadinessService.checkProjectReadiness(this.projectId);
+
+        // Prepare unique key so we only notify on change
+        const statusKey = status?.available ? 'available' : `unavailable:${status?.reason}`;
+        if (statusKey === this._lastKBStatusKey) return; // no change since last render
+        this._lastKBStatusKey = statusKey;
+
+        const indicator = this.domAPI.querySelector('#kb-status-indicator');
+        const msgSpan = this.domAPI.querySelector('#kb-status-message');
+
+        if (indicator && msgSpan) {
+          if (status.available) {
+            indicator.classList.add('hidden');
+          } else {
+            msgSpan.textContent = this._formatKBStatusMessage(status);
+            indicator.classList.remove('hidden');
+          }
+        }
+
+        // Emit a one-off system message when KB unavailable
+        if (!status.available) {
+          const chatUIEnh = this.DependencySystem.modules.get('chatUIEnhancements');
+          if (chatUIEnh?.appendMessage) {
+            chatUIEnh.appendMessage('system', this._formatKBStatusMessage(status));
+          }
+        }
+      } catch (err) {
+        logger.debug('[ChatManager] _updateKBStatusIndicator failed', err, { context: 'chatManager' });
+      }
+    }
+
+    _formatKBStatusMessage(status) {
+      if (!status) return 'Knowledge base status unknown';
+      const r = status.reason || 'unavailable';
+      switch (r) {
+        case 'No indexed files found':
+          return 'No knowledge-base files found for this project. Upload files to enable contextual answers.';
+        case 'Knowledge base not configured for project':
+          return 'Knowledge base not configured for this project.';
+        case 'No vector search backend available':
+          return 'Server is missing vector-search backend; KB features are disabled.';
+        case 'Health check timeout':
+          return 'Knowledge base health-check timed out.';
+        default:
+          return `Knowledge base unavailable: ${r}`;
+      }
     }
 
   }
