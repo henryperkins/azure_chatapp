@@ -1,5 +1,4 @@
-import { safeParseJSON } from './utils/globalUtils.js';
-// VENDOR-EXEMPT-SIZE: Core module pending refactor in Q3-25
+ // VENDOR-EXEMPT-SIZE: Core module pending refactor in Q3-25
 // Refactored to comply with factory export, pure imports, domReadinessService usage, event bus for module events,
 // and logger-based error handling per guardrails. No top-level logic is executed here; all initialization occurs inside createProjectManager.
 
@@ -49,148 +48,45 @@ export function createProjectManager({
   if (!logger) {
     throw new Error('[createProjectManager] Missing logger');
   }
-  if (!otherDeps.apiEndpoints) {
-    throw new Error('[createProjectManager] Missing apiEndpoints');
-  }
 
   const MODULE = 'ProjectManager';
 
   function normalizeProjectResponse(res) {
-    /* ------------------------------------------------------------------------
-     * Diagnostic: capture raw server response for on-device debugging
-     * --------------------------------------------------------------------- */
-    logger?.debug?.('[ProjectManager] normalizeProjectResponse - raw response', {
-      type: typeof res,
-      isString: typeof res === 'string',
-      length: typeof res === 'string' ? res.length : undefined,
-      preview:
-        typeof res === 'string'
-          ? res.substring(0, 200)
-          : JSON.stringify(res ?? {}, null, 0).substring(0, 200)
-    });
-
-    /* ------------------------------------------------------------------------
-     * Handle plain-string responses first
-     * --------------------------------------------------------------------- */
-    if (typeof res === 'string') {
-      const trimmed = res.trim();
-
-      /* Detect HTML error/redirect pages early (auth redirect, 404 template, …) */
-      if (
-        trimmed.startsWith('<!DOCTYPE') ||
-        trimmed.startsWith('<html') ||
-        trimmed.includes('</html>')
-      ) {
-        logger?.error?.(
-          '[ProjectManager] Received HTML instead of JSON – possible authentication/redirect',
-          {
-            context: MODULE,
-            htmlPreview: trimmed.substring(0, 500)
-          }
-        );
-        const titleMatch = trimmed.match(/<title>([^<]+)<\/title>/i);
-        const errMsg = titleMatch
-          ? `Server returned HTML page: ${titleMatch[1]}`
-          : 'Server returned HTML instead of JSON';
-        const err = new Error(errMsg);
-        err.status = 404; // best guess – adjust upstream when more info available
-        err.isHtmlResponse = true;
-        throw err;
-      }
-
-      /* Try JSON-parsing if payload looks like JSON */
-      if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-        try {
-          res = safeParseJSON(trimmed);
-        } catch (e) {
-          logger?.error?.('[ProjectManager] Failed to parse JSON response', {
-            context: MODULE,
-            error: e.message,
-            responsePreview: trimmed.substring(0, 200)
-          });
-          throw new Error('Invalid JSON response from server');
-        }
-      } else if (trimmed === '') {
-        throw new Error('Empty response from server');
-      }
+    let data = Array.isArray(res)
+      ? res[0]
+      : res?.data?.id
+        ? res.data
+        : res?.id
+          ? res
+          : null;
+    if (data) {
+      data = { ...data, id: String(data.id ?? data.uuid ?? data.project_id ?? data.projectId ?? '').trim() };
+      // Robust frontend field mapping for key project details
+      data.name =
+        data.name ??
+        data.title ??
+        data.project_name ??
+        "";
+      data.description =
+        data.description ??
+        data.details ??
+        data.project_description ??
+        "";
+      data.goals =
+        data.goals ??
+        data.project_goals ??
+        "";
+      data.customInstructions =
+        data.customInstructions ??
+        data.instructions ??
+        data.custom_instructions ??
+        data.project_instructions ??
+        "";
     }
-
-    if (!res) {
-      throw new Error('Null or undefined response from server');
+    if (!isValidProjectId(data?.id)) {
+      throw new Error('Invalid project ID in server response');
     }
-
-    /* ------------------------------------------------------------------------
-     * Attempt to locate the project object in various known shapes
-     * --------------------------------------------------------------------- */
-    let data = null;
-    const extractionPaths = [
-      () => res.data?.project,
-      () => res.data,
-      () => res.project,
-      () => res,
-      () => (Array.isArray(res) ? res[0] : null)
-    ];
-    for (const fn of extractionPaths) {
-      try {
-        const candidate = fn();
-        if (candidate && (candidate.id || candidate.uuid || candidate.project_id)) {
-          data = candidate;
-          break;
-        }
-      } catch {
-        /* ignore path errors */
-      }
-    }
-
-    /* ------------------------------------------------------------------------
-     * Validate extraction result
-     * --------------------------------------------------------------------- */
-    if (!data) {
-      if (res?.detail === 'Project not found') {
-        const err = new Error('Project not found');
-        err.status = 404;
-        throw err;
-      }
-      logger?.error?.('[ProjectManager] Could not extract project data from response', {
-        context: MODULE,
-        responseStructure: Object.keys(res || {}),
-        response: res
-      });
-      throw new Error('Invalid response structure – no project data found');
-    }
-
-    /* ------------------------------------------------------------------------
-     * Normalise to canonical frontend shape
-     * --------------------------------------------------------------------- */
-    const normalized = {
-      ...data,
-      id: String(
-        data.id || data.uuid || data.project_id || data.projectId || ''
-      ).trim(),
-      name: data.name || data.title || data.project_name || '',
-      description: data.description || data.details || data.project_description || '',
-      goals: data.goals || data.project_goals || '',
-      customInstructions:
-        data.customInstructions ||
-        data.instructions ||
-        data.custom_instructions ||
-        data.project_instructions ||
-        ''
-    };
-
-    /* ------------------------------------------------------------------------
-     * Final ID validity check
-     * --------------------------------------------------------------------- */
-    if (!isValidProjectId(normalized.id)) {
-      logger?.error?.('[ProjectManager] Invalid project ID after normalization', {
-        context: MODULE,
-        providedId: normalized.id,
-        originalData: data
-      });
-      throw new Error(`Invalid project ID: ${normalized.id}`);
-    }
-
-    return normalized;
+    return data;
   }
 
   function extractResourceList(res, keys = ['projects', 'conversations', 'files', 'artifacts']) {
@@ -313,113 +209,18 @@ export function createProjectManager({
           apiEndpoints.ARTIFACT_DOWNLOAD || '/api/projects/{id}/artifacts/{artifact_id}/download/'
       };
     }
-    async _req(url, opts = {}, contextLabel = 'n/a') {
+    _req(url, opts = {}, contextLabel = 'n/a') {
       if (typeof this.apiRequest !== 'function') {
         throw new Error('[ProjectManager] apiRequest missing');
       }
-
       /* Always include cookies so authenticated calls reach the server.
-         Merge with caller-supplied opts without overwriting them. */
+         Merge with caller-supplied opts without overwriting them.          */
       const mergedOpts =
         opts && typeof opts === 'object'
           ? { credentials: 'include', ...opts }
           : { credentials: 'include' };
 
-      try {
-        const response = await this.apiRequest(url, mergedOpts, contextLabel);
-
-        /* Successful response diagnostics */
-        this.logger?.debug?.(`[ProjectManager] API response for ${contextLabel}`, {
-          url,
-          status: response?.status,
-          hasData: !!response
-        });
-
-        return response;
-      } catch (err) {
-        /* Enhanced error logging / re-throw with context */
-        this.logger?.error?.(
-          `[ProjectManager] API request failed for ${contextLabel}`,
-          {
-            url,
-            method: opts?.method || 'GET',
-            status: err?.status ?? err?.response?.status,
-            statusText: err?.statusText ?? err?.response?.statusText,
-            responseData: err?.data ?? err?.response?.data,
-            error: err.message
-          }
-        );
-
-        err.apiContext = {
-          url,
-          method: opts?.method || 'GET',
-          contextLabel
-        };
-        throw err;
-      }
-    }
-
-    /**
-     * Centralized error handler used by various load/save helpers.
-     * Ensures we always:
-     *   1. Log the error through the provided logger (if any)
-     *   2. Emit the supplied event so that UI components can react
-     *   3. Return a safe fallback value so callers can continue gracefully
-     *
-     * The signature intentionally mirrors existing call-sites:
-     *   _handleErr(eventName, err, fallbackValue, meta?)
-     *
-     * @param {string} eventName - Event that should be emitted on both the local bus and DOM
-     * @param {*} err - The caught error/exception
-     * @param {*} fallbackVal - Value to return so upstream logic can proceed
-     * @param {object} [meta={}] - Additional metadata to attach to the emitted event
-     * @returns {*} The provided fallbackVal
-     */
-    _handleErr(eventName, err, fallbackVal, meta = {}) {
-      if (this.logger?.error) {
-        this.logger.error(`[ProjectManager][_handleErr] Event: ${eventName}`, err, {
-          context: MODULE,
-          ...meta
-        });
-      }
-
-      // Emit an event carrying details about the failure so interested
-      // subscribers (e.g. UI components) can display notices.
-      try {
-        let message;
-        if (typeof err?.data === 'string') message = err.data;
-        else if (typeof err?.response?.data === 'string') message = err.response.data;
-        else if (err?.data?.message) message = String(err.data.message);
-        else if (err?.response?.data?.message) message = String(err.response.data.message);
-        else if (err?.data?.detail) message = String(err.data.detail);
-        else if (err?.response?.data?.detail) message = String(err.response.data.detail);
-        else if (err?.detail) message = String(err.detail);
-        else if (typeof err === 'string') message = err;
-        else if (err?.message) message = err.message;
-        else message = 'Unknown error';
-
-        const eventDetail = {
-          error: message,
-          exception: err,
-          ...meta
-        };
-
-        // Provide a sensible payload for list endpoints so UI components
-        // that rely on them (e.g. ProjectListComponent) can still render
-        // gracefully even when an error occurs.
-        if (eventName === 'projectsLoaded') {
-          eventDetail.projects = Array.isArray(fallbackVal) ? fallbackVal : [];
-        }
-
-        this._emit(eventName, eventDetail);
-      } catch (emitErr) {
-        // Emitting should never crash the flow; log and swallow.
-        this.logger?.warn?.(`[ProjectManager][_handleErr] Failed to emit "${eventName}"`, emitErr, {
-          context: MODULE
-        });
-      }
-
-      return fallbackVal;
+      return this.apiRequest(url, mergedOpts, contextLabel);
     }
 
     _emit(event, detail) {
@@ -496,7 +297,7 @@ export function createProjectManager({
             this._emit('projectsLoaded', { projects: list, filter });
             resolve(list);
           } catch (err) {
-            this.logger.error('[ProjectManager][loadProjects]', err, { context: MODULE });
+            logger.error('[ProjectManager][loadProjects]', err, { context: MODULE });
             resolve(this._handleErr('projectsLoaded', err, []));
           } finally {
             this._loadingProjects = false;
@@ -521,36 +322,22 @@ export function createProjectManager({
       }
       let detailUrl;
       if (detailUrlTemplate) {
+        if (
+          detailUrlTemplate.includes('{id}') &&
+          !detailUrlTemplate.endsWith('/') &&
+          detailUrlTemplate.substring(detailUrlTemplate.indexOf('{id}') + '{id}'.length).length === 0
+        ) {
+          detailUrlTemplate += '/';
+        }
         detailUrl = detailUrlTemplate.replace('{id}', id);
       } else if (typeof this.apiEndpoints.DETAIL === 'function') {
         detailUrl = this.apiEndpoints.DETAIL(id);
       } else {
         throw new Error('Invalid DETAIL endpoint configuration');
       }
-      // Ensure trailing slash for REST endpoints to avoid unexpected HTML redirects
-      if (typeof detailUrl === 'string' && !detailUrl.endsWith('/') && !detailUrl.includes('?')) {
-        detailUrl += '/';
-      }
 
       try {
-        logger.info(`[${MODULE}] GET project details → URL: ${detailUrl}`, { context: MODULE });
         const detailRes = await this._req(detailUrl, undefined, 'loadProjectDetails');
-
-        // ------------------------------------------------------------------
-        // Defensive guard: Some backend failures (e.g., network hiccups, 204
-        // No Content responses incorrectly converted to `null`) may result in
-        // a falsy value here.  `normalizeProjectResponse` will throw in that
-        // situation, but catching it at this layer lets us attach richer
-        // context (projectId, endpoint) and emit a clearer error log.
-        // ------------------------------------------------------------------
-        if (detailRes == null) {
-          const err = new Error(`Null or undefined response from server for project ID: ${id}`);
-          err.status = 500;
-          err.endpoint = detailUrl;
-          throw err;
-        }
-
-        logger.debug(`[${MODULE}] RAW loadProjectDetails response:`, detailRes, { context: MODULE });
         const currentProjectObj = normalizeProjectResponse(detailRes);
 
         // Race condition check: Only update global state if the loaded project is still the active one.
@@ -1247,6 +1034,7 @@ export function createProjectManager({
     if (eventHandlers?.cleanupListeners) {
       eventHandlers.cleanupListeners({ context: MODULE });
     }
+    DependencySystem.modules.get('eventHandlers')?.cleanupListeners?.({ context: "ProjectManager" });
     instance.destroy();
   }
 

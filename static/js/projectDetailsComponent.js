@@ -748,9 +748,21 @@ class ProjectDetailsComponent {
     try {
       const project = await this.projectManager.loadProjectDetails(projectId);
       this.projectData = project || null;
-      if (!this.projectData) this._logError(`Unable to load project ${projectId}`);
-      else this._logInfo(`Project data loaded`, { projectId });
-      this._setState({ projectDataLoaded: true });
+      if (!this.projectData) {
+        this._logError(`Unable to load project ${projectId}`);
+        /* Gracefully recover by returning the user to the project list view.
+           This prevents the details page from remaining in an error state
+           when the backend reports the project is missing (404 or invalid
+           structure). */
+        try {
+          this.navigationService?.navigateToProjectList?.({ replace: true });
+        } catch (_) {
+          /* navigation failure is non-fatal; we already logged the original error */
+        }
+      } else {
+        this._logInfo(`Project data loaded`, { projectId });
+      }
+      this._setState({ projectDataLoaded: Boolean(this.projectData) });
     } catch (err) {
       this._logError(`Error loading project data`, err);
       this.projectData = null;
@@ -1039,6 +1051,14 @@ class ProjectDetailsComponent {
     this._logInfo("Fetching project data", { projectId });
     await this._fetchProjectData(this.projectId);
     this._renderProjectData();
+
+    /* Abort further initialisation when the project payload is missing (e.g.
+       404 or invalid response) – the user has already been redirected back to
+       the project list view inside _fetchProjectData(). */
+    if (!this.projectData) {
+      this._setState({ loading: false });
+      return;
+    }
 
     /* ── Ensure KB is fetched early so Chat UI can initialise ── */
     try {

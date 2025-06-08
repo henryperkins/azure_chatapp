@@ -224,6 +224,32 @@ export function createApiClient({
         // ---------- NEW unified response handling ----------
         contentType = resp.headers.get('content-type') || '';
 
+        // ------------------------------------------------------------------
+        // Special-case handling for 204 No-Content responses
+        // ------------------------------------------------------------------
+        // When the backend returns HTTP 204 the body is empty, causing the
+        // previous implementation to propagate a `null` payload.  Down-stream
+        // callers such as ProjectManager.loadProjectDetails expect a *truthy*
+        // response object and will otherwise raise
+        // “Null or undefined response from server …”.
+        //
+        // To maintain compatibility while still signalling “no content” we now
+        // resolve with an **empty object** (or a structured full-response
+        // wrapper when `returnFullResponse` is requested).  This preserves the
+        // successful control-flow without forcing every caller to add explicit
+        // null-checks for 204 responses.
+        // ------------------------------------------------------------------
+        if (resp.status === 204) {
+          if (returnFullResponse) {
+            return {
+              data: {},
+              status: resp.status,
+              headers: Object.fromEntries(resp.headers.entries()),
+            };
+          }
+          return {}; // <- canonical empty payload for 204 success
+        }
+
         if (resp.status !== 204) { // 204 = No-Content
           if (contentType.includes('application/json')) {
             try {
@@ -281,14 +307,16 @@ export function createApiClient({
             throw err;
           }
 
+          // ---- final return --------------------------------------------------
           if (returnFullResponse) {
             return {
-              data: payload,
+              data: payload ?? {},
               status: resp.status,
               headers: Object.fromEntries(resp.headers.entries()),
             };
           }
-          return payload;
+          // For 204 and similar cases ensure callers receive an object, not null.
+          return payload ?? {};
         }
 
         // ----- non-OK: throw rich error object -----
