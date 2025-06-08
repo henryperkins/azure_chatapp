@@ -274,6 +274,22 @@ select:focus {
   @apply opacity-100 scale-x-100;
 }
 
+/* Special styling for settings/config button */
+#dockSettingsBtn {
+  @apply relative;
+}
+
+#dockSettingsBtn::before {
+  content: '';
+  @apply absolute top-1 right-1;
+  @apply w-2 h-2 bg-primary rounded-full;
+  @apply opacity-70;
+}
+
+#dockSettingsBtn .dock-icon {
+  @apply text-primary/80;
+}
+
 /* Accessibility: visible focus for dock buttons */
 .dock-btn:focus-visible {
   @apply outline-none ring-2 ring-primary ring-offset-2;

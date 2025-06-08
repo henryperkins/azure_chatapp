@@ -175,6 +175,117 @@ input, select, textarea {
   font-size: var(--mobile-safe-font);
 }
 
+/* -------------------------------------------------------------------------
+   MODEL CONFIGURATION MOBILE OPTIMIZATIONS
+   ------------------------------------------------------------------------- */
+
+/* Enhanced mobile-friendly model configuration panel */
+#sidebarSettingsPanel {
+  @apply bg-base-100 border-base-200;
+  min-height: 200px;
+  max-height: 60vh;
+  @apply overflow-y-auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Model config container spacing */
+.model-config-container {
+  @apply space-y-4 p-1;
+}
+
+/* Enhanced model selection dropdown for mobile */
+.model-config-container select {
+  @apply w-full min-h-[44px] text-base;
+  font-size: var(--mobile-safe-font) !important;
+  @apply px-4 py-3 rounded-xl;
+  @apply border-2 border-base-300;
+  @apply bg-base-100 focus:border-primary;
+}
+
+/* Enhanced range sliders for mobile */
+.model-config-container input[type="range"] {
+  @apply w-full h-8;
+  @apply appearance-none bg-transparent cursor-pointer;
+  min-height: 32px;
+  padding: 8px 0;
+}
+
+.model-config-container input[type="range"]::-webkit-slider-track {
+  @apply bg-base-300 rounded-full;
+  height: 6px;
+  border: none;
+}
+
+.model-config-container input[type="range"]::-webkit-slider-thumb {
+  @apply appearance-none bg-primary;
+  height: 24px;
+  width: 24px;
+  border-radius: 50%;
+  border: 2px solid white;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  cursor: pointer;
+  margin-top: -9px;
+}
+
+.model-config-container input[type="range"]::-moz-range-track {
+  @apply bg-base-300 rounded-full;
+  height: 6px;
+  border: none;
+}
+
+.model-config-container input[type="range"]::-moz-range-thumb {
+  @apply bg-primary border-none;
+  height: 24px;
+  width: 24px;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+/* Enhanced toggle switches for mobile */
+.model-config-container .toggle {
+  @apply scale-125;
+  min-width: 44px;
+  min-height: 24px;
+}
+
+/* Better spacing for form labels */
+.model-config-container label {
+  @apply text-sm font-medium text-base-content;
+  @apply mb-2 block;
+  font-size: var(--mobile-safe-font);
+}
+
+/* Enhanced value display styling */
+.model-config-container .text-xs {
+  font-size: 14px !important;
+  @apply font-medium text-base-content/80;
+}
+
+/* Mobile-optimized model config sections */
+.model-config-section {
+  @apply bg-base-100 rounded-xl p-4 mb-3;
+  @apply border border-base-200;
+}
+
+.model-config-section:last-child {
+  @apply mb-0;
+}
+
+/* Enhanced checkbox/toggle container spacing */
+.model-config-container .flex.items-center {
+  @apply gap-3 py-2;
+  min-height: 44px;
+}
+
+/* Better touch targets for toggle labels */
+.model-config-container .flex.items-center label {
+  @apply cursor-pointer flex-1 mb-0;
+  @apply text-base font-medium;
+  font-size: var(--mobile-safe-font);
+  line-height: 1.4;
+}
+
 .input:focus, .select:focus, .textarea:focus {
   @apply outline-none border-primary;
   @apply ring-2 ring-primary ring-offset-2 ring-offset-base-100;

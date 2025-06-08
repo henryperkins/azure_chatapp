@@ -611,6 +611,14 @@ export function createModelConfig({
     if (!container) return;
     container.textContent = "";
 
+    // Add mobile-friendly wrapper
+    const configWrapper = api.ds?.modules?.get?.("domAPI")?.createElement("div");
+    if (configWrapper) {
+      configWrapper.className = "model-config-container";
+      container.appendChild(configWrapper);
+      container = configWrapper;
+    }
+
     api.delayed(() => {
       buildModelSelectUI(api, state, container);
       buildMaxTokensUI(api, state, container);
@@ -626,14 +634,17 @@ export function createModelConfig({
     const domAPI = api.ds?.modules?.get?.("domAPI");
     if (!domAPI) return;
 
+    const section = domAPI.createElement("div");
+    section.className = "model-config-section";
+
     const modelLabel = domAPI.createElement("label");
     modelLabel.htmlFor = `quickModelSelect-${container.id}`;
-    modelLabel.className = "block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1";
-    modelLabel.textContent = "Model:";
+    modelLabel.className = "block text-sm font-medium text-base-content mb-2";
+    modelLabel.textContent = "AI Model";
 
     const modelSelect = domAPI.createElement("select");
     modelSelect.id = `quickModelSelect-${container.id}`;
-    modelSelect.className = "select select-bordered select-sm w-full mb-2";
+    modelSelect.className = "select select-bordered w-full";
 
     getModelOptions().forEach((opt) => {
       const option = domAPI.createElement("option");
@@ -662,25 +673,32 @@ export function createModelConfig({
       { description: `quick config model select for ${container.id}` }
     );
 
-    container.appendChild(modelLabel);
-    container.appendChild(modelSelect);
+    section.appendChild(modelLabel);
+    section.appendChild(modelSelect);
+    container.appendChild(section);
   }
 
   function buildMaxTokensUI(api, state, container) {
     const domAPI = api.ds?.modules?.get?.("domAPI");
     if (!domAPI) return;
 
+    const section = domAPI.createElement("div");
+    section.className = "model-config-section";
+
     const maxTokensDiv = domAPI.createElement("div");
-    maxTokensDiv.className = "my-2 flex flex-col w-full";
+    maxTokensDiv.className = "flex flex-col w-full";
+
+    const headerDiv = domAPI.createElement("div");
+    headerDiv.className = "flex justify-between items-center mb-3";
 
     const maxTokensLabel = domAPI.createElement("label");
     maxTokensLabel.htmlFor = `quickMaxTokens-${container.id}`;
-    maxTokensLabel.className = "text-xs font-medium text-gray-700 dark:text-gray-300 mb-1";
-    maxTokensLabel.textContent = "Max Tokens:";
+    maxTokensLabel.className = "text-sm font-medium text-base-content";
+    maxTokensLabel.textContent = "Max Tokens";
 
     const maxTokensValue = domAPI.createElement("span");
-    maxTokensValue.className = "ml-1 text-xs text-gray-500 dark:text-gray-400";
-    maxTokensValue.textContent = state.maxTokens;
+    maxTokensValue.className = "text-sm font-medium text-primary";
+    maxTokensValue.textContent = state.maxTokens.toLocaleString();
 
     const maxTokensInput = domAPI.createElement("input");
     maxTokensInput.id = `quickMaxTokens-${container.id}`;
@@ -688,9 +706,7 @@ export function createModelConfig({
     maxTokensInput.min = "100";
     maxTokensInput.max = "100000";
     maxTokensInput.value = state.maxTokens;
-    // Ensure slider never overflows the narrow sidebar; w-full forces it to
-    // scale with container while range-xs keeps compact height.
-    maxTokensInput.className = "range range-xs w-full";
+    maxTokensInput.className = "range w-full";
 
     registerListener(
       api,
@@ -698,33 +714,38 @@ export function createModelConfig({
       "input",
       (e) => {
         const val = parseInt(e.target.value, 10);
-        maxTokensValue.textContent = val;
+        maxTokensValue.textContent = val.toLocaleString();
         updateModelConfig(api, state, { maxTokens: val });
       },
       { description: `quick config maxTokens slider for ${container.id}` }
     );
 
-    const labelAndValue = domAPI.createElement("div");
-    labelAndValue.className = "flex justify-between items-center";
-    labelAndValue.append(maxTokensLabel, maxTokensValue);
-    maxTokensDiv.append(labelAndValue, maxTokensInput);
-    container.appendChild(maxTokensDiv);
+    headerDiv.append(maxTokensLabel, maxTokensValue);
+    maxTokensDiv.append(headerDiv, maxTokensInput);
+    section.appendChild(maxTokensDiv);
+    container.appendChild(section);
   }
 
   function buildTemperatureUI(api, state, container) {
     const domAPI = api.ds?.modules?.get?.("domAPI");
     if (!domAPI) return;
 
+    const section = domAPI.createElement("div");
+    section.className = "model-config-section";
+
     const tempDiv = domAPI.createElement("div");
-    tempDiv.className = "my-2 flex flex-col w-full";
+    tempDiv.className = "flex flex-col w-full";
+
+    const headerDiv = domAPI.createElement("div");
+    headerDiv.className = "flex justify-between items-center mb-3";
 
     const tempLabel = domAPI.createElement("label");
     tempLabel.htmlFor = `quickTemperature-${container.id}`;
-    tempLabel.className = "text-xs font-medium text-gray-700 dark:text-gray-300 mb-1";
-    tempLabel.textContent = "Temperature:";
+    tempLabel.className = "text-sm font-medium text-base-content";
+    tempLabel.textContent = "Temperature";
 
     const tempValue = domAPI.createElement("span");
-    tempValue.className = "ml-1 text-xs text-gray-500 dark:text-gray-400";
+    tempValue.className = "text-sm font-medium text-primary";
     tempValue.textContent = state.temperature.toFixed(2);
 
     const tempInput = domAPI.createElement("input");
@@ -734,7 +755,7 @@ export function createModelConfig({
     tempInput.max = "2";
     tempInput.step = "0.05";
     tempInput.value = state.temperature;
-    tempInput.className = "range range-xs w-full";
+    tempInput.className = "range w-full";
 
     registerListener(
       api,
@@ -748,26 +769,27 @@ export function createModelConfig({
       { description: `quick config temperature slider for ${container.id}` }
     );
 
-    const labelAndValue = domAPI.createElement("div");
-    labelAndValue.className = "flex justify-between items-center";
-    labelAndValue.append(tempLabel, tempValue);
-
-    tempDiv.append(labelAndValue, tempInput);
-    container.appendChild(tempDiv);
+    headerDiv.append(tempLabel, tempValue);
+    tempDiv.append(headerDiv, tempInput);
+    section.appendChild(tempDiv);
+    container.appendChild(section);
   }
 
   function buildReasoningEffortUI(api, state, container) {
     const domAPI = api.ds?.modules?.get?.("domAPI");
     if (!domAPI) return;
 
+    const section = domAPI.createElement("div");
+    section.className = "model-config-section";
+
     const label = domAPI.createElement("label");
     label.htmlFor = `quickReasoning-${container.id}`;
-    label.className = "block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1";
-    label.textContent = "Reasoning Effort:";
+    label.className = "block text-sm font-medium text-base-content mb-2";
+    label.textContent = "Reasoning Effort";
 
     const select = domAPI.createElement("select");
     select.id = `quickReasoning-${container.id}`;
-    select.className = "select select-bordered select-sm w-full mb-2";
+    select.className = "select select-bordered w-full";
 
     const options = [
       { id: "low", name: "Low" },
@@ -792,27 +814,38 @@ export function createModelConfig({
       { description: `quick config reasoning effort select for ${container.id}` }
     );
 
-    container.appendChild(label);
-    container.appendChild(select);
+    section.appendChild(label);
+    section.appendChild(select);
+    container.appendChild(section);
   }
 
   function buildWebSearchToggleUI(api, state, container) {
     const domAPI = api.ds?.modules?.get?.("domAPI");
     if (!domAPI) return;
 
+    const section = domAPI.createElement("div");
+    section.className = "model-config-section";
+
     const outerDiv = domAPI.createElement("div");
-    outerDiv.className = "my-2 flex items-center";
+    outerDiv.className = "flex items-center justify-between";
+
+    const labelDiv = domAPI.createElement("div");
+    labelDiv.className = "flex flex-col";
+
+    const label = domAPI.createElement("label");
+    label.htmlFor = `quickWebSearch-${container.id}`;
+    label.className = "text-sm font-medium text-base-content cursor-pointer";
+    label.textContent = "Web Search";
+
+    const description = domAPI.createElement("div");
+    description.className = "text-xs text-base-content/60 mt-1";
+    description.textContent = "Enable real-time web search";
 
     const toggle = domAPI.createElement("input");
     toggle.type = "checkbox";
     toggle.id = `quickWebSearch-${container.id}`;
-    toggle.className = "toggle toggle-xs mr-2";
+    toggle.className = "toggle toggle-primary";
     toggle.checked = state.enable_web_search;
-
-    const label = domAPI.createElement("label");
-    label.htmlFor = `quickWebSearch-${container.id}`;
-    label.className = "text-xs cursor-pointer";
-    label.textContent = "Enable Web Search";
 
     registerListener(
       api,
@@ -824,8 +857,10 @@ export function createModelConfig({
       { description: `quick config web search toggle for ${container.id}` }
     );
 
-    outerDiv.append(toggle, label);
-    container.appendChild(outerDiv);
+    labelDiv.append(label, description);
+    outerDiv.append(labelDiv, toggle);
+    section.appendChild(outerDiv);
+    container.appendChild(section);
   }
 
   function buildVisionToggleIfNeeded(api, state, container) {
@@ -835,19 +870,29 @@ export function createModelConfig({
     const model = getModelOptions().find((m) => m.id === state.modelName);
     if (!model?.supportsVision) return;
 
+    const section = domAPI.createElement("div");
+    section.className = "model-config-section quick-vision-container";
+
     const visionDiv = domAPI.createElement("div");
-    visionDiv.className = "mt-2 flex items-center quick-vision-container";
+    visionDiv.className = "flex items-center justify-between";
+
+    const labelDiv = domAPI.createElement("div");
+    labelDiv.className = "flex flex-col";
+
+    const toggleLabel = domAPI.createElement("label");
+    toggleLabel.htmlFor = `quickVisionToggle-${container.id}`;
+    toggleLabel.className = "text-sm font-medium text-base-content cursor-pointer";
+    toggleLabel.textContent = "Vision Processing";
+
+    const description = domAPI.createElement("div");
+    description.className = "text-xs text-base-content/60 mt-1";
+    description.textContent = "Enable image analysis";
 
     const toggle = domAPI.createElement("input");
     toggle.type = "checkbox";
     toggle.id = `quickVisionToggle-${container.id}`;
-    toggle.className = "toggle toggle-xs mr-2";
+    toggle.className = "toggle toggle-primary";
     toggle.checked = state.visionEnabled;
-
-    const toggleLabel = domAPI.createElement("label");
-    toggleLabel.htmlFor = `quickVisionToggle-${container.id}`;
-    toggleLabel.className = "text-xs cursor-pointer";
-    toggleLabel.textContent = "Enable Vision";
 
     registerListener(
       api,
@@ -859,8 +904,10 @@ export function createModelConfig({
       { description: `quick config vision toggle for ${container.id}` }
     );
 
-    visionDiv.append(toggle, toggleLabel);
-    container.appendChild(visionDiv);
+    labelDiv.append(toggleLabel, description);
+    visionDiv.append(labelDiv, toggle);
+    section.appendChild(visionDiv);
+    container.appendChild(section);
   }
 
   // Build and return the final public module object (the factory's product).

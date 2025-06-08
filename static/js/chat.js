@@ -464,27 +464,42 @@ export function createChatManager(deps = {}) {
     }
 
     _handleAppCurrentProjectChanged(event) {
-      const newProject = event?.detail?.project;
-      const oldProjectId = this.projectId;
-      logger.info(`[ChatManager][_handleAppCurrentProjectChanged] Received. New: ${newProject?.id}, Old: ${oldProjectId}`, { detail: event.detail, context: "chatManager" });
+      // Robustly resolve the new/old project IDs – the event may contain
+      // either a full `project` object or just a bare `projectId` string
+      // depending on where `app.setCurrentProject()` was called.
+      const eventDetail = event?.detail || {};
+      const newProjectObj = eventDetail.project || null;
+      const newProjectId = newProjectObj?.id || eventDetail.projectId || null;
 
-      if (newProject?.id && newProject.id !== oldProjectId) {
-        logger.info(`[ChatManager][_handleAppCurrentProjectChanged] Project changed to ${newProject.id}. Re-initializing chat.`, { context: "chatManager" });
+      const oldProjectId = this.projectId;
+
+      logger.info(
+        `[ChatManager][_handleAppCurrentProjectChanged] Received. New: ${newProjectId}, Old: ${oldProjectId}`,
+        { detail: event.detail, context: "chatManager" }
+      );
+
+      if (newProjectId && newProjectId !== oldProjectId) {
+        // If we only have an ID, wrap it into a minimal object so downstream
+        // logic that previously expected `project.id` keeps working.
+        // Ensure we have a minimal project-like object in case future logic
+        // expects `project.id`. Not used at the moment but kept for clarity.
+
+        logger.info(`[ChatManager][_handleAppCurrentProjectChanged] Project changed to ${newProjectId}. Re-initializing chat.`, { context: "chatManager" });
         // Cleanup old project listeners and state before re-initializing
         this.eventHandlers.cleanupListeners?.({ context: 'chatManager:UI' }); // Clean UI specific listeners for the old project
         this._clearProjectSpecificData(); // Clear data related to oldProjectId
 
         // Re-initialize for the new project. Pass along current UI selectors.
         this.initialize({
-          projectId: newProject.id,
+          projectId: newProjectId,
           containerSelector: this.containerSelector,
           messageContainerSelector: this.messageContainerSelector,
           inputSelector: this.inputSelector,
           sendButtonSelector: this.sendButtonSelector,
           titleSelector: this.titleSelector,
           minimizeButtonSelector: this.minimizeButtonSelector
-        }).catch(err => logger.error(`[ChatManager][_handleAppCurrentProjectChanged] Error during re-initialization for new project ${newProject.id}`, { error: err, context: "chatManager" }));
-      } else if (!newProject && oldProjectId) {
+        }).catch(err => logger.error(`[ChatManager][_handleAppCurrentProjectChanged] Error during re-initialization for new project ${newProjectId}`, { error: err, context: "chatManager" }));
+      } else if (!newProjectId && oldProjectId) {
         logger.info(`[ChatManager][_handleAppCurrentProjectChanged] Project context cleared. Cleaning up chat for project ${oldProjectId}.`, { context: "chatManager" });
         this._clearProjectSpecificData();
         this.projectId = null;
