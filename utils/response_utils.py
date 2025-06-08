@@ -74,10 +74,33 @@ async def create_standard_response(
             # it is purely additive.
             pass
 
+    # FastAPI's `jsonable_encoder` should always yield a serialisable object, but
+    # on very rare occasions – for example when an **unregistered** custom type
+    # slips through the `custom_encoder` mapping – the encoder may return
+    # `None` instead of raising.  Passing that `None` value to Starlette's
+    # `JSONResponse` would result in the literal string `"null"` being sent to
+    # the client which the JavaScript code then deserialises to `null`,
+    # ultimately triggering the
+    #   “Null or undefined response from server”
+    # error we have seen on the frontend.
+    #
+    # To harden the API contract we therefore fall back to an *empty* payload
+    # (containing at least the mandatory wrapper keys) whenever the encoder
+    # unexpectedly returns `None`.
     json_ready = jsonable_encoder(
         payload,
-        custom_encoder={MetaData: lambda _x: None}
+        custom_encoder={MetaData: lambda _x: None},
     )
+
+    if json_ready is None:
+        # This should never happen, but ensures we never emit plain `null`.
+        json_ready = {
+            "status": payload.get("status", "success"),
+            "message": payload.get("message", ""),
+            "data": payload.get("data", {}),
+            "timestamp": payload.get("timestamp"),
+            "request_id": payload.get("request_id"),
+        }
 
     return JSONResponse(
         content=json_ready,

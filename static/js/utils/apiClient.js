@@ -96,9 +96,19 @@ export function createApiClient({
             restOpts.headers["Authorization"] = `Bearer ${token}`;
           }
         }
-        // Fallback: If user appears authenticated but still no Authorization header, check storageService DI
-        if (!restOpts.headers["Authorization"] && ((typeof auth.hasAuthCookies === "function" && auth.hasAuthCookies()) || (DependencySystem?.modules?.get('appModule')?.state?.isAuthenticated))) {
-          const storageService = DependencySystem?.modules?.get?.('storageService');
+        /* ------------------------------------------------------------------
+         * Fallback: If user appears authenticated but still no Authorization
+         * header, attempt to fetch a token from the DependencySystem's
+         * storageService – accessed via the global namespace to avoid an
+         * undeclared identifier error under ESLint's no-undef rule.
+         * ------------------------------------------------------------------ */
+        const globalDS = globalThis?.DependencySystem;
+        const userSeemsAuthed =
+          !restOpts.headers["Authorization"] &&
+          ((typeof auth.hasAuthCookies === "function" && auth.hasAuthCookies()) ||
+            globalDS?.modules?.get?.('appModule')?.state?.isAuthenticated);
+        if (userSeemsAuthed) {
+          const storageService = globalDS?.modules?.get?.('storageService');
           const storageTok = storageService?.getItem?.('access_token');
           if (storageTok) {
             restOpts.headers["Authorization"] = `Bearer ${storageTok}`;
@@ -216,16 +226,30 @@ export function createApiClient({
 
         if (resp.status !== 204) { // 204 = No-Content
           if (contentType.includes('application/json')) {
-            try { payload = await resp.json(); }
-            catch (err) {
-              logger.error('[apiClient] JSON parse error in API response', err, { context: 'apiClient:jsonParse', url: normUrl, status: resp.status });
-              payload = null;
+            try {
+              payload = await resp.json();
+            } catch (err) {
+              logger.error(
+                '[apiClient] JSON parse error in API response',
+                err,
+                { context: 'apiClient:jsonParse', url: normUrl, status: resp.status }
+              );
+              /* Propagate the parsing failure so callers can react properly
+                 instead of receiving a "null" payload that triggers opaque
+                 downstream errors like "Null or undefined response". */
+              throw err;
             }
           } else {
-            try { payload = await resp.text(); }
-            catch (err) {
-              logger.error('[apiClient] Text parse error in API response', err, { context: 'apiClient:textParse', url: normUrl, status: resp.status });
-              payload = null;
+            try {
+              payload = await resp.text();
+            } catch (err) {
+              logger.error(
+                '[apiClient] Text parse error in API response',
+                err,
+                { context: 'apiClient:textParse', url: normUrl, status: resp.status }
+              );
+              /* Surface the error to the caller for consistent handling */
+              throw err;
             }
           }
         }

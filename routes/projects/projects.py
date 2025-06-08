@@ -40,9 +40,13 @@ from models.project_file import ProjectFile
 from models.artifact import Artifact
 from models.knowledge_base import KnowledgeBase
 from utils.auth_utils import get_current_user_and_token
-from services.project_service import check_project_permission, ProjectAccessLevel
-from services.project_service import coerce_project_id
-from services.project_service import _lookup_project
+from services.project_service import (
+    check_project_permission,
+    ProjectAccessLevel,
+    coerce_project_id,
+    _lookup_project,
+    validate_project_access,  # <-- ensure strict access/exists check
+)
 from utils.db_utils import get_all_by_condition, save_model
 from utils.response_utils import create_standard_response
 from utils.serializers import serialize_project
@@ -370,18 +374,14 @@ async def get_project(
             span.set_tag("project.id", str(proj_id))
             span.set_tag("user.id", str(current_user.id))
 
-            project = await _lookup_project(db, proj_id)
-            if not project:
-                metrics.incr("project.view.failure", tags={"reason": "not_found"})
-                raise HTTPException(status_code=404, detail="Project not found")
-
+            # ------------------------------------------------------------------
+            # Strict existence + permission validation in a single call
+            # ------------------------------------------------------------------
+            project = await validate_project_access(
+                proj_id, current_user, db, skip_ownership_check=False
+            )
             # Eager-load knowledge_base to avoid additional I/O later on
             await db.refresh(project, ["knowledge_base"])
-
-            # Permission check -------------------------------------------------
-            await check_project_permission(
-                proj_id, current_user, db, ProjectAccessLevel.READ
-            )
 
             with configure_scope() as scope:
                 scope.set_context("project", serialize_project(project))
@@ -412,6 +412,12 @@ async def get_project(
                 span_or_transaction=span,
             )
 
+    # ------------------------------------------------------------------
+    # Maintain correct HTTP error semantics
+    # ------------------------------------------------------------------
+    except HTTPException:
+        # Re-raise so FastAPI preserves original status code and message
+        raise
     except Exception as e:
         logger.exception("Unhandled error in get_project")
         capture_exception(e)
