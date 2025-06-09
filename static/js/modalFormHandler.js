@@ -5,6 +5,8 @@
  * modal-specific form behaviors. Extracted from oversized modalManager.js.
  */
 
+const MODULE_CONTEXT = 'modalFormHandler';
+
 export function createModalFormHandler({
   domAPI,
   eventHandlers,
@@ -43,11 +45,11 @@ export function createModalFormHandler({
         return false;
       }
 
-      const { 
+      const {
         validateOnSubmit = true,
         clearOnSuccess = true,
         closeOnSuccess = true,
-        context = MODULE 
+        context = MODULE
       } = options;
 
       const submitHandler = safeHandler(async (event) => {
@@ -76,7 +78,7 @@ export function createModalFormHandler({
             if (clearOnSuccess) {
               clearModalForm(form);
             }
-            
+
             if (closeOnSuccess) {
               // Emit event to close modal
               eventHandlers.dispatchEvent(modalEl, 'modal:requestClose', {
@@ -112,15 +114,15 @@ export function createModalFormHandler({
     }
 
     const errors = [];
-    
+
     try {
       // Get all required inputs
       const requiredInputs = form.querySelectorAll('input[required], select[required], textarea[required]');
-      
+
       requiredInputs.forEach(input => {
         const value = input.value?.trim();
         const fieldName = input.name || input.id || 'Unknown field';
-        
+
         if (!value) {
           errors.push(`${fieldName} is required`);
           domAPI.addClass(input, 'input-error');
@@ -157,12 +159,12 @@ export function createModalFormHandler({
           } else {
             const min = parseFloat(input.min);
             const max = parseFloat(input.max);
-            
+
             if (!isNaN(min) && num < min) {
               errors.push(`${fieldName} must be at least ${min}`);
               domAPI.addClass(input, 'input-error');
             }
-            
+
             if (!isNaN(max) && num > max) {
               errors.push(`${fieldName} must be at most ${max}`);
               domAPI.addClass(input, 'input-error');
@@ -172,12 +174,12 @@ export function createModalFormHandler({
       });
 
       const result = { valid: errors.length === 0, errors };
-      _log('Modal form validation', { 
-        valid: result.valid, 
+      _log('Modal form validation', {
+        valid: result.valid,
         errorCount: errors.length,
-        formId: form.id 
+        formId: form.id
       });
-      
+
       return result;
     } catch (err) {
       _logError('Form validation failed', err, { formId: form.id });
@@ -190,7 +192,7 @@ export function createModalFormHandler({
 
     try {
       clearFormErrors(form);
-      
+
       if (errors.length === 0) return;
 
       // Create or update error container
@@ -198,7 +200,7 @@ export function createModalFormHandler({
       if (!errorContainer) {
         errorContainer = domAPI.createElement('div');
         errorContainer.className = 'form-errors alert alert-error mt-3';
-        
+
         // Insert at top of form
         const firstChild = form.firstElementChild;
         if (firstChild) {
@@ -211,7 +213,7 @@ export function createModalFormHandler({
       // Create error list
       const errorList = domAPI.createElement('ul');
       errorList.className = 'list-disc list-inside space-y-1';
-      
+
       errors.forEach(error => {
         const li = domAPI.createElement('li');
         domAPI.setTextContent(li, sanitizer.sanitize(error));
@@ -221,7 +223,7 @@ export function createModalFormHandler({
       // Clear and add new errors
       domAPI.removeAllChildren(errorContainer);
       domAPI.appendChild(errorContainer, errorList);
-      
+
       domAPI.removeClass(errorContainer, 'hidden');
 
       _log('Form errors displayed', { errorCount: errors.length, formId: form.id });
@@ -366,11 +368,11 @@ export function createModalFormHandler({
     try {
       const formData = new FormData(form);
       const data = Object.fromEntries(formData.entries());
-      
+
       // Handle checkboxes that aren't checked (they won't be in FormData)
       const checkboxes = form.querySelectorAll('input[type="checkbox"]');
       checkboxes.forEach(checkbox => {
-        if (!data.hasOwnProperty(checkbox.name)) {
+        if (!Object.prototype.hasOwnProperty.call(data, checkbox.name)) {
           data[checkbox.name] = false;
         } else {
           data[checkbox.name] = true;
@@ -387,14 +389,14 @@ export function createModalFormHandler({
   return {
     // Form binding and handling
     bindModalForm,
-    
+
     // Form validation
     validateModalForm,
-    
+
     // Error handling
     showFormErrors,
     clearFormErrors,
-    
+
     // Form state management
     setFormLoading,
     clearModalForm,

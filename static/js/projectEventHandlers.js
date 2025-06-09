@@ -11,11 +11,11 @@ export function createProjectEventHandlers({
   logger,
   modalManager,
   projectManager,
-  authenticationService,
+  authenticationService: _authenticationService, // prefixed with _
   navigationService,
-  eventService,
-  uiStateService,
-  projectContextService
+  eventService: _eventService, // prefixed with _
+  uiStateService: _uiStateService, // prefixed with _
+  projectContextService: _projectContextService, // prefixed with _
 } = {}) {
   const MODULE = 'ProjectEventHandlers';
 
@@ -161,45 +161,83 @@ export function createProjectEventHandlers({
         case 'edit':
           await modalManager.openModal('editProject', { project: projectData });
           break;
-        
-        case 'archive':
-          const archiveMessage = projectData.is_archived 
-            ? 'Are you sure you want to unarchive this project?'
-            : 'Are you sure you want to archive this project?';
-          
-          const archiveConfirmed = await modalManager.openModal('confirmDialog', {
-            title: projectData.is_archived ? 'Unarchive Project' : 'Archive Project',
-            message: archiveMessage,
-            confirmText: projectData.is_archived ? 'Unarchive' : 'Archive',
-            cancelText: 'Cancel'
-          });
 
-          if (archiveConfirmed && projectManager) {
-            if (projectData.is_archived) {
-              await projectManager.unarchiveProject(projectData.id);
-            } else {
-              await projectManager.archiveProject(projectData.id);
+        case 'archive': {
+          // Wrap lexical declarations in a block
+          const confirmMsg = `Archive project "${projectData.name}"?`;
+          modalManager.confirmAction({
+            title: 'Archive Project',
+            message: confirmMsg,
+            confirmText: 'Archive',
+            confirmClass: 'btn-warning',
+            onConfirm: async () => {
+              try {
+                await projectManager.archiveProject(projectData.id);
+                logger.info('[ProjectEventHandlers] Project archived', { projectId: projectData.id });
+              } catch (err) {
+                logger.error('[ProjectEventHandlers] Archive failed', err);
+              }
             }
+          });
+          break;
+        }
+        case 'unarchive': {
+          const confirmMsg = `Unarchive project "${projectData.name}"?`;
+          modalManager.confirmAction({
+            title: 'Unarchive Project',
+            message: confirmMsg,
+            confirmText: 'Unarchive',
+            confirmClass: 'btn-success',
+            onConfirm: async () => {
+              try {
+                await projectManager.unarchiveProject(projectData.id);
+                logger.info('[ProjectEventHandlers] Project unarchived', { projectId: projectData.id });
+              } catch (err) {
+                logger.error('[ProjectEventHandlers] Unarchive failed', err);
+              }
+            }
+          });
+          break;
+        }
+        case 'pin': {
+          const confirmMsg = `Pin project "${projectData.name}"?`;
+          modalManager.confirmAction({
+            title: 'Pin Project',
+            message: confirmMsg,
+            confirmText: 'Pin',
+            confirmClass: 'btn-primary',
+            onConfirm: async () => {
+              try {
+                await projectManager.pinProject(projectData.id);
+                logger.info('[ProjectEventHandlers] Project pinned', { projectId: projectData.id });
+              } catch (err) {
+                logger.error('[ProjectEventHandlers] Pin failed', err);
+              }
+            }
+          });
+          break;
+        }
+        case 'delete': {
+          // Wrap lexical declaration in a block
+          {
+            const confirmMsg = `Delete project "${projectData.name}"?`;
+            modalManager.confirmAction({
+              title: 'Delete Project',
+              message: confirmMsg,
+              confirmText: 'Delete',
+              confirmClass: 'btn-error',
+              onConfirm: async () => {
+                try {
+                  await projectManager.deleteProject(projectData.id);
+                  logger.info('[ProjectEventHandlers] Project deleted', { projectId: projectData.id });
+                } catch (err) {
+                  logger.error('[ProjectEventHandlers] Delete failed', err);
+                }
+              }
+            });
           }
           break;
-
-        case 'delete':
-          const deleteConfirmed = await modalManager.openModal('confirmDialog', {
-            title: 'Delete Project',
-            message: 'Are you sure you want to delete this project? This action cannot be undone.',
-            confirmText: 'Delete',
-            cancelText: 'Cancel',
-            type: 'danger'
-          });
-
-          if (deleteConfirmed && projectManager) {
-            await projectManager.deleteProject(projectData.id);
-            // Navigate back to project list
-            if (navigationService) {
-              navigationService.navigateToProjectList();
-            }
-          }
-          break;
+        }
 
         default:
           _logError('Unknown modal action:', action);

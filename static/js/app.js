@@ -10,6 +10,8 @@ import { createCustomEventPolyfill } from './utils/polyfillCustomEvent.js';
 // Core config & factory imports for bootstrapping
 import { APP_CONFIG } from './appConfig.js';
 import { createBrowserService } from './utils/browserService.js';
+// DOMPurify injection helper – passed to initializer, **not executed here**
+import { createDOMPurifyGlobal } from './vendor/dompurify-global.js';
 import { createAppInitializer } from './init/appInitializer.js';
 
 // Factories and utilities to be passed to appInitializer
@@ -44,6 +46,12 @@ import { createProjectDetailsComponent } from './projectDetailsComponent.js';
 import { createProjectListComponent } from './projectListComponent.js';
 import { createProjectModal } from './modalManager.js';
 import { createSidebar } from './sidebar.js';
+import { createChatUIController } from './chatUIController.js';
+import { createConversationManager } from './conversationManager.js';
+import { createMessageHandler } from './messageHandler.js';
+import { createProjectDetailsRenderer } from './projectDetailsRenderer.js';
+import { createProjectDataCoordinator } from './projectDataCoordinator.js';
+import { createProjectEventHandlers } from './projectEventHandlers.js';
 
 /**
  * STRICT: The only initialization code here is to create the 'browserService',
@@ -54,27 +62,19 @@ const browserService = createBrowserService({
   windowObject: (typeof window !== 'undefined') ? window : undefined
 });
 
-// Ensure CustomEvent exists in the injected window
-createCustomEventPolyfill({ browserService });
+
+// DO NOT execute DOMPurify injection or polyfills here – pass factories instead.
 
 const DependencySystem = browserService.getDependencySystem();
 
 // Instantiate and run the app initializer
-const appInit = createAppInitializer({
-  DependencySystem,
-  browserService,
-  APP_CONFIG,
-  shouldSkipDedup,
-  stableStringify,
-  isAbsoluteUrl,
-  globalFormatBytes,
-  globalFormatDate,
-  globalFileIcon,
-  isValidProjectId,
+// --------------------------------------------------------------
+// Consolidated factory map
+// --------------------------------------------------------------
+const factories = {
   createApiEndpoints,
   createApiClient,
   createHtmlTemplateLoader,
-  MODAL_MAPPINGS,
   createFileUploadComponent,
   createAccessibilityEnhancements,
   createNavigationService,
@@ -91,7 +91,33 @@ const appInit = createAppInitializer({
   createProjectDetailsComponent,
   createProjectListComponent,
   createProjectModal,
-  createSidebar
+  createSidebar,
+  // Phase-2/3 extracted factories
+  createChatUIController,
+  createConversationManager,
+  createMessageHandler,
+  createProjectDetailsRenderer,
+  createProjectDataCoordinator,
+  createProjectEventHandlers
+};
+
+const appInit = createAppInitializer({
+  DependencySystem,
+  browserService,
+  APP_CONFIG,
+  shouldSkipDedup,
+  stableStringify,
+  isAbsoluteUrl,
+  globalFormatBytes,
+  globalFormatDate,
+  globalFileIcon,
+  isValidProjectId,
+  MODAL_MAPPINGS,
+  // new pattern
+  factories,
+  // prerequisite factories (previously executed here)
+  createDOMPurifyGlobal,
+  createCustomEventPolyfill
 });
 
 // The ONLY orchestration in app.js: start up through the unified initializer

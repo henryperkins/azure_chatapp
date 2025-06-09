@@ -1,4 +1,3 @@
-
 /**
  * ProjectDetailsRenderer – extracted UI rendering helpers (Phase-2)
  * ---------------------------------------------------------------
@@ -16,6 +15,7 @@ export function createProjectDetailsRenderer({
   formatBytes
 } = {}) {
   const MODULE = 'ProjectDetailsRenderer';
+  const MODULE_CONTEXT = 'ProjectDetailsRenderer';
 
   if (!domAPI || !sanitizer || !eventHandlers || !logger) {
     throw new Error(`[${MODULE}] Required dependencies missing: domAPI, sanitizer, eventHandlers, logger`);

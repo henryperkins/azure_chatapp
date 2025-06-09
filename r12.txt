@@ -1,0 +1,1322 @@
+🛡️ Frontend Pattern Checker - Scanning...
+
+Scanning: uiStateService.jsScanning: uiRenderer.jsScanning: tokenStatsManagerProxy.jsScanning: tokenStatsManager.jsScanning: theme-toggle.jsScanning: sidebarMobileDock.jsScanning: sidebarAuth.jsScanning: sidebar.jsScanning: sidebar-enhancements.jsScanning: safeHandler.jsScanning: projectManager.jsScanning: projectListComponent.jsScanning: projectEventHandlers.jsScanning: projectDetailsRenderer.jsScanning: projectDetailsComponent.jsScanning: projectDataCoordinator.jsScanning: projectDashboardUtils.jsScanning: projectDashboard.jsScanning: project-details-enhancements.jsScanning: pollingService.jsScanning: navigationService.jsScanning: modelConfig.jsScanning: modalStateManager.jsScanning: modalRenderer.jsScanning: modalManager.jsScanning: modalFormHandler.jsScanning: modalConstants.jsScanning: messageHandler.jsScanning: logger.jsScanning: logDeliveryService.jsScanning: knowledgeBaseSearchHandler.jsScanning: knowledgeBaseReadinessService.jsScanning: knowledgeBaseManager.jsScanning: knowledgeBaseComponent.jsScanning: kb-result-handlers.jsScanning: formatting.jsScanning: eventHandler.jsScanning: errorReporter.jsScanning: conversationManager.jsScanning: chatUIEnhancements.jsScanning: chatUIController.jsScanning: chatExtensions.jsScanning: chat.jsScanning: chat-ui-utils.jsScanning: authStateManager.jsScanning: authFormListenerFactory.jsScanning: authFormHandler.jsScanning: authApiService.jsScanning: auth.jsScanning: appConfig.jsScanning: app.jsScanning: accessibility-utils.jsScanning: FileUploadComponent.jsScanning: dompurify.es.jsScanning: dompurify-global.jsScanning: storageService.jsScanning: session.jsScanning: selectorConstants.jsScanning: pullToRefresh.jsScanning: polyfillCustomEvent.jsScanning: initHelpers.jsScanning: htmlTemplateLoader.jsScanning: globalUtils.jsScanning: getSafeHandler.jsScanning: errorReporterStub.jsScanning: domReadinessService.jsScanning: domAPI.jsScanning: browserService.jsScanning: apiEndpoints.jsScanning: apiClient.jsScanning: eventService.jsScanning: appInitializer.jsScanning: auth-storage.test.js                                                                      ┌──────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│                   🛡️ Violations in: authApiService.js (8)                   │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────────┬─────┐
+│Pattern Rule                                                            │Count│
+├────────────────────────────────────────────────────────────────────────┼─────┤
+│🔒 12. Logger / Observability                                           │8    │
+└────────────────────────────────────────────────────────────────────────┴─────┘
+
+Detailed Violations:
+
+• Rule 12: Logger / Observability
+  No `console.*`; all logs via DI logger with context. Use canonical safeHandler for event error handling.
+
+L73:  } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "auth-api-service:myError" });
+     }
+
+L129: } catch {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "auth-api-service:myError" });
+     }
+
+L142: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "auth-api-service:myError" });
+     }
+
+L163: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "auth-api-service:myError" });
+     }
+
+L181: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "auth-api-service:myError" });
+     }
+
+L206: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "auth-api-service:myError" });
+     }
+
+L228: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "auth-api-service:myError" });
+     }
+
+L250: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "auth-api-service:myError" });
+     }
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│                  🛡️ Violations in: authFormHandler.js (5)                   │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────────┬─────┐
+│Pattern Rule                                                            │Count│
+├────────────────────────────────────────────────────────────────────────┼─────┤
+│🔒 12. Logger / Observability                                           │5    │
+└────────────────────────────────────────────────────────────────────────┴─────┘
+
+Detailed Violations:
+
+• Rule 12: Logger / Observability
+  No `console.*`; all logs via DI logger with context. Use canonical safeHandler for event error handling.
+
+L90:  } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "auth-form-handler:myError" });
+     }
+
+L107: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "auth-form-handler:myError" });
+     }
+
+L120: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "auth-form-handler:myError" });
+     }
+
+L134: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "auth-form-handler:myError" });
+     }
+
+L154: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "auth-form-handler:myError" });
+     }
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│              🛡️ Violations in: authFormListenerFactory.js (1)               │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────────┬─────┐
+│Pattern Rule                                                            │Count│
+├────────────────────────────────────────────────────────────────────────┼─────┤
+│🔒 12. Logger / Observability                                           │1    │
+└────────────────────────────────────────────────────────────────────────┴─────┘
+
+Detailed Violations:
+
+• Rule 12: Logger / Observability
+  No `console.*`; all logs via DI logger with context. Use canonical safeHandler for event error handling.
+
+L124: modalsLoadedHandlerRef,
+  ⚠  Violation: Event handler for 'eventHandlers.trackListener' should be wrapped by 'safeHandler' (or be a directly passed param, or simple inline function).
+  💡 Hint:
+     Complex handlers or those prone to errors should be: eventHandlers.trackListener(el, 'click', safeHandler(myHandler, 'auth-form-listener-factory:desc'), ...);
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│                  🛡️ Violations in: authStateManager.js (4)                  │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────────┬─────┐
+│Pattern Rule                                                            │Count│
+├────────────────────────────────────────────────────────────────────────┼─────┤
+│🔒 12. Logger / Observability                                           │4    │
+└────────────────────────────────────────────────────────────────────────┴─────┘
+
+Detailed Violations:
+
+• Rule 12: Logger / Observability
+  No `console.*`; all logs via DI logger with context. Use canonical safeHandler for event error handling.
+
+L90:  } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "auth-state-manager:myError" });
+     }
+
+L119: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "auth-state-manager:myError" });
+     }
+
+L155: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "auth-state-manager:myError" });
+     }
+
+L242: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "auth-state-manager:myError" });
+     }
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│                   🛡️ Violations in: browserService.js (5)                   │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────────┬─────┐
+│Pattern Rule                                                            │Count│
+├────────────────────────────────────────────────────────────────────────┼─────┤
+│🔒 12. Logger / Observability                                           │5    │
+└────────────────────────────────────────────────────────────────────────┴─────┘
+
+Detailed Violations:
+
+• Rule 12: Logger / Observability
+  No `console.*`; all logs via DI logger with context. Use canonical safeHandler for event error handling.
+
+L43:  } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "browser-service:myError" });
+     }
+
+L107: logger.error('browserService: windowObject.FormData is not available. This may occur in test/mocked ...
+  ⚠  Violation: Direct 'logger.error' call missing a final metadata object with a 'context' property.
+  💡 Hint:
+     Ensure logger calls like 'error' end with, e.g., { context: "Module:description" }. Found type for last arg: Literal
+
+L115: logger.error('browserService: windowObject.MutationObserver is not available. This may occur in test...
+  ⚠  Violation: Direct 'logger.error' call missing a final metadata object with a 'context' property.
+  💡 Hint:
+     Ensure logger calls like 'error' end with, e.g., { context: "Module:description" }. Found type for last arg: Literal
+
+L150: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "browser-service:myError" });
+     }
+
+L151: logger.error('[browserService] triggerDownload failed', err);
+  ⚠  Violation: Direct 'logger.error' call missing a final metadata object with a 'context' property.
+  💡 Hint:
+     Ensure logger calls like 'error' end with, e.g., { context: "Module:description" }. Found type for last arg: Identifier
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│                   🛡️ Violations in: chatExtensions.js (1)                   │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────────┬─────┐
+│Pattern Rule                                                            │Count│
+├────────────────────────────────────────────────────────────────────────┼─────┤
+│🔒 12. Logger / Observability                                           │1    │
+└────────────────────────────────────────────────────────────────────────┴─────┘
+
+Detailed Violations:
+
+• Rule 12: Logger / Observability
+  No `console.*`; all logs via DI logger with context. Use canonical safeHandler for event error handling.
+
+L170: } catch {/* noop */}
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "chatExtensions:myError" });
+     }
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│                  🛡️ Violations in: chatUIController.js (1)                  │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────────┬─────┐
+│Pattern Rule                                                            │Count│
+├────────────────────────────────────────────────────────────────────────┼─────┤
+│🔒 12. Logger / Observability                                           │1    │
+└────────────────────────────────────────────────────────────────────────┴─────┘
+
+Detailed Violations:
+
+• Rule 12: Logger / Observability
+  No `console.*`; all logs via DI logger with context. Use canonical safeHandler for event error handling.
+
+L368: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "ChatUIController:myError" });
+     }
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│                       🛡️ Violations in: domAPI.js (2)                       │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────────┬─────┐
+│Pattern Rule                                                            │Count│
+├────────────────────────────────────────────────────────────────────────┼─────┤
+│🔒 12. Logger / Observability                                           │2    │
+└────────────────────────────────────────────────────────────────────────┴─────┘
+
+Detailed Violations:
+
+• Rule 12: Logger / Observability
+  No `console.*`; all logs via DI logger with context. Use canonical safeHandler for event error handling.
+
+L79:  } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "dom-a-p-i:myError" });
+     }
+
+L89:  } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "dom-a-p-i:myError" });
+     }
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│                🛡️ Violations in: domReadinessService.js (12)                │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────────┬─────┐
+│Pattern Rule                                                            │Count│
+├────────────────────────────────────────────────────────────────────────┼─────┤
+│🔒 12. Logger / Observability                                           │12   │
+└────────────────────────────────────────────────────────────────────────┴─────┘
+
+Detailed Violations:
+
+• Rule 12: Logger / Observability
+  No `console.*`; all logs via DI logger with context. Use canonical safeHandler for event error handling.
+
+L264: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "dom-readiness-service:myError" });
+     }
+
+L277: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "dom-readiness-service:myError" });
+     }
+
+L345: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "dom-readiness-service:myError" });
+     }
+
+L386: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "dom-readiness-service:myError" });
+     }
+
+L511: } catch (_) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (_) {
+       logger.error("Operation failed", _, { context: "dom-readiness-service:myError" });
+     }
+
+L520: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "dom-readiness-service:myError" });
+     }
+
+L527: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "dom-readiness-service:myError" });
+     }
+
+L568: } catch (e) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (e) {
+       logger.error("Operation failed", e, { context: "dom-readiness-service:myError" });
+     }
+
+L603: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "dom-readiness-service:myError" });
+     }
+
+L626: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "dom-readiness-service:myError" });
+     }
+
+L662: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "dom-readiness-service:myError" });
+     }
+
+L736: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "dom-readiness-service:myError" });
+     }
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│                 🛡️ Violations in: kb-result-handlers.js (1)                 │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────────┬─────┐
+│Pattern Rule                                                            │Count│
+├────────────────────────────────────────────────────────────────────────┼─────┤
+│🔒 12. Logger / Observability                                           │1    │
+└────────────────────────────────────────────────────────────────────────┴─────┘
+
+Detailed Violations:
+
+• Rule 12: Logger / Observability
+  No `console.*`; all logs via DI logger with context. Use canonical safeHandler for event error handling.
+
+L52:  } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "KbResultHandlers:myError" });
+     }
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│           🛡️ Violations in: knowledgeBaseReadinessService.js (3)            │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────────┬─────┐
+│Pattern Rule                                                            │Count│
+├────────────────────────────────────────────────────────────────────────┼─────┤
+│🔒 12. Logger / Observability                                           │3    │
+└────────────────────────────────────────────────────────────────────────┴─────┘
+
+Detailed Violations:
+
+• Rule 12: Logger / Observability
+  No `console.*`; all logs via DI logger with context. Use canonical safeHandler for event error handling.
+
+L104: logger.debug(`[${MODULE}] Health check result`, { projectId, status });
+  ⚠  Violation: Direct 'logger.debug' call missing a final metadata object with a 'context' property.
+  💡 Hint:
+     Ensure logger calls like 'debug' end with, e.g., { context: "Module:description" }. Found type for last arg: ObjectExpression
+
+L106: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "knowledge-base-readiness-service:myError" });
+     }
+
+L107: logger.warn(`[${MODULE}] Health check failed`, err, { projectId });
+  ⚠  Violation: Direct 'logger.warn' call missing a final metadata object with a 'context' property.
+  💡 Hint:
+     Ensure logger calls like 'warn' end with, e.g., { context: "Module:description" }. Found type for last arg: ObjectExpression
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│             🛡️ Violations in: knowledgeBaseSearchHandler.js (2)             │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────────┬─────┐
+│Pattern Rule                                                            │Count│
+├────────────────────────────────────────────────────────────────────────┼─────┤
+│🔒 12. Logger / Observability                                           │2    │
+└────────────────────────────────────────────────────────────────────────┴─────┘
+
+Detailed Violations:
+
+• Rule 12: Logger / Observability
+  No `console.*`; all logs via DI logger with context. Use canonical safeHandler for event error handling.
+
+L94:  } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "knowledge-base-search-handler:myError" });
+     }
+
+L282: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "knowledge-base-search-handler:myError" });
+     }
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│                 🛡️ Violations in: logDeliveryService.js (2)                 │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────────┬─────┐
+│Pattern Rule                                                            │Count│
+├────────────────────────────────────────────────────────────────────────┼─────┤
+│🔒 12. Logger / Observability                                           │2    │
+└────────────────────────────────────────────────────────────────────────┴─────┘
+
+Detailed Violations:
+
+• Rule 12: Logger / Observability
+  No `console.*`; all logs via DI logger with context. Use canonical safeHandler for event error handling.
+
+L41:  } catch (error) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (error) {
+       logger.error("Operation failed", error, { context: "log-delivery-service:myError" });
+     }
+
+L102: handleLogEvent,
+  ⚠  Violation: Event handler for 'eventHandlers.trackListener' should be wrapped by 'safeHandler' (or be a directly passed param, or simple inline function).
+  💡 Hint:
+     Complex handlers or those prone to errors should be: eventHandlers.trackListener(el, 'click', safeHandler(myHandler, 'log-delivery-service:desc'), ...);
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│                   🛡️ Violations in: messageHandler.js (4)                   │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────────┬─────┐
+│Pattern Rule                                                            │Count│
+├────────────────────────────────────────────────────────────────────────┼─────┤
+│🔒 12. Logger / Observability                                           │4    │
+└────────────────────────────────────────────────────────────────────────┴─────┘
+
+Detailed Violations:
+
+• Rule 12: Logger / Observability
+  No `console.*`; all logs via DI logger with context. Use canonical safeHandler for event error handling.
+
+L33:  } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "message-handler:myError" });
+     }
+
+L34:  logger.error('[MessageHandler] sendMessage failed', err); // eslint-disable-line
+  ⚠  Violation: Direct 'logger.error' call missing a final metadata object with a 'context' property.
+  💡 Hint:
+     Ensure logger calls like 'error' end with, e.g., { context: "Module:description" }. Found type for last arg: Identifier
+
+L44:  } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "message-handler:myError" });
+     }
+
+L45:  logger.warn('[MessageHandler] token estimation failed', err); // eslint-disable-line
+  ⚠  Violation: Direct 'logger.warn' call missing a final metadata object with a 'context' property.
+  💡 Hint:
+     Ensure logger calls like 'warn' end with, e.g., { context: "Module:description" }. Found type for last arg: Identifier
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│                 🛡️ Violations in: modalFormHandler.js (10)                  │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────────┬─────┐
+│Pattern Rule                                                            │Count│
+├────────────────────────────────────────────────────────────────────────┼─────┤
+│🔒 12. Logger / Observability                                           │10   │
+└────────────────────────────────────────────────────────────────────────┴─────┘
+
+Detailed Violations:
+
+• Rule 12: Logger / Observability
+  No `console.*`; all logs via DI logger with context. Use canonical safeHandler for event error handling.
+
+L88:  } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "modal-form-handler:myError" });
+     }
+
+L103: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "modal-form-handler:myError" });
+     }
+
+L145: } catch {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "modal-form-handler:myError" });
+     }
+
+L182: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "modal-form-handler:myError" });
+     }
+
+L228: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "modal-form-handler:myError" });
+     }
+
+L250: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "modal-form-handler:myError" });
+     }
+
+L304: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "modal-form-handler:myError" });
+     }
+
+L333: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "modal-form-handler:myError" });
+     }
+
+L357: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "modal-form-handler:myError" });
+     }
+
+L381: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "modal-form-handler:myError" });
+     }
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│                   🛡️ Violations in: modalManager.js (24)                    │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────────┬─────┐
+│Pattern Rule                                                            │Count│
+├────────────────────────────────────────────────────────────────────────┼─────┤
+│🔒 12. Logger / Observability                                           │24   │
+└────────────────────────────────────────────────────────────────────────┴─────┘
+
+Detailed Violations:
+
+• Rule 12: Logger / Observability
+  No `console.*`; all logs via DI logger with context. Use canonical safeHandler for event error handling.
+
+L157: logger.debug('[ModalManager] Close requested', { modalName, source });
+  ⚠  Violation: Direct 'logger.debug' call missing a final metadata object with a 'context' property.
+  💡 Hint:
+     Ensure logger calls like 'debug' end with, e.g., { context: "Module:description" }. Found type for last arg: ObjectExpression
+
+L172: logger.debug('[ModalManager] Showing modal', { modalName, options });
+  ⚠  Violation: Direct 'logger.debug' call missing a final metadata object with a 'context' property.
+  💡 Hint:
+     Ensure logger calls like 'debug' end with, e.g., { context: "Module:description" }. Found type for last arg: ObjectExpression
+
+L175: logger.warn('[ModalManager] Cannot open modal', { modalName });
+  ⚠  Violation: Direct 'logger.warn' call missing a final metadata object with a 'context' property.
+  💡 Hint:
+     Ensure logger calls like 'warn' end with, e.g., { context: "Module:description" }. Found type for last arg: ObjectExpression
+
+L183: logger.error('[ModalManager] Modal element not found', { modalName, modalId });
+  ⚠  Violation: Direct 'logger.error' call missing a final metadata object with a 'context' property.
+  💡 Hint:
+     Ensure logger calls like 'error' end with, e.g., { context: "Module:description" }. Found type for last arg: ObjectExpression
+
+L204: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "ModalManager:myError" });
+     }
+
+L205: logger.error('[ModalManager] Update content callback failed', err, { modalName });
+  ⚠  Violation: Direct 'logger.error' call missing a final metadata object with a 'context' property.
+  💡 Hint:
+     Ensure logger calls like 'error' end with, e.g., { context: "Module:description" }. Found type for last arg: ObjectExpression
+
+L219: logger.info('[ModalManager] Modal shown successfully', { modalName });
+  ⚠  Violation: Direct 'logger.info' call missing a final metadata object with a 'context' property.
+  💡 Hint:
+     Ensure logger calls like 'info' end with, e.g., { context: "Module:description" }. Found type for last arg: ObjectExpression
+
+L222: logger.error('[ModalManager] Failed to show modal element', { modalName });
+  ⚠  Violation: Direct 'logger.error' call missing a final metadata object with a 'context' property.
+  💡 Hint:
+     Ensure logger calls like 'error' end with, e.g., { context: "Module:description" }. Found type for last arg: ObjectExpression
+
+L226: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "ModalManager:myError" });
+     }
+
+L227: logger.error('[ModalManager] Error showing modal', err, { modalName });
+  ⚠  Violation: Direct 'logger.error' call missing a final metadata object with a 'context' property.
+  💡 Hint:
+     Ensure logger calls like 'error' end with, e.g., { context: "Module:description" }. Found type for last arg: ObjectExpression
+
+L234: logger.debug('[ModalManager] Hiding modal', { modalName });
+  ⚠  Violation: Direct 'logger.debug' call missing a final metadata object with a 'context' property.
+  💡 Hint:
+     Ensure logger calls like 'debug' end with, e.g., { context: "Module:description" }. Found type for last arg: ObjectExpression
+
+L240: logger.warn('[ModalManager] No modal to hide');
+  ⚠  Violation: Direct 'logger.warn' call missing a final metadata object with a 'context' property.
+  💡 Hint:
+     Ensure logger calls like 'warn' end with, e.g., { context: "Module:description" }. Found type for last arg: Literal
+
+L246: logger.warn('[ModalManager] Cannot close modal', { modalName });
+  ⚠  Violation: Direct 'logger.warn' call missing a final metadata object with a 'context' property.
+  💡 Hint:
+     Ensure logger calls like 'warn' end with, e.g., { context: "Module:description" }. Found type for last arg: ObjectExpression
+
+L254: logger.error('[ModalManager] Modal element not found for hiding', { modalName, modalId });
+  ⚠  Violation: Direct 'logger.error' call missing a final metadata object with a 'context' property.
+  💡 Hint:
+     Ensure logger calls like 'error' end with, e.g., { context: "Module:description" }. Found type for last arg: ObjectExpression
+
+L262: logger.info('[ModalManager] Modal hidden successfully', { modalName });
+  ⚠  Violation: Direct 'logger.info' call missing a final metadata object with a 'context' property.
+  💡 Hint:
+     Ensure logger calls like 'info' end with, e.g., { context: "Module:description" }. Found type for last arg: ObjectExpression
+
+L265: logger.error('[ModalManager] Failed to hide modal element', { modalName });
+  ⚠  Violation: Direct 'logger.error' call missing a final metadata object with a 'context' property.
+  💡 Hint:
+     Ensure logger calls like 'error' end with, e.g., { context: "Module:description" }. Found type for last arg: ObjectExpression
+
+L269: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "ModalManager:myError" });
+     }
+
+L270: logger.error('[ModalManager] Error hiding modal', err, { modalName });
+  ⚠  Violation: Direct 'logger.error' call missing a final metadata object with a 'context' property.
+  💡 Hint:
+     Ensure logger calls like 'error' end with, e.g., { context: "Module:description" }. Found type for last arg: ObjectExpression
+
+L296: logger.info('[ModalManager] All modals hidden', { count: closedModals.length });
+  ⚠  Violation: Direct 'logger.info' call missing a final metadata object with a 'context' property.
+  💡 Hint:
+     Ensure logger calls like 'info' end with, e.g., { context: "Module:description" }. Found type for last arg: ObjectExpression
+
+L298: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "ModalManager:myError" });
+     }
+
+L299: logger.error('[ModalManager] Error hiding all modals', err);
+  ⚠  Violation: Direct 'logger.error' call missing a final metadata object with a 'context' property.
+  💡 Hint:
+     Ensure logger calls like 'error' end with, e.g., { context: "Module:description" }. Found type for last arg: Identifier
+
+L311: logger.error('[ModalManager] Cannot bind form - modal not found', { modalName, modalId });
+  ⚠  Violation: Direct 'logger.error' call missing a final metadata object with a 'context' property.
+  💡 Hint:
+     Ensure logger calls like 'error' end with, e.g., { context: "Module:description" }. Found type for last arg: ObjectExpression
+
+L319: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "ModalManager:myError" });
+     }
+
+L320: logger.error('[ModalManager] Error binding modal form', err, { modalName, formSelector });
+  ⚠  Violation: Direct 'logger.error' call missing a final metadata object with a 'context' property.
+  💡 Hint:
+     Ensure logger calls like 'error' end with, e.g., { context: "Module:description" }. Found type for last arg: ObjectExpression
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│                   🛡️ Violations in: modalRenderer.js (11)                   │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────────┬─────┐
+│Pattern Rule                                                            │Count│
+├────────────────────────────────────────────────────────────────────────┼─────┤
+│🔒 12. Logger / Observability                                           │11   │
+└────────────────────────────────────────────────────────────────────────┴─────┘
+
+Detailed Violations:
+
+• Rule 12: Logger / Observability
+  No `console.*`; all logs via DI logger with context. Use canonical safeHandler for event error handling.
+
+L79:  } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "modal-renderer:myError" });
+     }
+
+L115: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "modal-renderer:myError" });
+     }
+
+L144: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "modal-renderer:myError" });
+     }
+
+L160: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "modal-renderer:myError" });
+     }
+
+L196: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "modal-renderer:myError" });
+     }
+
+L213: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "modal-renderer:myError" });
+     }
+
+L231: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "modal-renderer:myError" });
+     }
+
+L246: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "modal-renderer:myError" });
+     }
+
+L262: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "modal-renderer:myError" });
+     }
+
+L279: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "modal-renderer:myError" });
+     }
+
+L303: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "modal-renderer:myError" });
+     }
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│                 🛡️ Violations in: modalStateManager.js (5)                  │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────────┬─────┐
+│Pattern Rule                                                            │Count│
+├────────────────────────────────────────────────────────────────────────┼─────┤
+│🔒 12. Logger / Observability                                           │5    │
+└────────────────────────────────────────────────────────────────────────┴─────┘
+
+Detailed Violations:
+
+• Rule 12: Logger / Observability
+  No `console.*`; all logs via DI logger with context. Use canonical safeHandler for event error handling.
+
+L181: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "modal-state-manager:myError" });
+     }
+
+L219: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "modal-state-manager:myError" });
+     }
+
+L245: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "modal-state-manager:myError" });
+     }
+
+L310: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "modal-state-manager:myError" });
+     }
+
+L333: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "modal-state-manager:myError" });
+     }
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│                 🛡️ Violations in: navigationService.js (6)                  │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────────┬─────┐
+│Pattern Rule                                                            │Count│
+├────────────────────────────────────────────────────────────────────────┼─────┤
+│🔒 12. Logger / Observability                                           │6    │
+└────────────────────────────────────────────────────────────────────────┴─────┘
+
+Detailed Violations:
+
+• Rule 12: Logger / Observability
+  No `console.*`; all logs via DI logger with context. Use canonical safeHandler for event error handling.
+
+L63:  } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "navigationService:myError" });
+     }
+
+L103: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "navigationService:myError" });
+     }
+
+L216: } catch (error) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (error) {
+       logger.error("Operation failed", error, { context: "navigationService:myError" });
+     }
+
+L294: } catch (error) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (error) {
+       logger.error("Operation failed", error, { context: "navigationService:myError" });
+     }
+
+L343: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "navigationService:myError" });
+     }
+
+L363: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "navigationService:myError" });
+     }
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│                   🛡️ Violations in: pollingService.js (1)                   │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────────┬─────┐
+│Pattern Rule                                                            │Count│
+├────────────────────────────────────────────────────────────────────────┼─────┤
+│🔒 12. Logger / Observability                                           │1    │
+└────────────────────────────────────────────────────────────────────────┴─────┘
+
+Detailed Violations:
+
+• Rule 12: Logger / Observability
+  No `console.*`; all logs via DI logger with context. Use canonical safeHandler for event error handling.
+
+L135: eventHandlers.trackListener(doc, 'navigation:deactivateView', cleanup, {
+  ⚠  Violation: Event handler for 'eventHandlers.trackListener' should be wrapped by 'safeHandler' (or be a directly passed param, or simple inline function).
+  💡 Hint:
+     Complex handlers or those prone to errors should be: eventHandlers.trackListener(el, 'click', safeHandler(myHandler, 'polling-service:desc'), ...);
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│              🛡️ Violations in: projectDataCoordinator.js (10)               │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────────┬─────┐
+│Pattern Rule                                                            │Count│
+├────────────────────────────────────────────────────────────────────────┼─────┤
+│🔒 12. Logger / Observability                                           │10   │
+└────────────────────────────────────────────────────────────────────────┴─────┘
+
+Detailed Violations:
+
+• Rule 12: Logger / Observability
+  No `console.*`; all logs via DI logger with context. Use canonical safeHandler for event error handling.
+
+L52:  } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "project-data-coordinator:myError" });
+     }
+
+L72:  } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "project-data-coordinator:myError" });
+     }
+
+L92:  } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "project-data-coordinator:myError" });
+     }
+
+L112: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "project-data-coordinator:myError" });
+     }
+
+L135: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "project-data-coordinator:myError" });
+     }
+
+L155: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "project-data-coordinator:myError" });
+     }
+
+L175: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "project-data-coordinator:myError" });
+     }
+
+L198: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "project-data-coordinator:myError" });
+     }
+
+L221: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "project-data-coordinator:myError" });
+     }
+
+L241: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "project-data-coordinator:myError" });
+     }
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│               🛡️ Violations in: projectDetailsRenderer.js (4)               │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────────┬─────┐
+│Pattern Rule                                                            │Count│
+├────────────────────────────────────────────────────────────────────────┼─────┤
+│🔒 12. Logger / Observability                                           │4    │
+└────────────────────────────────────────────────────────────────────────┴─────┘
+
+Detailed Violations:
+
+• Rule 12: Logger / Observability
+  No `console.*`; all logs via DI logger with context. Use canonical safeHandler for event error handling.
+
+L62:  } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "project-details-renderer:myError" });
+     }
+
+L98:  } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "project-details-renderer:myError" });
+     }
+
+L129: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "project-details-renderer:myError" });
+     }
+
+L171: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "project-details-renderer:myError" });
+     }
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│                🛡️ Violations in: projectEventHandlers.js (1)                │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────────┬─────┐
+│Pattern Rule                                                            │Count│
+├────────────────────────────────────────────────────────────────────────┼─────┤
+│🔒 12. Logger / Observability                                           │1    │
+└────────────────────────────────────────────────────────────────────────┴─────┘
+
+Detailed Violations:
+
+• Rule 12: Logger / Observability
+  No `console.*`; all logs via DI logger with context. Use canonical safeHandler for event error handling.
+
+L207: } catch (error) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (error) {
+       logger.error("Operation failed", error, { context: "project-event-handlers:myError" });
+     }
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│                 🛡️ Violations in: tokenStatsManager.js (1)                  │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────────┬─────┐
+│Pattern Rule                                                            │Count│
+├────────────────────────────────────────────────────────────────────────┼─────┤
+│🔒 12. Logger / Observability                                           │1    │
+└────────────────────────────────────────────────────────────────────────┴─────┘
+
+Detailed Violations:
+
+• Rule 12: Logger / Observability
+  No `console.*`; all logs via DI logger with context. Use canonical safeHandler for event error handling.
+
+L658: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "tokenStatsManager:myError" });
+     }
+
+--------------------------------------------------------------------------------
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│            🚨 Found 124 violation(s) in 24 of 73 file(s) scanned.            │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+

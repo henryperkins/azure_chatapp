@@ -5,7 +5,7 @@
  * - ModalRenderer: DOM manipulation and rendering
  * - ModalStateManager: State tracking and lifecycle
  * - ModalFormHandler: Form handling within modals
- * 
+ *
  * Reduced from 1235 → ~400 lines through separation of concerns.
  */
 
@@ -27,7 +27,7 @@ export function createModalManager({
   eventService,
   sanitizer
 } = {}) {
-  
+
   // Dependency validation
   if (!domAPI) {
     throw new Error('[ModalManager] domAPI DI not provided');
@@ -40,7 +40,7 @@ export function createModalManager({
   }
 
   const MODULE_CONTEXT = 'ModalManager';
-  
+
   // Use provided sanitizer or fallback to domPurify
   const modalSanitizer = sanitizer || domPurify;
   if (!modalSanitizer) {
@@ -86,10 +86,7 @@ export function createModalManager({
       try {
         logger.info('[ModalManager] Initializing', { context: MODULE_CONTEXT });
 
-        // Wait for DOM readiness
-        if (domReadinessService) {
-          await domReadinessService.waitForEvent('app:ready');
-        }
+
 
         // Register default modal mappings
         const mappings = modalMapping || MODAL_MAPPINGS;
@@ -101,9 +98,9 @@ export function createModalManager({
         setupGlobalEventListeners();
 
         isReady = true;
-        logger.info('[ModalManager] Initialization complete', { 
+        logger.info('[ModalManager] Initialization complete', {
           modalCount: Object.keys(mappings).length,
-          context: MODULE_CONTEXT 
+          context: MODULE_CONTEXT
         });
 
       } catch (err) {
@@ -210,7 +207,7 @@ export function createModalManager({
       const success = renderer.showModalElement(modalEl);
       if (success) {
         stateManager.setActiveModal(modalName);
-        
+
         // Center modal if requested
         if (options.center) {
           renderer.centerModal(modalEl);
@@ -283,7 +280,7 @@ export function createModalManager({
   function hideAll() {
     try {
       const closedModals = stateManager.closeAllModals();
-      
+
       // Hide all modal elements
       closedModals.forEach(modalName => {
         const modalId = stateManager.getModalId(modalName);
@@ -346,13 +343,13 @@ export function createModalManager({
         if (confirmBtn) {
           domAPI.setTextContent(confirmBtn, confirmText);
           confirmBtn.className = `btn ${confirmClass}`;
-          
+
           // Remove existing listeners
-          eventHandlers.cleanupListeners({ 
-            target: confirmBtn, 
-            context: MODULE_CONTEXT + ':ConfirmDelete' 
+          eventHandlers.cleanupListeners({
+            target: confirmBtn,
+            context: MODULE_CONTEXT + ':ConfirmDelete'
           });
-          
+
           // Add new listener
           eventHandlers.trackListener(confirmBtn, 'click', safeHandler(() => {
             hide('confirm');
@@ -368,7 +365,7 @@ export function createModalManager({
         const cancelBtn = modalEl.querySelector('.cancel-btn');
         if (cancelBtn) {
           domAPI.setTextContent(cancelBtn, cancelText);
-          
+
           eventHandlers.trackListener(cancelBtn, 'click', safeHandler(() => {
             hide('confirm');
             if (typeof onCancel === 'function') {
@@ -394,6 +391,10 @@ export function createModalManager({
     isReadyPromise: () => readyPromise,
 
     // Core modal operations
+    // Alias openModal -> show for backward compatibility with modules that still
+    // expect an `openModal` helper. This avoids widespread refactors while the
+    // codebase completes the migration to the more explicit `show` verb.
+    openModal: show,
     show,
     hide,
     toggle,
@@ -435,15 +436,15 @@ export function createModalManager({
 
     cleanup() {
       logger.debug('[ModalManager] cleanup()', { context: MODULE_CONTEXT });
-      
+
       // Cleanup extracted modules
       renderer.cleanup();
       stateManager.cleanup();
       formHandler.cleanup();
-      
+
       // Cleanup event listeners
       eventHandlers.cleanupListeners({ context: MODULE_CONTEXT });
-      
+
       // Reset state
       isReady = false;
       readyPromise = null;
@@ -455,10 +456,10 @@ export function createModalManager({
 export default class ModalManager {
   constructor(opts) {
     const manager = createModalManager(opts);
-    
+
     // Delegate all methods to the functional implementation
     Object.assign(this, manager);
-    
+
     // Auto-initialize
     this.initialize().catch(err => {
       if (opts?.logger) {
@@ -468,4 +469,58 @@ export default class ModalManager {
       }
     });
   }
+}
+
+/**
+ * createProjectModal – thin convenience wrapper around the generic
+ * createModalManager specifically configured for the "project" modal
+ * defined in MODAL_MAPPINGS (logical key: 'project').  It exposes a
+ * single helper `openModal(projectData)` that pre-populates the modal
+ * form fields when editing an existing project.  All other methods are
+ * delegated to the underlying ModalManager instance so consumers retain
+ * full access to show/hide/toggle APIs.
+ *
+ * This factory exists solely for backward-compatibility with modules
+ * that were built before the Phase-2 modal refactor and still expect a
+ * dedicated ProjectModal helper.  New code should use the unified
+ * ModalManager.show('project', …) interface.
+ */
+export function createProjectModal(options = {}) {
+  // Re-use the generic modal manager implementation – do **NOT** create
+  // duplicate state; single source of truth lives in ModalManager.
+  const modalManager = createModalManager(options);
+
+  async function openModal(projectData = {}) {
+    // Ensure underlying ModalManager is ready before attempting to show.
+    if (typeof modalManager.initialize === 'function') {
+      try {
+        await modalManager.initialize();
+      } catch (_) {
+        // Initialization errors are already logged inside ModalManager.
+      }
+    }
+
+    const { name = '', description = '' } = projectData || {};
+
+    return modalManager.show('project', {
+      updateContent: (modalEl) => {
+        if (!modalEl) return;
+
+        // Pre-fill commonly used inputs.  Fallbacks are no-ops if elements
+        // are missing – we intentionally avoid hard dependencies on the
+        // exact template markup to keep this helper resilient to future
+        // UI tweaks.
+        const nameInput = modalEl.querySelector('#projectModalNameInput');
+        if (nameInput) nameInput.value = name;
+
+        const descInput = modalEl.querySelector('#projectModalDescriptionInput');
+        if (descInput) descInput.value = description;
+      }
+    });
+  }
+
+  return {
+    ...modalManager,
+    openModal
+  };
 }

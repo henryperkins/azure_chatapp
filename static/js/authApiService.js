@@ -71,7 +71,7 @@ export function createAuthApiService({
       _log('CSRF token fetched successfully');
       return csrfTokenCache;
     } catch (err) {
-      _logError('Failed to fetch CSRF token', err);
+      logger.error('[AuthApiService] Failed to fetch CSRF token', err, { context: MODULE });
       csrfTokenCache = null;
       csrfTokenExpiry = null;
       throw err;
@@ -126,8 +126,8 @@ export function createAuthApiService({
           } else if (errorData.error) {
             errorMessage = errorData.error;
           }
-        } catch {
-          // Use default error message if JSON parsing fails
+        } catch (err) {
+          logger.warn(`[${MODULE}] Failed to parse error response JSON`, err, { context: MODULE, endpoint });
         }
         
         const error = new Error(errorMessage);
@@ -140,7 +140,7 @@ export function createAuthApiService({
       _log('Auth request successful', { endpoint, method, status: response.status });
       return data;
     } catch (err) {
-      _logError('Auth request failed', err, { endpoint, method });
+      logger.error('[AuthApiService] Auth request failed', err, { context: MODULE, endpoint, method });
       throw extendErrorWithStatus(err, err.message || 'Authentication request failed');
     }
   }
@@ -161,7 +161,7 @@ export function createAuthApiService({
         throw new Error(response.message || 'Login failed - invalid response format');
       }
     } catch (err) {
-      _logError('Login failed', err, { username });
+      logger.error('[AuthApiService] Login failed', err, { context: MODULE, username });
       throw err;
     }
   }
@@ -179,7 +179,7 @@ export function createAuthApiService({
       _log('Logout successful');
       return response;
     } catch (err) {
-      _logError('Logout failed', err);
+      logger.error('[AuthApiService] Logout failed', err, { context: MODULE });
       // Clear tokens even if logout request failed
       csrfTokenCache = null;
       csrfTokenExpiry = null;
@@ -204,7 +204,7 @@ export function createAuthApiService({
         throw new Error(response.message || 'Registration failed - invalid response format');
       }
     } catch (err) {
-      _logError('Registration failed', err, { username, email });
+      logger.error('[AuthApiService] Registration failed', err, { context: MODULE, username, email });
       throw err;
     }
   }
@@ -226,7 +226,7 @@ export function createAuthApiService({
         return { authenticated: false, user: null };
       }
     } catch (err) {
-      _logError('Session verification failed', err);
+      logger.error('[AuthApiService] Session verification failed', err, { context: MODULE });
       // Don't throw on verification failure - just return unauthenticated state
       return { authenticated: false, user: null };
     }
@@ -248,7 +248,7 @@ export function createAuthApiService({
         throw new Error(response.message || 'Session refresh failed');
       }
     } catch (err) {
-      _logError('Session refresh failed', err);
+      logger.error('[AuthApiService] Session refresh failed', err, { context: MODULE });
       throw err;
     }
   }

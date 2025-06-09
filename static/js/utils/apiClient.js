@@ -115,7 +115,7 @@ export function createApiClient({
           }
         }
       } catch (err) {
-        logger?.warn?.('[apiClient] Failed to inject Authorization header', err, {
+        logger.error('[apiClient] Failed to inject Authorization header', err, {
           context: 'apiClient:authHeader'
         });
       }

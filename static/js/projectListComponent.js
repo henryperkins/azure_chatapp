@@ -25,10 +25,8 @@ export function createProjectListComponent(deps) {
         app,
         storage,
         sanitizer: htmlSanitizer,
-        apiClient,
         domAPI,
         browserService,
-        globalUtils,
         domReadinessService,
         APP_CONFIG,
         logger,
@@ -71,17 +69,17 @@ export function createProjectListComponent(deps) {
 
     // Migrate state to UIStateService
     const STATE_COMPONENT = 'ProjectListComponent';
-    
+
     function getState(key, defaultValue = null) {
         return uiStateService ? uiStateService.getState(STATE_COMPONENT, key) || defaultValue : defaultValue;
     }
-    
+
     function setState(key, value) {
         if (uiStateService) {
             uiStateService.setState(STATE_COMPONENT, key, value);
         }
     }
-    
+
     function _setState(partial) {
         if (uiStateService) {
             Object.entries(partial).forEach(([key, value]) => {
@@ -89,7 +87,7 @@ export function createProjectListComponent(deps) {
             });
         }
     }
-    
+
     // Initialize default state values
     if (uiStateService) {
         setState('projects', getState('projects', []));
@@ -135,6 +133,23 @@ export function createProjectListComponent(deps) {
             loadingGrid.style.display = 'none';
         }
     }
+
+    // --- State access helper ---
+    // Use getState/setState/_setState for all state access.
+    // For convenience, define a local getter for state.
+    const state = new Proxy({}, {
+        get(_target, key) {
+            return getState(key);
+        },
+        set(_target, key, value) {
+            setState(key, value);
+            return true;
+        },
+        ownKeys() {
+            // Not used, but required for Proxy completeness
+            return [];
+        }
+    });
 
     // ----- Initialization/Readiness -----
     async function initialize() {
@@ -631,7 +646,7 @@ export function createProjectListComponent(deps) {
 
         logger.debug('[ProjectListComponent][show] Checking auth state before showing content', {
             isAuthenticated,
-            hasProjects: !!(state.projects && state.projects.length > 0),
+            hasProjects: !!((state.projects || []).length > 0),
             context: MODULE_CONTEXT
         });
 
@@ -690,7 +705,7 @@ export function createProjectListComponent(deps) {
         }
     }
     function _handleAction(action, projectId) {
-        const project = state.projects.find(
+        const project = (state.projects || []).find(
             (p) => String(_getProjectId(p)) === projectId
         );
         if (!project) return;
@@ -725,12 +740,12 @@ export function createProjectListComponent(deps) {
     }
     function _handleProjectCreated(project) {
         if (!project) return;
-        _setState({ projects: [project, ...state.projects] });
+        _setState({ projects: [project, ...(state.projects || [])] });
         renderProjects(state.projects);
     }
     function _handleProjectUpdated(updatedProject) {
         if (!updatedProject) return;
-        const idx = state.projects.findIndex(
+        const idx = (state.projects || []).findIndex(
             (p) => String(_getProjectId(p)) === String(_getProjectId(updatedProject))
         );
         if (idx >= 0) {
@@ -821,7 +836,7 @@ export function createProjectListComponent(deps) {
 
         const useDeleteModal = typeof modalManager.confirmDelete === 'function';
         const fn = useDeleteModal ? modalManager.confirmDelete.bind(modalManager)
-                                  : modalManager.confirmAction?.bind(modalManager);
+            : modalManager.confirmAction?.bind(modalManager);
 
         if (!fn) return;
 
@@ -906,11 +921,11 @@ export function createProjectListComponent(deps) {
         }
     }
     function _showLoginRequired() {
-         if (!element) return;
-         // Preserve header, filters, and search; only reset the project grid contents
-         if (gridElement) {
-             _clearElement(gridElement);
-         }
+        if (!element) return;
+        // Preserve header, filters, and search; only reset the project grid contents
+        if (gridElement) {
+            _clearElement(gridElement);
+        }
 
         // ──────────────────────────────────────────────────────────────
         // Guarantee #projectCardsPanel exists at ALL times.
@@ -1015,7 +1030,7 @@ export function createProjectListComponent(deps) {
         return card;
     }
     function _computeCardClasses(_project) {
-        const theme = state.customization.theme || "default";
+        const theme = state.customization?.theme || "default";
         const themeBg = theme === "default" ? "bg-base-100" : `bg-${theme}`;
         const themeText = theme === "default" ? "text-base-content" : `text-${theme}-content`;
         return `project-card ${themeBg} ${themeText} shadow-md hover:shadow-lg transition-all border border-base-300 rounded-box p-4 flex flex-col h-full mb-3 max-w-full w-full overflow-hidden`;
@@ -1080,7 +1095,7 @@ export function createProjectListComponent(deps) {
         return header;
     }
     function _buildCardDescription(project) {
-        if (state.customization.showDescription && project.description) {
+        if (state.customization?.showDescription && project.description) {
             const description = domAPI.createElement("p");
             description.className = "text-sm text-base-content/70 mb-3 line-clamp-2";
             description.textContent = project.description;
@@ -1091,7 +1106,7 @@ export function createProjectListComponent(deps) {
     function _buildCardFooter(project) {
         const footer = domAPI.createElement("div");
         footer.className = "mt-auto pt-2 flex justify-between text-xs text-base-content/70";
-        if (state.customization.showDate && project.updated_at) {
+        if (state.customization?.showDate && project.updated_at) {
             const dateEl = domAPI.createElement("span");
             dateEl.textContent = _formatDate(project.updated_at);
             footer.appendChild(dateEl);

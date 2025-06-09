@@ -74,7 +74,7 @@ export function createAuthFormHandler({
 
   function setButtonLoading(btn, isLoading, loadingText = 'Processing...') {
     if (!btn) return;
-    
+
     try {
       if (isLoading) {
         btn.disabled = true;
@@ -94,7 +94,7 @@ export function createAuthFormHandler({
 
   function showError(container, message) {
     if (!container || !message) return;
-    
+
     try {
       let errorEl = container.querySelector('.error-message');
       if (!errorEl) {
@@ -111,7 +111,7 @@ export function createAuthFormHandler({
 
   function hideError(container) {
     if (!container) return;
-    
+
     try {
       const errorEl = container.querySelector('.error-message');
       if (errorEl) {
@@ -124,7 +124,7 @@ export function createAuthFormHandler({
 
   function clearForm(formEl) {
     if (!formEl) return;
-    
+
     try {
       const inputs = formEl.querySelectorAll('input[type="text"], input[type="email"], input[type="password"]');
       inputs.forEach(input => {
@@ -148,7 +148,7 @@ export function createAuthFormHandler({
 
       const formData = new FormData(formEl);
       const data = Object.fromEntries(formData.entries());
-      
+
       try {
         await onSubmit(data, formEl);
       } catch (err) {
@@ -156,9 +156,9 @@ export function createAuthFormHandler({
       }
     }, `${context}:FormSubmit`);
 
-    eventHandlers.trackListener(formEl, 'submit', handler, { 
-      context, 
-      description: 'FormSubmission' 
+    eventHandlers.trackListener(formEl, 'submit', handler, {
+      context,
+      description: 'FormSubmission'
     });
 
     _log('Form submission bound', { formId: formEl.id, context });
@@ -173,7 +173,7 @@ export function createAuthFormHandler({
     const handler = safeHandler(() => {
       const value = inputEl.value;
       const result = validator(value);
-      
+
       const container = inputEl.parentElement;
       if (result.valid) {
         hideError(container);
@@ -184,9 +184,9 @@ export function createAuthFormHandler({
       }
     }, `${context}:InputValidation`);
 
-    eventHandlers.trackListener(inputEl, 'blur', handler, { 
-      context, 
-      description: 'InputValidation' 
+    eventHandlers.trackListener(inputEl, 'blur', handler, {
+      context,
+      description: 'InputValidation'
     });
   }
 
@@ -220,7 +220,7 @@ export function createAuthFormHandler({
 
     cleanup() {
       _log('cleanup()');
-      eventHandlers.cleanupListeners({ context: MODULE_CONTEXT });
+      eventHandlers.cleanupListeners({ context: 'authFormHandler' });
     }
   };
 }

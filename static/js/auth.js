@@ -22,7 +22,7 @@ export function createAuth(deps) {
   const requiredDeps = [
     'apiClient', 'logger', 'domReadinessService', 'eventHandlers',
     'domAPI', 'sanitizer', 'apiEndpoints', 'safeHandler', 'browserService',
-    'eventService', 'appModule'
+    'eventService', 'appModule', 'APP_CONFIG'
   ];
   
   for (const dep of requiredDeps) {
@@ -35,7 +35,8 @@ export function createAuth(deps) {
     apiClient, eventHandlers, domAPI, sanitizer, modalManager,
     apiEndpoints, DependencySystem, logger, domReadinessService,
     safeHandler, browserService, eventService, storageService,
-    appModule
+    appModule,
+    APP_CONFIG
   } = deps;
 
   const MODULE_CONTEXT = 'AuthModule';
@@ -408,8 +409,11 @@ export function createAuth(deps) {
         });
       }
 
-      // Wait for DOM readiness
-      await domReadinessService.waitForEvent('app:ready');
+      // Wait for global "app:ready" event with extended timeout. Use configurable
+      // APP_READY_WAIT so slower devices/network conditions do not cause a
+      // bootstrap dead-letter. Falls back to 30 s if the config key is missing.
+      const appReadyTimeout = APP_CONFIG?.TIMEOUTS?.APP_READY_WAIT ?? 30000;
+      await domReadinessService.waitForEvent('app:ready', { timeout: appReadyTimeout, context: MODULE_CONTEXT + ':initialize' });
 
       // Verify current session
       await verifySession();
@@ -470,6 +474,8 @@ export function createAuth(deps) {
 
     // Initialization
     initialize,
+    // Alias for backward-compatibility with appInitializer expectations
+    init: (...args) => initialize(...args),
 
     // Legacy compatibility
     AuthBus, // For backward compatibility

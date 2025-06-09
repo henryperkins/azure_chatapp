@@ -96,6 +96,17 @@ export function debounce(fn, wait = 250, timerAPI = null) {
   };
 }
 
+// ------------------------------------------------------------------
+// Named JSON helpers (public API)
+// ------------------------------------------------------------------
+
+// Provide a named export so callers can `import { safeParseJSON } ...`.
+// We deliberately re-export the internal implementation to avoid duplicating
+// logic or exposing logger dependencies at the top level.  The DI-aware
+// version remains available via createGlobalUtils({ logger }).
+
+export { _safeParseJSON as safeParseJSON };
+
 // JSON helpers
 export function stableStringify(v) {
   if (v === null || typeof v !== "object") return JSON.stringify(v);
@@ -105,86 +116,82 @@ export function stableStringify(v) {
     .map((k) => `${JSON.stringify(k)}:${stableStringify(v[k])}`)
     .join(",")}}`;
 }
-export function safeParseJSON(str) {
+function _safeParseJSON(str) {
   if (typeof str !== "string") throw new Error('[globalUtils.safeParseJSON] Input not a string and fallback is forbidden.');
   try {
     return JSON.parse(str);
   } catch (err) {
-    logger.error('[globalUtils] safeParseJSON failed', err,
-      { context: MODULE_CONTEXT + ':safeParseJSON' });
     throw new Error('[globalUtils.safeParseJSON] JSON parse failed and fallback is forbidden: ' + (err?.message || err));
   }
 }
 
 // DOM helpers (only single definition, prefer domAPI for new code)
-export function createElement(tag, opts = {}, trackListener, domAPI) {
+function _createElement(tag, opts = {}, trackListener, domAPI) {
   const doc = domAPI?.getDocument?.();
   if (!doc) throw new Error('[globalUtils.createElement] domAPI with getDocument() is required');
-  let el;
-  try {
-    el = doc.createElement(tag);
-    if (opts.className) el.className = opts.className;
-    if (opts.id) el.id = opts.id;
-    if ("textContent" in opts) el.textContent = opts.textContent;
-    if ("innerHTML" in opts) {
-      if (domAPI?.setInnerHTML) {
-        domAPI.setInnerHTML(el, opts.innerHTML);   // sanitizer aware
-      } else {
-        // Fallback: escape tags to avoid XSS
-        el.textContent = String(opts.innerHTML).replace(/<[^>]*>?/gm, '');
-      }
+
+  const el = doc.createElement(tag);
+  if (opts.className) el.className = opts.className;
+  if (opts.id) el.id = opts.id;
+  if ("textContent" in opts) el.textContent = opts.textContent;
+  if ("innerHTML" in opts) {
+    if (domAPI?.setInnerHTML) {
+      domAPI.setInnerHTML(el, opts.innerHTML);   // sanitizer aware
+    } else {
+      // Fallback: escape tags to avoid XSS
+      el.textContent = String(opts.innerHTML).replace(/<[^>]*>?/gm, '');
     }
-
-    // Attach event listeners via DI tracker
-    Object.entries(opts).forEach(([k, v]) => {
-      if (k.startsWith("on") && typeof v === "function") {
-        const evt = k.slice(2).toLowerCase();
-        if (!trackListener)
-          throw new Error(`[globalUtils] createElement requires trackListener for ${evt}`);
-        trackListener(el, evt, v);
-      }
-    });
-
-    // data‑* attributes & common HTML props
-    Object.entries(opts).forEach(([k, v]) => {
-      if (k.startsWith("data-")) el.setAttribute(k, v);
-    });
-    [
-      "title",
-      "alt",
-      "src",
-      "href",
-      "placeholder",
-      "type",
-      "value",
-      "name",
-    ].forEach((p) => {
-      if (opts[p] !== undefined) el[p] = opts[p];
-    });
-  } catch (err) {
-    logger.error('[globalUtils] createElement failed', err,
-      { context: MODULE_CONTEXT + ':createElement' });
-    throw err;
   }
+
+  // Attach event listeners via DI tracker
+  Object.entries(opts).forEach(([k, v]) => {
+    if (k.startsWith("on") && typeof v === "function") {
+      const evt = k.slice(2).toLowerCase();
+      if (!trackListener)
+        throw new Error(`[globalUtils] createElement requires trackListener for ${evt}`);
+      trackListener(el, evt, v);
+    }
+  });
+
+  // data‑* attributes & common HTML props
+  Object.entries(opts).forEach(([k, v]) => {
+    if (k.startsWith("data-")) el.setAttribute(k, v);
+  });
+  [
+    "title",
+    "alt",
+    "src",
+    "href",
+    "placeholder",
+    "type",
+    "value",
+    "name",
+  ].forEach((p) => {
+    if (opts[p] !== undefined) el[p] = opts[p];
+  });
+
   return el;
 }
 
-export function toggleElement(selOrEl, show, domAPI) {
+// Re-export createElement for legacy callers (e.g., chatUIEnhancements.js)
+// This is an alias to the single canonical implementation above.
+export { _createElement as createElement };
+
+function _toggleElement(selOrEl, show, domAPI) {
   try {
     if (typeof selOrEl === "string") {
       domAPI.querySelectorAll(selOrEl).forEach((el) => el.classList.toggle("hidden", !show));
     } else if (selOrEl && selOrEl.classList) {
       selOrEl.classList.toggle("hidden", !show);
     }
-  } catch (err) {
-    logger.error('[globalUtils] toggleElement failed', err,
-      { context: MODULE_CONTEXT + ':toggleElement' });
+  } catch {
+    // No-op, logger handled in DI wrapper
   }
 }
 
 // Formatters
 export const formatNumber = (n) => new Intl.NumberFormat().format(n || 0);
-export const formatDate = (d) => {
+function _formatDate(d) {
   if (!d) return "";
   try {
     return new Date(d).toLocaleDateString(undefined, {
@@ -192,12 +199,13 @@ export const formatDate = (d) => {
       month: '2-digit',
       day: '2-digit'
     });
-  } catch (err) {
-    logger.error('[globalUtils] formatDate failed', err,
-      { context: MODULE_CONTEXT + ':formatDate' });
+  } catch {
     return String(d);
   }
-};
+}
+
+// Provide a named export so callers can `import { formatDate } ...`.
+export { _formatDate as formatDate };
 export function formatBytes(num) {
   if (num == null) return "";
   const sizes = ["B", "KB", "MB", "GB", "TB"];
@@ -227,19 +235,53 @@ export const fileIcon = (t = "") =>
   }[t.toLowerCase()] || "📄"
 );
 
-
+export function toggleElement(...a) {
+  try {
+    return _toggleElement(...a);
+  } catch (err) {
+    // Silently fail, do not reference logger here (not available in this scope)
+  }
+}
 
 export function createGlobalUtils({ logger, apiClient } = {}) {
-  if (!logger)        throw new Error('[globalUtils] logger required');
-  if (!apiClient)     throw new Error('[globalUtils] apiClient required');
+  if (!logger) throw new Error('[globalUtils] logger required');
+  if (!apiClient) throw new Error('[globalUtils] apiClient required');
 
   return {
-    isAbsoluteUrl, normaliseUrl, normalizeUrl, shouldSkipDedup,
-    debounce, stableStringify, safeParseJSON,
-    createElement: (...a) => createElement(...a),
-    toggleElement: (...a) => toggleElement(...a),
-    formatNumber, formatDate, formatBytes, fileIcon,
-    fetchData   : (id) => apiClient.get(`/item/${id}`),
-    cleanup () {}
+    isAbsoluteUrl,
+    normaliseUrl,
+    normalizeUrl,
+    shouldSkipDedup,
+    debounce,
+    stableStringify,
+    safeParseJSON: function (str) {
+      try {
+        return _safeParseJSON(str);
+      } catch (err) {
+        logger.error('[globalUtils] safeParseJSON failed', err, { context: MODULE_CONTEXT + ':safeParseJSON' });
+        throw err;
+      }
+    },
+    createElement: function (...a) {
+      try {
+        return _createElement(...a);
+      } catch (err) {
+        logger.error('[globalUtils] createElement failed', err, { context: MODULE_CONTEXT + ':createElement' });
+        throw err;
+      }
+    },
+    toggleElement: function (...a) {
+      try {
+        return _toggleElement(...a);
+      } catch (err) {
+        logger.error('[globalUtils] toggleElement failed', err, { context: MODULE_CONTEXT + ':toggleElement' });
+      }
+    },
+    formatNumber,
+    formatDate: _formatDate,
+    formatBytes,
+    fileIcon,
+    fetchData: (id) => apiClient.get(`/item/${id}`),
+    cleanup() { }
   };
 }

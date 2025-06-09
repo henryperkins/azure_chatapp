@@ -24,7 +24,10 @@ export const APP_CONFIG = {
   TIMEOUTS: {
     DEPENDENCY_WAIT: 5000,      // generic waitFor timeout (hardened, was 15000)
     STARTUP_ABORT: 12000,       // whole-app bootstrap max
-    DOM_READY      : 8000,      // new – required by domReadinessService
+    // DOM readiness often takes longer in low-spec devices or when the network
+    // is slow to fetch templates. Increase to 20 s to avoid premature
+    // bootstrap failures (authInit waiting for `app:ready`).
+    DOM_READY      : 20000,
     APP_READY_WAIT : 30000,     // optional – used by authInit
     API_REQUEST: 30000 // Increased API timeout to 30 seconds
   },

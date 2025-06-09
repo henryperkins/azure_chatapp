@@ -185,7 +185,6 @@ export function createChatManager({
     loadConversation,
     deleteConversation,
     getCurrentConversationId: getCurrentConversation,
-    chatBus,
     chatUIController,
     chatUIEnhancements,
     cleanup,

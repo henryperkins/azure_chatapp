@@ -160,7 +160,29 @@ class ProjectDetailsComponent {
 
     // Store DI container for later safe look-ups
     this.DependencySystem = deps.DependencySystem;
-    this.chatManager = deps.chatManager;
+    // ------------------------------------------------------------------
+    // ChatManager lazy-resolution
+    // ------------------------------------------------------------------
+    let _chatManagerRef = deps.chatManager || null;
+
+    Object.defineProperty(this, 'chatManager', {
+      configurable: true,
+      enumerable: true,
+      get: () => {
+        if (_chatManagerRef) return _chatManagerRef;
+        // Attempt to resolve late from DI container – avoids brittle
+        // setChatManager() wiring during bootstrap.
+        try {
+          _chatManagerRef = this.DependencySystem?.modules?.get?.('chatManager');
+        } catch (_) {
+          /* noop – will retry on next access */
+        }
+        return _chatManagerRef;
+      },
+      set: (val) => {
+        _chatManagerRef = val;
+      }
+    });
     this.apiClient = deps.apiClient;
 
     // Phase-2.3: Centralised project context (injected only – no runtime lookup)
@@ -304,6 +326,8 @@ class ProjectDetailsComponent {
    * @param {Object|null} cm – The newly created ChatManager instance.
    */
   setChatManager(cm) {
+    // Use the property setter so the internal reference is updated and
+    // subsequent lazy look-ups return the injected instance.
     this.chatManager = cm;
     this._logInfo('ChatManager instance received and set.', { hasChatManager: !!cm });
 
