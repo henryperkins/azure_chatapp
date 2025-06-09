@@ -314,6 +314,8 @@ export function createAuth(deps) {
         }
         
       } catch (err) {
+        logger.error('[AuthModule] Login form submission failed', err,
+          { context: MODULE_CONTEXT + ':LoginForm' });
         formHandler.showError(form, err.message || 'Login failed. Please try again.');
       } finally {
         formHandler.setButtonLoading(submitBtn, false);
@@ -360,6 +362,8 @@ export function createAuth(deps) {
         formHandler.showError(form, 'Account created successfully! You can now sign in.');
         
       } catch (err) {
+        logger.error('[AuthModule] Registration form submission failed', err,
+          { context: MODULE_CONTEXT + ':RegisterForm' });
         formHandler.showError(form, err.message || 'Registration failed. Please try again.');
       } finally {
         formHandler.setButtonLoading(submitBtn, false);
