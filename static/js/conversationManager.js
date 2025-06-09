@@ -21,6 +21,7 @@ export function createConversationManager({
   browserService,
   tokenStatsManager,
   modelConfig,
+  eventService,
   eventBus,
   DependencySystem,
   CHAT_CONFIG
@@ -33,6 +34,7 @@ export function createConversationManager({
   if (!browserService) throw new Error('[ConversationManager] browserService dependency missing');
   if (!tokenStatsManager) throw new Error('[ConversationManager] tokenStatsManager dependency missing');
   if (!modelConfig) throw new Error('[ConversationManager] modelConfig dependency missing');
+  if (!eventService) throw new Error('[ConversationManager] eventService dependency missing');
   if (!eventBus) throw new Error('[ConversationManager] eventBus dependency missing');
 
   const MODULE_CONTEXT = 'ConversationManager';
@@ -149,15 +151,12 @@ export function createConversationManager({
         }
 
         // Emit event for UI updates
-        const event = new CustomEvent('conversation:loaded', {
-          detail: {
-            conversationId,
-            conversation,
-            messages,
-            projectId
-          }
+        _emit('conversation:loaded', {
+          conversationId,
+          conversation,
+          messages,
+          projectId
         });
-        eventBus.dispatchEvent(event);
 
         return {
           success: true,
@@ -298,15 +297,12 @@ export function createConversationManager({
       browserService.setSearchParam('chatId', convId);
 
       // Emit creation event
-      const event = new CustomEvent('conversation:created', {
-        detail: {
-          conversationId: conversation.id,
-          projectId,
-          title: conversation.title,
-          conversation
-        }
+      _emit('conversation:created', {
+        conversationId: conversation.id,
+        projectId,
+        title: conversation.title,
+        conversation
       });
-      eventBus.dispatchEvent(event);
 
       return {
         success: true,
@@ -347,13 +343,10 @@ export function createConversationManager({
       }
 
       // Emit deletion event
-      const event = new CustomEvent('conversation:deleted', {
-        detail: {
-          conversationId,
-          wasActive: conversationId === state.currentConversationId
-        }
+      _emit('conversation:deleted', {
+        conversationId,
+        wasActive: conversationId === state.currentConversationId
       });
-      eventBus.dispatchEvent(event);
 
       return { success: true, conversationId };
     } catch (error) {
@@ -452,14 +445,11 @@ export function createConversationManager({
       const messages = response.data?.messages || [];
       
       // Emit messages loaded event
-      const event = new CustomEvent('conversation:messagesLoaded', {
-        detail: {
-          conversationId,
-          messages,
-          projectId
-        }
+      _emit('conversation:messagesLoaded', {
+        conversationId,
+        messages,
+        projectId
       });
-      eventBus.dispatchEvent(event);
 
       return { success: true, messages, conversationId };
     } catch (error) {
@@ -488,13 +478,10 @@ export function createConversationManager({
     
     if (oldId !== id) {
       // Emit conversation change event
-      const event = new CustomEvent('conversation:changed', {
-        detail: {
-          oldConversationId: oldId,
-          newConversationId: id
-        }
+      _emit('conversation:changed', {
+        oldConversationId: oldId,
+        newConversationId: id
       });
-      eventBus.dispatchEvent(event);
     }
   }
 

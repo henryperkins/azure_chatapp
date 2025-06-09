@@ -140,9 +140,7 @@ export function createChatManager({
         chatUIController.appendMessage(aiEl);
       }
 
-      chatBus.dispatchEvent(new CustomEvent('chat:messageSent', {
-        detail: { text: content, response: responseData },
-      }));
+      eventService.emit('chat:messageSent', { text: content, response: responseData });
     } catch (err) {
       chatUIController.hideTypingIndicator();
       logger.error('[ChatManager] sendMessage failed', err, { context: MODULE_CONTEXT });
@@ -165,7 +163,10 @@ export function createChatManager({
     // sub-modules provide their own cleanup(); call if present.
     [conversationManager, messageHandler, chatUIEnhancements].forEach((mod) => {
       if (mod && typeof mod.cleanup === 'function') {
-        try { mod.cleanup(); } catch {/* ignore */}
+        try { mod.cleanup(); }
+        catch (err) {
+          logger.error('[ChatManager] sub-module cleanup failed', err, { context: MODULE_CONTEXT });
+        }
       }
     });
 

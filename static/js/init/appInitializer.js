@@ -1350,6 +1350,7 @@ export function createAppInitializer(opts = {}) {
                         browserService,
                         tokenStatsManager: DependencySystem.modules.get('tokenStatsManagerProxy') || DependencySystem.modules.get('tokenStatsManager'),
                         modelConfig: DependencySystem.modules.get('modelConfig'),
+                        eventService: DependencySystem.modules.get('eventService'),
                         eventBus: DependencySystem.modules.get('appBus') || DependencySystem.modules.get('eventBus'),
                         DependencySystem,
                         CHAT_CONFIG: APP_CONFIG?.CHAT || { DEFAULT_MODEL: 'gpt-4' }
