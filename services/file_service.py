@@ -55,7 +55,7 @@ class FileService:
         self,
         project_id: UUID,
         file: UploadFile,
-        user_id: int,
+        user_id: Optional[int] = None,
         *,
         index_kb: bool = False,
         background_tasks: Optional[BackgroundTasks] = None,
@@ -66,7 +66,9 @@ class FileService:
         Args:
             project_id: Target project UUID
             file: Uploaded file object
-            user_id: User performing the upload
+        user_id: (Optional) User performing the upload; ``None`` when the
+                operation is executed by a background system task or when the
+                caller does not represent an authenticated user.
             index_kb: Whether to index file in knowledge base
             background_tasks: Optional background task queue
 

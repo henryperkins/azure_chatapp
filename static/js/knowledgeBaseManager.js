@@ -106,7 +106,25 @@ export function createKnowledgeBaseManager(ctx) {
 
       if (resp.status === "success") {
         logger.info(`[${MODULE}][toggleKnowledgeBase] Successfully toggled KB to ${enabled} for project ${pid}.`, { context: MODULE });
-        if (ctx.state.knowledgeBase) {
+        // Ensure local KB state object exists and reflects the new status
+        if (!ctx.state.knowledgeBase) {
+          /*
+           * When the user toggles the switch while the component is in the
+           * inactive placeholder view, `ctx.state.knowledgeBase` may have been
+           * cleared by `_showInactiveState()`.  In that scenario we still need
+           * a minimal local KB object so that downstream render helpers know
+           * there *is* a KB attached and that it is now active.  We construct
+           * a stub from the information returned by the toggle endpoint and
+           * merge it later with the full project details once they are
+           * re-fetched.
+           */
+          const kbId = (resp?.data && resp.data.knowledge_base_id) ?? resp.knowledge_base_id;
+          ctx.state.knowledgeBase = {
+            id: kbId,
+            project_id: pid,
+            is_active: enabled,
+          };
+        } else {
           ctx.state.knowledgeBase.is_active = enabled;
         }
         ctx._updateStatusIndicator(enabled); // UI update
@@ -1034,7 +1052,10 @@ export function createKnowledgeBaseManager(ctx) {
   // Module/component cleanup function
   function cleanup() {
     // Clean up any event listeners, intervals, etc.
-    ctx.eventHandlers.cleanupListeners({ context: "file-deletion" });
+    if (ctx?.eventHandlers?.cleanupListeners) {
+      ctx.eventHandlers.cleanupListeners({ context: MODULE });
+      ctx.eventHandlers.cleanupListeners({ context: "file-deletion" }); // legacy sub-context
+    }
 
   }
 

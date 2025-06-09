@@ -456,13 +456,53 @@ export function createEventHandlers({
   // PROJECT MODAL FORM
 
   function setupProjectModalForm() {
+    const formEl = domAPI.getElementById('projectModalForm');
+    /* Prevent duplicate listener registration which led to multiple
+       submissions and validation errors after the first successful save. */
+    if (!formEl || domAPI.getDataAttribute(formEl, 'ehBound')) {
+      return; // Already bound or element missing
+    }
     const pm = _projectManager || DependencySystem.modules.get('projectManager');
     if (!pm) {
       return;
     }
-    async function handleProjectFormSubmit(formData) {
+    async function handleProjectFormSubmit(formData, form) {
       const data = Object.fromEntries(formData.entries());
-      if (data.max_tokens) data.max_tokens = parseInt(data.max_tokens, 10);
+      // Normalise inputs -------------------------------------------------
+      if (typeof data.name === 'string') data.name = data.name.trim();
+      /*
+       * Back-compat: the HTML form was recently updated to use the camel-case
+       * field name `maxTokens` instead of the original snake-case
+       * `max_tokens`.  Accept either version so the handler keeps working even
+       * if only one of them is present.
+       */
+      if (data.max_tokens == null && data.maxTokens != null) {
+        data.max_tokens = data.maxTokens; // normalise to the original API field
+      }
+
+      if (data.max_tokens) {
+        data.max_tokens = parseInt(data.max_tokens, 10);
+      }
+      // Normalise project name (support `projectName` alias used in older HTML)
+      if (data.name == null && typeof data.projectName === 'string') {
+        data.name = data.projectName;
+      }
+
+      /* Safari quirk / dynamic DOM manipulation guard  
+         There are edge-cases where the <input name="name"> element exists in
+         the form but its value is not picked up by `new FormData(form)` – for
+         instance when the element is temporarily removed/disabled by a
+         validation plugin just before the submit event bubbles.  As an extra
+         safety-net we read the current value from the DOM when FormData missed
+         it. */
+      if (!data.name) {
+        const nameEl = form?.querySelector?.('#projectModalNameInput');
+        if (nameEl && typeof nameEl.value === 'string') {
+          data.name = nameEl.value.trim();
+        }
+      }
+
+      // Validation -------------------------------------------------------
       if (!data.name) {
         throw new Error('Project name is required.');
       }
@@ -481,6 +521,8 @@ export function createEventHandlers({
         onError: handleProjectFormError
       }
     );
+    // Mark as bound to avoid double registration
+    domAPI.setDataAttribute(formEl, 'ehBound', '1');
   }
 
   // CONTENT ELEMENTS

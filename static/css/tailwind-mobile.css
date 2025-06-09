@@ -7,7 +7,93 @@
 
 /* DaisyUI plugin with CSS-first approach */
 @plugin "daisyui" {
+  /* Register our custom themes created below and set them as defaults */
   themes: azure-light --default, dracula-enhanced --prefersdark;
+}
+
+/* ------------------------------------------------------------------
+   Custom DaisyUI themes – defined via the `daisyui/theme` plugin so
+   that component utilities like `btn-primary` follow our brand
+   palette automatically.  Colours reference the variables already
+   declared in the @theme block above, keeping one source-of-truth.
+------------------------------------------------------------------- */
+
+@plugin "daisyui/theme" {
+  /* ---------------------------------------------------------------
+     Azure Light – corporate-style light theme
+  --------------------------------------------------------------- */
+  name: "azure-light";
+  default: true;
+  prefersdark: false;
+  color-scheme: light;
+
+  /* Map DaisyUI semantic tokens to design-system variables */
+  --color-primary: var(--color-primary);
+  --color-primary-content: var(--color-primary-content);
+  --color-secondary: var(--color-secondary);
+  --color-secondary-content: var(--color-secondary-content);
+  --color-accent: var(--color-accent);
+  --color-accent-content: var(--color-primary-content);
+
+  --color-neutral: var(--color-base-300);
+  --color-neutral-content: var(--color-base-content);
+
+  --color-base-100: var(--color-base-100);
+  --color-base-200: var(--color-base-200);
+  --color-base-300: var(--color-base-300);
+  --color-base-content: var(--color-base-content);
+
+  --color-info: var(--color-primary);
+  --color-info-content: var(--color-primary-content);
+  --color-success: var(--color-success);
+  --color-success-content: var(--color-success-content);
+  --color-warning: var(--color-warning);
+  --color-warning-content: var(--color-warning-content);
+  --color-error: var(--color-error);
+  --color-error-content: var(--color-error-content);
+
+  /* Rounded corners consistent across components */
+  --radius-selector: 0.5rem;
+  --radius-field: 0.375rem;
+  --radius-box: 0.75rem;
+}
+
+@plugin "daisyui/theme" {
+  /* ---------------------------------------------------------------
+     Dracula Enhanced – opinionated dark mode variant extending the
+     classic Dracula palette with improved contrast ratios.
+  --------------------------------------------------------------- */
+  name: "dracula-enhanced";
+  prefersdark: true;
+  color-scheme: dark;
+
+  --color-primary: 135 56 239;              /* purple-ish */
+  --color-primary-content: 0 0 0;
+  --color-secondary: 59 130 246;            /* blue */
+  --color-secondary-content: 0 0 0;
+  --color-accent: 96 165 250;               /* light-blue */
+  --color-accent-content: 0 0 0;
+
+  --color-neutral: 50 53 70;
+  --color-neutral-content: 240 240 240;
+
+  --color-base-100: rgb(var(--b1) / 1);
+  --color-base-200: rgb(var(--b2) / 1);
+  --color-base-300: rgb(var(--b3) / 1);
+  --color-base-content: var(--color-base-content);
+
+  --color-info: 76 139 245;
+  --color-info-content: 255 255 255;
+  --color-success: var(--color-success);
+  --color-success-content: var(--color-success-content);
+  --color-warning: var(--color-warning);
+  --color-warning-content: var(--color-warning-content);
+  --color-error: var(--color-error);
+  --color-error-content: var(--color-error-content);
+
+  --radius-selector: 0.5rem;
+  --radius-field: 0.375rem;
+  --radius-box: 0.75rem;
 }
 
 /* Content paths are configured in tailwind.config.js for DaisyUI compatibility */

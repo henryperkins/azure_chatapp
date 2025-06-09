@@ -6,7 +6,32 @@ services/client_log_service.py - Business logic for client log processing
 
 import logging
 import json
-from typing import List, Dict, Any
+from typing import List, Dict, Any, cast, Literal, TypedDict
+
+# Typing helpers – fall back to local definitions if running with an older
+# version of `sentry-sdk` that doesn't expose the (private) `_types` module at
+# runtime. These aliases exist purely to satisfy static type checkers like
+# Pylance/mypy; they have no runtime impact.
+try:
+    # Pylance ships stubs that expose these, but the runtime module might not.
+    from sentry_sdk._types import LogLevelStr, Event  # type: ignore
+except Exception:  # pragma: no cover – runtime-only fallback
+
+    LogLevelStr = Literal[
+        "fatal",
+        "critical",
+        "error",
+        "warning",
+        "info",
+        "debug",
+    ]
+
+    class _EventDict(TypedDict, total=False):
+        message: str
+        level: LogLevelStr
+        extra: Dict[str, Any]
+
+    Event = _EventDict  # type: ignore
 from datetime import datetime, timedelta, timezone
 import aiofiles
 import sentry_sdk
@@ -118,7 +143,13 @@ class ClientLogService:
                 scope.set_extra("log_upload_context", request_context)
 
                 # Create more structured Sentry events for error logs with data payloads
-                sentry_event_level = getattr(entry, "level", "error").lower() if hasattr(entry, "level") else "error"
+                raw_level: str = (
+                    getattr(entry, "level", "error").lower()
+                    if hasattr(entry, "level")
+                    else "error"
+                )
+
+                sentry_event_level = self._normalize_sentry_level(raw_level)
 
                 # If entry.data looks like an Error object (from the browser), capture as such
                 client_data = getattr(entry, "data", None)
@@ -126,14 +157,16 @@ class ClientLogService:
                     "name" in client_data or "stack" in client_data
                 ):
                     # Optionally: synthesize a "synthetic exception" if stack/message present
-                    sentry_sdk.capture_event({
+                    event: Event = {
                         "message": f"[CLIENT] {entry.message}",
                         "level": sentry_event_level,
                         "extra": {
                             "client_error_details": client_data,
-                            "original_client_log": entry.dict(exclude_none=True)
-                        }
-                    })
+                            "original_client_log": entry.dict(exclude_none=True),
+                        },
+                    }
+
+                    sentry_sdk.capture_event(event)
                 else:
                     sentry_sdk.capture_message(
                         f"[CLIENT] {entry.message}",
@@ -178,3 +211,34 @@ class ClientLogService:
         ]
         for key in expired:
             del self.error_cache[key]
+
+    # ---------------------------------------------------------------------
+    # Internal helpers
+    # ---------------------------------------------------------------------
+
+    @staticmethod
+    def _normalize_sentry_level(level: str) -> LogLevelStr:
+        """Coerce arbitrary string into a valid Sentry ``LogLevelStr``.
+
+        The official Sentry type stubs restrict the *level* field to the set
+        of log level string literals.  Runtime code is lenient – anything is
+        accepted – but static analyzers (e.g., Pylance, mypy) rightfully flag
+        dynamic ``str`` values as incompatible.
+
+        This helper maps unknown/unsupported values to ``"error"`` which is a
+        sensible and safe default for client-side error forwarding.
+        """
+        allowed: tuple[LogLevelStr, ...] = (
+            "fatal",
+            "critical",
+            "error",
+            "warning",
+            "info",
+            "debug",
+        )
+
+        normalized = level.lower()
+        if normalized not in allowed:  # type: ignore[operator]
+            return cast(LogLevelStr, "error")
+
+        return cast(LogLevelStr, normalized)

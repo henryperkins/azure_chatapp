@@ -14,6 +14,9 @@ import { createDomReadinessService } from "../utils/domReadinessService.js";
 import { createLogger } from "../logger.js";
 import { createCustomEventPolyfill } from "../utils/polyfillCustomEvent.js";
 import { createKnowledgeBaseReadinessService } from "../knowledgeBaseReadinessService.js";
+// Front-end KB factories registered for DI (allowed direct import here per guard-rails)
+import { createKnowledgeBaseManager } from "../knowledgeBaseManager.js";
+import { createKnowledgeBaseSearchHandler } from "../knowledgeBaseSearchHandler.js";
 import {
     setBrowserService as registerSessionBrowserService,
     getSessionId as coreGetSessionId
@@ -182,6 +185,24 @@ export function createAppInitializer(opts = {}) {
         if (!(k in opts)) {
             opts[k] = DI[k];
         }
+    }
+
+    // --------------------------------------------------------------
+    // Register Knowledge-Base factories so downstream modules can
+    // resolve them via DependencySystem (guard-rails compliant).
+    // Only appInitializer.js (and app.js) may import factories
+    // directly; every other module must obtain them through DI.
+    // --------------------------------------------------------------
+    // DependencySystem is declared later via destructuring which puts it in a
+    // temporal-dead-zone until that point.  Referencing it here therefore
+    // triggers “Cannot access 'DependencySystem' before initialization”.
+    // Use the already-available reference from `opts` instead.
+    const ds = opts.DependencySystem;
+    if (!ds.modules.get('KBManagerFactory')) {
+        ds.register('KBManagerFactory', createKnowledgeBaseManager);
+    }
+    if (!ds.modules.get('KBSearchHandlerFactory')) {
+        ds.register('KBSearchHandlerFactory', createKnowledgeBaseSearchHandler);
     }
 
     // Destructure to match the original createAppInitializer signature

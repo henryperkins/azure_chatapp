@@ -410,14 +410,24 @@ export function createProjectManager({
         };
         logger.debug(`[${MODULE}] Authentication state:`, authState);
         
-        // Detect auth state mismatch - user is marked as authenticated but has no token
-        if (authState.isAuthenticated && !authState.hasAuthToken) {
-          logger.warn(`[${MODULE}] Auth state mismatch – user marked authenticated but Authorization header missing. Forcing re-auth to avoid 401.`);
-          const error = new Error('Authentication token missing or expired. Please log in again.');
-          error.status = 401;
-          error.code = 'AUTH_TOKEN_MISSING';
-          throw error;
-        }
+        /*
+         * Previous logic threw an error when the in-memory token cache was empty
+         * even though the user was considered authenticated (isAuthenticated).
+         * This is a common situation when the backend issued the access token
+         * as an **HttpOnly cookie** – JavaScript cannot read that cookie, so
+         * getAuthHeader() understandably returns an empty object.
+         *
+         * The backend, however, will still receive the cookie because all
+         * requests are executed with `credentials: 'include'` inside the
+         * projectManager _req wrapper.  Rejecting the call on the client side
+         * therefore leads to false “Please log in again” errors even though
+         * the session is perfectly valid.
+         *
+         * Fix: do **not** treat the missing Authorization header as fatal.
+         * We simply proceed – if the server really cannot authenticate the
+         * request it will reply with 401/403 and the normal error handling
+         * path (this._handleErr) will take over.
+         */
         
         let detailRes;
         try {
@@ -824,12 +834,13 @@ export function createProjectManager({
       return { validatedFiles, invalidFiles };
     }
 
-    async uploadFileWithRetry(projectId, { file }, maxRetries = 3) {
+    async uploadFileWithRetry(projectId, { file, index_kb = true } = {}, maxRetries = 3) {
       return retryWithBackoff(
         async () => {
           const formData = new FormData();
           formData.append('file', file);
           formData.append('projectId', projectId);
+          formData.append('index_kb', index_kb ? 'true' : 'false');
           await this._req(
             `/api/projects/${projectId}/files/`,
             { method: 'POST', body: formData },

@@ -67,7 +67,9 @@ export function createFileUploadComponent({
       dragZone: elements?.dragZone || '#dragDropZone',
       uploadProgress: elements?.uploadProgress || '#filesUploadProgress',
       progressBar: elements?.progressBar || '#fileProgressBar',
-      uploadStatus: elements?.uploadStatus || '#uploadStatus'
+      uploadStatus: elements?.uploadStatus || '#uploadStatus',
+      // optional aria enhancements added below
+      indexKbCheckbox: elements?.indexKbCheckbox || '#indexKbCheckbox'
     }
   };
 
@@ -95,9 +97,22 @@ const _scheduler = scheduler || {
     try {
       if (domReadinessService) {
         // Only pass string selectors, not DOM element objects
-        const stringSelectors = Object.values(_elements.selectors).filter(
-          selector => typeof selector === 'string'
-        );
+        // Only wait for selectors that are strictly required for a successful
+        // bootstrap. Optional elements (e.g. the "Index KB" checkbox) must *not*
+        // block initialization – their absence should be tolerated.
+
+        const REQUIRED_SELECTOR_KEYS = [
+          'fileInput',
+          'uploadBtn',
+          'dragZone',
+          'uploadProgress',
+          'progressBar',
+          'uploadStatus'
+        ];
+
+        const stringSelectors = REQUIRED_SELECTOR_KEYS
+          .map((key) => _elements.selectors[key])
+          .filter((selector) => typeof selector === 'string');
         if (stringSelectors.length > 0) {
           await domReadinessService.dependenciesAndElements({
             domSelectors: stringSelectors,
@@ -140,7 +155,8 @@ const _scheduler = scheduler || {
       'dragZone',
       'uploadProgress',
       'progressBar',
-      'uploadStatus'
+      'uploadStatus',
+      'indexKbCheckbox'
     ];
 
     for (const key of elementKeys) {
@@ -171,6 +187,14 @@ const _scheduler = scheduler || {
     ) {
       return false;
     }
+
+    // Accessibility enhancements for dragZone
+    if (els.dragZone) {
+      domAPI.setAttribute?.(els.dragZone, 'role', 'button');
+      domAPI.setAttribute?.(els.dragZone, 'tabindex', '0');
+      domAPI.setAttribute?.(els.dragZone, 'aria-label', 'Upload files by clicking or dropping');
+    }
+
     return true;
   }
 
@@ -199,10 +223,13 @@ const _scheduler = scheduler || {
         track(dragZone, eventName, (e) => {
           e.preventDefault();
           e.stopPropagation();
-          if (eventName === 'dragenter' || eventName === 'dragover') {
+          const isEnter = (eventName === 'dragenter' || eventName === 'dragover');
+          if (isEnter) {
             dragZone.classList.add('border-primary');
+            domAPI.setAttribute?.(dragZone, 'aria-busy', 'true');
           } else {
             dragZone.classList.remove('border-primary');
+            domAPI.removeAttribute?.(dragZone, 'aria-busy');
             if (eventName === 'drop') {
               _handleFileDrop(e);
             }
@@ -250,16 +277,27 @@ const _scheduler = scheduler || {
 
     const { validFiles, invalidFiles } = _validateFiles(files);
 
-    invalidFiles.forEach(({ file, error }) => {
-      logger.error('[FileUploadComponent][_uploadFiles] Invalid file',
-        {
-          status: 400,
-          data: { fileName: file?.name },
-          message: String(error)
-        },
-        { context: MODULE_CONTEXT }
-      );
-    });
+    if (invalidFiles.length > 0) {
+      const firstErr = invalidFiles[0];
+      if (_elements.fileInput && typeof _elements.fileInput.setCustomValidity === 'function') {
+        _elements.fileInput.setCustomValidity(firstErr.message || 'Invalid file');
+        _elements.fileInput.reportValidity?.();
+        // clear message after a short delay so subsequent opens are clean
+        _scheduler.setTimeout(() => {
+          _elements.fileInput.setCustomValidity('');
+        }, 4000);
+      }
+      invalidFiles.forEach(({ file, error }) => {
+        logger.error('[FileUploadComponent][_uploadFiles] Invalid file',
+          {
+            status: 400,
+            data: { fileName: file?.name },
+            message: String(error)
+          },
+          { context: MODULE_CONTEXT }
+        );
+      });
+    }
 
     if (validFiles.length === 0) {
       return;
@@ -280,11 +318,14 @@ const _scheduler = scheduler || {
   }
 
   async function _uploadFile(pid, file) {
+    const indexKbChecked = _elements.indexKbCheckbox
+      ? Boolean(_elements.indexKbCheckbox.checked)
+      : true;
     try {
       if (typeof projectManager.uploadFileWithRetry !== "function") {
         throw new Error('projectManager.uploadFileWithRetry function not available');
       }
-      await projectManager.uploadFileWithRetry(pid, { file });
+      await projectManager.uploadFileWithRetry(pid, { file, index_kb: indexKbChecked });
       _updateUploadProgress(1, 0);
     } catch (err) {
       logger.error("[FileUploadComponent] uploadFile",

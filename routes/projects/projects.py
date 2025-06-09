@@ -152,6 +152,14 @@ async def create_project(
                 project_id=project.id,
             )
 
+            # The conversation creation commits the session, which expires all
+            # attributes (``expire_on_commit=True``).  Re-load the KB
+            # relationship to avoid an implicit lazy-load – implicit loads
+            # inside an async context trigger the notorious
+            # "greenlet_spawn has not been called; can't call await_only()"
+            # error.  An explicit refresh keeps the operation fully async-safe.
+            await db.refresh(project, ["knowledge_base"])
+
             duration = (time.time() - start_time) * 1000
             metrics.distribution(
                 "project.create.duration", duration, unit="millisecond"

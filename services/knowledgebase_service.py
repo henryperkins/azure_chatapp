@@ -150,29 +150,49 @@ async def ensure_project_has_knowledge_base(
     project_id: UUID, db: AsyncSession, user_id: Optional[int] = None
 ) -> KnowledgeBase:
     """Ensures a project has an active knowledge base with locking protection against race conditions"""
+    # ------------------------------------------------------------------
+    # Avoid synchronous relationship lazy-loading in AsyncSession
+    # ------------------------------------------------------------------
+    # Accessing `project.knowledge_base` directly would trigger a lazy-load
+    # that SQLAlchemy cannot fulfil inside an async context without a
+    # running greenlet, resulting in the familiar
+    #   “greenlet_spawn has not been called; can't call await_only() here”
+    # error.
+    #
+    # Instead, query the KnowledgeBase table explicitly which keeps all
+    # database IO fully `await`-driven and therefore greenlet-free.
+    # ------------------------------------------------------------------
+
     project = await _validate_user_and_project(project_id, user_id, db)
 
-    # Check if project already has a knowledge base (common case)
-    if project.knowledge_base:
-        kb = project.knowledge_base
-        if kb and not kb.is_active:
+    # Quick path: look up KB directly without touching relationship loader
+    from sqlalchemy import select
+    result = await db.execute(
+        select(KnowledgeBase).where(KnowledgeBase.project_id == project_id)
+    )
+    kb = result.scalars().first()
+
+    if kb:
+        if not kb.is_active:
             kb.is_active = True
             await save_model(db, kb)
-            logger.info(f"Reactivated knowledge base {kb.id} for project {project_id}")
+            logger.info(
+                f"Reactivated knowledge base {kb.id} for project {project_id}"
+            )
         return kb
 
     # Acquire a database-level lock to prevent race conditions
-    # First, refresh the project to ensure we have latest state
+    # First, refresh the project to ensure we have latest state (ensures we
+    # are working with the newest row version when creating the KB)
     await db.refresh(project)
 
-    # Double-check if KB was created between initial check and lock acquisition
-    if project.knowledge_base:
-        kb = project.knowledge_base
-        if kb:
-            logger.info(
-                f"KB already created in concurrent request for project {project_id}"
-            )
-            return kb
+    # Double-check after refresh
+    result = await db.execute(
+        select(KnowledgeBase).where(KnowledgeBase.project_id == project_id)
+    )
+    kb_existing = result.scalars().first()
+    if kb_existing:
+        return kb_existing
 
     try:
         # Create new knowledge base
@@ -190,13 +210,17 @@ async def ensure_project_has_knowledge_base(
         # it could be due to a race condition, try to get the KB again
         if "already has a knowledge base" in str(e):
             await db.refresh(project)
-            if project.knowledge_base:
-                kb = project.knowledge_base
-                if kb:
-                    logger.info(
-                        f"Using KB created by concurrent request for project {project_id}"
-                    )
-                    return kb
+            # Try the explicit lookup again after refresh – another request
+            # might have created and committed a KB in the meantime.
+            result_retry = await db.execute(
+                select(KnowledgeBase).where(KnowledgeBase.project_id == project_id)
+            )
+            kb_retry = result_retry.scalars().first()
+            if kb_retry:
+                logger.info(
+                    f"Using KB created by concurrent request for project {project_id}"
+                )
+                return kb_retry
         # If we couldn't recover, re-raise the exception
         raise
 
@@ -601,7 +625,9 @@ async def get_knowledge_base_health(
     kb = await get_by_id(db, KnowledgeBase, knowledge_base_id)
     if not kb:
         raise HTTPException(status_code=404, detail="Knowledge base not found")
-    vdb = await VectorDBManager.get_for_project(kb.project_id, db=db)
+    # Cast ``kb.project_id`` to ``UUID`` to satisfy static type checkers –
+    # SQLAlchemy model attributes are not precisely typed.
+    vdb = await VectorDBManager.get_for_project(UUID(str(kb.project_id)), db=db)
     stats = await vdb.get_stats()
     return {"knowledge_base_id": str(kb.id), "vector_db": stats}
 

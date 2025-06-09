@@ -3,8 +3,7 @@
  * @description Refactored factory: NO global document/window. All DOM and event wiring via DI.
  */
 
-import { createKnowledgeBaseSearchHandler } from './knowledgeBaseSearchHandler.js';
-import { createKnowledgeBaseManager } from './knowledgeBaseManager.js';
+// All sub-factories must be resolved via DependencySystem to respect DI guard-rails.
 import { ELEMENT_SELECTORS } from './utils/selectorConstants.js';
 
 const MODULE = "KnowledgeBaseComponent";
@@ -32,6 +31,17 @@ export function createKnowledgeBaseComponent(options = {}) {
   const domAPI = getDep("domAPI");
   const domReadinessService = getDep("domReadinessService");
   const logger = getDep("logger"); // Ensure logger is fetched for constructor scope if needed early
+
+  // Resolve KB sub-factories via DI (registered in appInitializer)
+  const createKnowledgeBaseManager = getDep("KBManagerFactory");
+  const createKnowledgeBaseSearchHandler = getDep("KBSearchHandlerFactory");
+
+  if (!createKnowledgeBaseManager || typeof createKnowledgeBaseManager !== 'function') {
+    throw new Error(`[${MODULE}] Missing KBManagerFactory (createKnowledgeBaseManager) in DependencySystem`);
+  }
+  if (!createKnowledgeBaseSearchHandler || typeof createKnowledgeBaseSearchHandler !== 'function') {
+    throw new Error(`[${MODULE}] Missing KBSearchHandlerFactory (createKnowledgeBaseSearchHandler) in DependencySystem`);
+  }
 
   if (!domReadinessService)
     throw new Error(`[${MODULE}] requires 'domReadinessService' DI`);
@@ -388,9 +398,20 @@ export function createKnowledgeBaseComponent(options = {}) {
       const addListener = (elRef, type, fn, opts = {}) => {
         const element = typeof elRef === 'string' ? this.elements[elRef] : elRef;
         if (element) {
-          EH.trackListener(element, type, fn, { ...opts, context: MODULE_CONTEXT, description: opts.description || `${elRef}_${type}` });
+          EH.trackListener(element, type, fn, {
+            ...opts,
+            context: MODULE_CONTEXT,
+            description: opts.description || `${elRef}_${type}`
+          });
         } else {
-          this.logger.warn(`[${MODULE}] Element ref "${elRef}" not found for listener type "${type}".`, { context: MODULE_CONTEXT });
+          // When optional UI fragments (e.g., mobile view without search bar) are
+          // not present, quietly skip listener registration.  A debug-level log
+          // prevents noisy WARN spam while still allowing deep diagnostics when
+          // LOG_LEVEL is set to DEBUG.
+          this.logger.debug(
+            `[${MODULE}] Optional element ref "${elRef}" absent – skipped ${type} listener registration.`,
+            { context: MODULE_CONTEXT }
+          );
         }
       };
 

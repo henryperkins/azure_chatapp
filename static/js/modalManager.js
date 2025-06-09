@@ -1004,19 +1004,11 @@ class ProjectModal {
 
     this.logger.debug?.('[ProjectModal] Setting up event listeners.');
 
-    if (this.formElement) {
-      const submitHandler = async (e) => {
-        // e.preventDefault() is called in handleSubmit
-        await this.handleSubmit(e);
-      };
-      this._bindEvent(
-        this.formElement,
-        'submit',
-        submitHandler,
-        'ProjectModal form submit', // More specific description
-        { passive: false }
-      );
-    }
+    // Submit handling is now managed centrally by EventHandler.setupProjectModalForm.
+    // This avoids registering multiple 'submit' listeners on the same form which
+    // previously caused a second submission after the form was reset, triggering
+    // spurious “Project name is required” validation errors.  Local submit
+    // binding has therefore been removed.
 
     const cancelBtn = this.modalElement.querySelector('#projectCancelBtn');
     if (cancelBtn) {
