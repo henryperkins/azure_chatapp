@@ -277,7 +277,9 @@ export function createAuth(deps) {
         return storageService.getItem('access_token');
       }
       return null;
-    } catch {
+    } catch (err) {
+      logger.error('[AuthModule] getAccessToken failed', err,
+        { context: MODULE_CONTEXT + ':getAccessToken' });
       return null;
     }
   }
@@ -289,7 +291,8 @@ export function createAuth(deps) {
   // === FORM INTEGRATION ===
   function bindLoginForm(formElement) {
     if (!formElement) {
-      logger.warn('[AuthModule] bindLoginForm called with null form element');
+      logger.warn('[AuthModule] bindLoginForm called with null form element',
+                  { context: MODULE_CONTEXT + ':bindLoginForm' });
       return;
     }
 
@@ -336,7 +339,8 @@ export function createAuth(deps) {
 
   function bindRegisterForm(formElement) {
     if (!formElement) {
-      logger.warn('[AuthModule] bindRegisterForm called with null form element');
+      logger.warn('[AuthModule] bindRegisterForm called with null form element',
+                  { context: MODULE_CONTEXT + ':bindRegisterForm' });
       return;
     }
 
@@ -394,8 +398,9 @@ export function createAuth(deps) {
       // Initialize from stored data
       const storedUser = stateManager.initializeFromStorage();
       if (storedUser) {
-        logger.debug('[AuthModule] Found stored user data, will verify session', { 
-          username: storedUser.username 
+        logger.debug('[AuthModule] Found stored user data, will verify session', {
+          username: storedUser.username,
+          context : MODULE_CONTEXT + ':initialize'
         });
       }
 
@@ -411,7 +416,8 @@ export function createAuth(deps) {
         setInterval(() => {
           if (stateManager.shouldVerifySession()) {
             verifySession().catch(err => {
-              logger.warn('[AuthModule] Periodic session verification failed', err);
+              logger.warn('[AuthModule] Periodic session verification failed', err,
+                          { context: MODULE_CONTEXT + ':periodicVerify' });
             });
           }
         }, 60000);
