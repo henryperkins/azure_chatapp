@@ -266,11 +266,23 @@ export function createChatManager(deps = {}) {
       this.inputField = null;
       this.sendButton = null;
       this.titleElement = null;
-      this.containerSelector = null;
-      this.messageContainerSelector = null;
-      this.inputSelector = null;
-      this.sendButtonSelector = null;
-      this.minimizeButtonSelector = null;
+
+      // ------------------------------------------------------------------
+      // Default DOM selector assignments
+      // ------------------------------------------------------------------
+      // The ChatManager must know where the chat UI lives *before* the first
+      // call to .initialize().  Previously these values were left `null` and
+      // expected to be supplied by the caller which led to initialisation
+      // failures when `ProjectDashboard` invoked ChatManager without explicit
+      // selector arguments.  By providing sane defaults that match the
+      // canonical selector constants the ChatManager can bootstrap itself
+      // reliably regardless of who triggers the first initialisation.
+      this.containerSelector           = SELECTORS.chatUIContainer;
+      this.messageContainerSelector    = SELECTORS.chatMessages;
+      this.inputSelector               = SELECTORS.chatInput;
+      this.sendButtonSelector          = SELECTORS.chatSendBtn;
+      this.titleSelector               = SELECTORS.chatTitle;
+      this.minimizeButtonSelector      = null; // No default – optional feature
       this._authChangeListener = null;
       this.modelConfig = this.modelConfigAPI.getConfig();
       this.DependencySystem = DependencySystem || undefined;

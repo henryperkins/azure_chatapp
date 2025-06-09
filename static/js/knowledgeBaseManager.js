@@ -444,8 +444,8 @@ export function createKnowledgeBaseManager(ctx) {
         ctx.domAPI.getElementById?.('knowledgeBaseSettingsModal');
     }
     let modal = ctx.elements.settingsModal;
-    if (!modal || typeof modal.showModal !== "function") {
-      logger.warn(`[${MODULE}][showKnowledgeBaseModal] Settings modal element not found or not a dialog. Aborting.`, { context: MODULE });
+    if (!modal) {
+      logger.error(`[${MODULE}][showKnowledgeBaseModal] #knowledgeBaseSettingsModal element not found – cannot open modal`, { context: MODULE });
       return;
     }
 
