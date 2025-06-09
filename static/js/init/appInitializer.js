@@ -548,10 +548,9 @@ export function createAppInitializer(opts = {}) {
                                 { detail },
                                 appBus
                             );
-                        } else if (appBus && typeof appBus.dispatchEvent === 'function') {
-                            appBus.dispatchEvent(
-                                handlers.createCustomEvent('currentProjectChanged', { detail })
-                            );
+                        const eventSvc = DependencySystem.modules.get('eventService');
+                        if (eventSvc?.emit) {
+                            eventSvc.emit('currentProjectChanged', detail);
                         }
 
                         // Legacy event
@@ -573,16 +572,11 @@ export function createAppInitializer(opts = {}) {
                                         },
                                         doc
                                     );
-                                } else if (domAPIlookup && typeof domAPIlookup.dispatchEvent === 'function') {
-                                    domAPIlookup.dispatchEvent(
-                                        doc,
-                                        handlers.createCustomEvent('projectSelected', {
-                                            detail: {
-                                                projectId: state.currentProject.id,
-                                                project: { ...state.currentProject }
-                                            }
-                                        })
-                                    );
+                                if (eventSvc?.emit) {
+                                    eventSvc.emit('projectSelected', {
+                                        projectId: state.currentProject.id,
+                                        project: { ...state.currentProject }
+                                    });
                                 }
                             }
                         }
