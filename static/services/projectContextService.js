@@ -42,6 +42,9 @@ export function createProjectContextService({ DependencySystem, logger, appModul
     navigationService = DependencySystem.modules?.get('navigationService');
   }
 
+  // Capture unified AppBus once at factory time – avoids later runtime look-ups.
+  const AppBus = DependencySystem.modules?.get('AppBus');
+
   if (!appModule || !appModule.state) {
     throw new Error('[projectContextService] appModule with state not available – DI order incorrect');
   }
@@ -233,11 +236,11 @@ export function createProjectContextService({ DependencySystem, logger, appModul
       try {
         const event = new CustomEvent('projectContextChanged', { detail });
         
-        // Emit on multiple buses for compatibility during transition
-        if (DependencySystem.modules?.get('appModule')?.appBus) {
-          DependencySystem.modules.get('appModule').appBus.dispatchEvent(event);
+        // Emit via the unified AppBus for new architecture
+        if (AppBus) {
+          AppBus.dispatchEvent(event);
         }
-        
+
         // Also emit on document for global listeners
         if (browserService?.getDocument) {
           browserService.getDocument().dispatchEvent(event);

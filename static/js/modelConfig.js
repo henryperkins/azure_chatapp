@@ -18,7 +18,8 @@ export function createModelConfig({
   storageHandler,
   sanitizer,
   scheduleTask,
-  logger
+  logger,
+  eventService = null
 } = {}) {
   // The entire module is wrapped inside this factory to avoid top-level side effects.
   const MODULE_CONTEXT = "ModelConfig";
@@ -59,13 +60,17 @@ export function createModelConfig({
     throw new Error("[ModelConfig] sanitizer with sanitize() is required");
   }
 
-  // Dedicated module event bus object. We rely on eventHandler for adding/removing listeners,
-  // rather than calling addEventListener directly.
-  const busTarget = new EventTarget();
-  dependencySystem?.modules?.register?.('modelConfigBus', busTarget);   // NEW
-
+  // Use unified eventService instead of local EventTarget
   function dispatchEventToBus(api, eventName, detailObj) {
-    busTarget.dispatchEvent(new CustomEvent(eventName, { detail: detailObj }));
+    if (eventService?.emit) {
+      eventService.emit(`modelConfig:${eventName}`, detailObj);
+    } else {
+      // Fallback to document-level events
+      const domAPI = dependencySystem?.modules?.get?.('domAPI');
+      if (domAPI?.getDocument) {
+        domAPI.getDocument().dispatchEvent(new CustomEvent(`modelConfig:${eventName}`, { detail: detailObj }));
+      }
+    }
   }
 
   function setupDependencies() {
@@ -209,15 +214,26 @@ export function createModelConfig({
   }
 
   /**
-   * Instead of directly busTarget.addEventListener, we use eventHandler.trackListener.
+   * Listen for config changes using unified eventService.
    */
   function onConfigChange(api, callback) {
     const listener = (evt) => {
-      if (evt.detail) callback(evt.detail);
+      const detail = evt.detail || evt;
+      if (detail) callback(detail);
     };
-    registerListener(api, busTarget, "modelConfigChanged", listener, {
-      description: "modelConfigBus onConfigChange",
-    });
+    
+    if (eventService?.on) {
+      eventService.on('modelConfig:modelConfigChanged', listener);
+    } else {
+      // Fallback to document-level events
+      const domAPI = dependencySystem?.modules?.get?.('domAPI');
+      if (domAPI?.getDocument && eventHandler?.trackListener) {
+        eventHandler.trackListener(domAPI.getDocument(), "modelConfig:modelConfigChanged", listener, {
+          description: "modelConfig onChange fallback",
+          context: MODULE_CONTEXT
+        });
+      }
+    }
   }
 
   function setStateFromConfig(state, config) {
@@ -932,9 +948,8 @@ export function createModelConfig({
         await domReadinessService.dependenciesAndElements(["app", "domAPI"]);
         initializeUI(api, state);
       },
-      // Provide a handle for advanced usage if another module wants to manually track or dispatch
-      // events. This ensures no direct global usage of addEventListener.
-      getEventBus: () => busTarget,
+      // Provide access to eventService for advanced usage
+      getEventService: () => eventService,
     };
 
     return modelApi;

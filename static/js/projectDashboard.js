@@ -25,7 +25,8 @@ export function createProjectDashboard({
   logger,
   sanitizer,
   APP_CONFIG,
-  moduleResolver
+  moduleResolver,
+  eventService = null
 }) {
   // ─────────────────────────────────────────────────────────────────────────
   // 1) Validate dependencies upfront
@@ -67,9 +68,8 @@ export function createProjectDashboard({
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // 2) Local event bus for the ProjectDashboard (avoid global doc events)
+  // 2) Use unified eventService instead of local event bus
   // ─────────────────────────────────────────────────────────────────────────
-  const dashboardBus = new EventTarget();
 
   // ─────────────────────────────────────────────────────────────────────────
   // 3) Class Definition: wrapped entirely inside the factory
@@ -85,7 +85,7 @@ export function createProjectDashboard({
       this.eventHandlers = eventHandlers;
       this.logger = logger;
       this.sanitizer = sanitizer;
-      this.dashboardBus = dashboardBus;
+      this.eventService = eventService;
 
       // Canonical safeHandler for this instance
       const _safeHandler = getSafeHandler(DependencySystem);
@@ -263,32 +263,28 @@ export function createProjectDashboard({
           // Mark initialized
           const initDuration = Date.now() - initStartTime;
 
-          // Dispatch an internal event on the local bus
-          this.dashboardBus.dispatchEvent(
-            new CustomEvent('projectDashboardInitialized', {
-              detail: {
-                success: true,
-                timestamp: Date.now(),
-                duration: initDuration
-              }
-            })
-          );
+          // Dispatch an internal event via unified eventService
+          if (this.eventService?.emit) {
+            this.eventService.emit('projectDashboard:initialized', {
+              success: true,
+              timestamp: Date.now(),
+              duration: initDuration
+            });
+          }
           return true;
         } catch (err) {
           logger.error('[ProjectDashboard][initialize]', err, { context: 'projectDashboard' });
           const initDuration = Date.now() - initStartTime;
 
-          this.dashboardBus.dispatchEvent(
-            new CustomEvent('projectDashboardInitialized', {
-              detail: {
-                success: false,
-                error: err,
-                errorMessage: err?.message,
-                timestamp: Date.now(),
-                duration: initDuration
-              }
-            })
-          );
+          if (this.eventService?.emit) {
+            this.eventService.emit('projectDashboard:initialized', {
+              success: false,
+              error: err,
+              errorMessage: err?.message,
+              timestamp: Date.now(),
+              duration: initDuration
+            });
+          }
           return false;
         }
       };
@@ -319,9 +315,10 @@ export function createProjectDashboard({
         this.eventHandlers.cleanupListeners({ context: 'projectDashboard' });
       }
 
-      // Detach any local-bus listeners and null-out the bus
-      this.dashboardBus?.dispatchEvent(new Event('dashboardDestroyed'));
-      this.dashboardBus = null;
+      // Emit destroy event via unified eventService
+      if (this.eventService?.emit) {
+        this.eventService.emit('projectDashboard:destroyed', {});
+      }
 
       // Cleanup readiness service if applicable
       if (typeof this.domReadinessService.destroy === 'function') {
@@ -466,9 +463,9 @@ export function createProjectDashboard({
 
       // Optionally dispatch 'projectLoaded' if we originally had the full object
       if (wasFullObject && project?.id) {
-        this.dashboardBus.dispatchEvent(
-          new CustomEvent('projectLoaded', { detail: project })
-        );
+        if (this.eventService?.emit) {
+          this.eventService.emit('projectDashboard:projectLoaded', project);
+        }
       }
 
       // Initialize chat manager if available
@@ -674,9 +671,9 @@ export function createProjectDashboard({
             'projectKnowledgeBaseRendered'
           ];
           events.forEach((evName) => {
-            this.dashboardBus.dispatchEvent(
-              new CustomEvent(evName, { detail: { projectId: pId } })
-            );
+            if (this.eventService?.emit) {
+              this.eventService.emit(`projectDashboard:${evName}`, { projectId: pId });
+            }
           });
         }, 3000);
       }
@@ -1035,8 +1032,8 @@ export function createProjectDashboard({
     showProjectList: dashboard.showProjectList.bind(dashboard),
     showProjectDetails: dashboard.showProjectDetails.bind(dashboard),
     cleanup: dashboard.cleanup.bind(dashboard),
-    // Optionally expose the local bus if needed:
-    dashboardBus: dashboard.dashboardBus,
+    // Expose eventService for compatibility:
+    eventService: dashboard.eventService,
     setProjectListComponent: (component) => {
       if (dashboard.components) dashboard.components.projectList = component;
       else dashboard.logger.warn('[ProjectDashboard] Components object not ready for projectList', { context: 'projectDashboard' });

@@ -28,10 +28,17 @@ import { createTokenStatsManagerProxy } from "../tokenStatsManagerProxy.js";
 import { createPollingService } from "../pollingService.js";
 // Optional Chat UI extensions (Phase-2)
 import { createChatExtensions } from "../chatExtensions.js";
+// Phase-2 – newly extracted ProjectDetails helpers
+import { createProjectDetailsRenderer } from "../projectDetailsRenderer.js";
+import { createProjectDataCoordinator } from "../projectDataCoordinator.js";
 // Unified Event Service (Phase-3) – replaces scattered AppBus/AuthBus/etc.
 import { createEventService } from "../../services/eventService.js";
 // UI State Service (Phase-2.3)
 import { createUIStateService } from "../uiStateService.js";
+// Phase-2 extracted auth modules
+import { createAuthFormHandler } from "../authFormHandler.js";
+import { createAuthApiService } from "../authApiService.js";
+import { createAuthStateManager } from "../authStateManager.js";
 
 // Phase-1 remediation: central auth state façade
 import { createAuthenticationService } from "../../services/authenticationService.js";
@@ -108,7 +115,7 @@ export function createAppInitializer(opts = {}) {
             eventHandlers
         });
         const { cleanup: customEventPolyfillCleanup } =
-              createCustomEventPolyfill({ browserService: opts.browserService, logger });
+            createCustomEventPolyfill({ browserService: opts.browserService, logger });
         DependencySystem.register('customEventPolyfill', {
             cleanup: customEventPolyfillCleanup
         });
@@ -175,7 +182,12 @@ export function createAppInitializer(opts = {}) {
         DependencySystem.register('AppBus', AppBus);
 
         // Create fully-featured eventService wrapper and register.
-        const eventService = createEventService({ logger, existingBus: AppBus });
+        const eventService = createEventService({
+            DependencySystem,
+            logger,
+            eventHandlers,
+            existingBus: AppBus
+        });
         DependencySystem.register('eventService', eventService);
 
         // Aliases for incremental migration – point to the same bus so legacy
@@ -206,14 +218,35 @@ export function createAppInitializer(opts = {}) {
         // ------------------------------------------------------------------
         const tokenStatsProxy = createTokenStatsManagerProxy({ DependencySystem, logger });
         DependencySystem.register('tokenStatsManagerProxy', tokenStatsProxy);
-        // Also expose under canonical name so ChatManager resolves it transparently
-        DependencySystem.register('tokenStatsManager', tokenStatsProxy);
+        // Note: tokenStatsManager will be registered later with real instance in createAndRegisterUIComponents
 
         // ------------------------------------------------------------------
         // Phase-2.3 – UI State Service registration
         // ------------------------------------------------------------------
         const uiStateService = createUIStateService({ logger });
         DependencySystem.register('uiStateService', uiStateService);
+
+        // ------------------------------------------------------------------
+        // Phase-2 – Auth Module Components registration
+        // ------------------------------------------------------------------
+        const authFormHandler = createAuthFormHandler({
+            domAPI, sanitizer, eventHandlers, logger, safeHandler
+        });
+        DependencySystem.register('authFormHandler', authFormHandler);
+
+        const authApiService = createAuthApiService({
+            apiClient: null, // will be set later when available
+            apiEndpoints: opts.apiEndpoints,
+            logger,
+            browserService: opts.browserService
+        });
+        DependencySystem.register('authApiService', authApiService);
+
+        const authStateManager = createAuthStateManager({
+            eventService, logger, browserService: opts.browserService,
+            storageService: null // will be set later if available
+        });
+        DependencySystem.register('authStateManager', authStateManager);
 
         // Provide everything we just created
         return {
@@ -325,7 +358,10 @@ export function createAppInitializer(opts = {}) {
         createAccessibilityEnhancements, createNavigationService,
         createHtmlTemplateLoader, createUiRenderer,
         createKnowledgeBaseComponent, createProjectDetailsEnhancements,
-        createTokenStatsManager
+        createTokenStatsManager,
+        // Phase-2 renderer / coordinator
+        createProjectDetailsRenderer,
+        createProjectDataCoordinator
     };
     for (const [k, v] of Object.entries(required)) {
         if (!v) throw new Error(`[appInitializer] Missing required dependency: ${k}`);
@@ -354,7 +390,10 @@ export function createAppInitializer(opts = {}) {
         createUiRenderer,
         createKnowledgeBaseComponent,
         createProjectDetailsEnhancements,
-        createTokenStatsManager
+        createTokenStatsManager,
+        // Phase-2 renderer / coordinator factories
+        createProjectDetailsRenderer,
+        createProjectDataCoordinator
     };
     Object.entries(factoryMap).forEach(([name, fn]) => {
         // Only register if it's a function and not already registered
@@ -503,17 +542,17 @@ export function createAppInitializer(opts = {}) {
                             previousProjectId: detail.previousProjectId,
                             context: 'appState:projectChangeEvent'
                         });
-if (handlers?.dispatch) {
-    handlers.dispatch(
-        'currentProjectChanged',
-        { detail },
-        appBus
-    );
-} else if (appBus && typeof appBus.dispatchEvent === 'function') {
-    appBus.dispatchEvent(
-        handlers.createCustomEvent('currentProjectChanged', { detail })
-    );
-}
+                        if (handlers?.dispatch) {
+                            handlers.dispatch(
+                                'currentProjectChanged',
+                                { detail },
+                                appBus
+                            );
+                        } else if (appBus && typeof appBus.dispatchEvent === 'function') {
+                            appBus.dispatchEvent(
+                                handlers.createCustomEvent('currentProjectChanged', { detail })
+                            );
+                        }
 
                         // Legacy event
                         if (state.currentProject && domAPIlookup) {
@@ -523,28 +562,28 @@ if (handlers?.dispatch) {
                                     projectId: state.currentProject.id,
                                     context: 'appState:projectChangeEvent:legacy'
                                 });
-if (handlers?.dispatch) {
-    handlers.dispatch(
-        'projectSelected',
-        {
-            detail: {
-                projectId: state.currentProject.id,
-                project: { ...state.currentProject }
-            }
-        },
-        doc
-    );
-} else if (domAPIlookup && typeof domAPIlookup.dispatchEvent === 'function') {
-    domAPIlookup.dispatchEvent(
-        doc,
-        handlers.createCustomEvent('projectSelected', {
-            detail: {
-                projectId: state.currentProject.id,
-                project: { ...state.currentProject }
-            }
-        })
-    );
-}
+                                if (handlers?.dispatch) {
+                                    handlers.dispatch(
+                                        'projectSelected',
+                                        {
+                                            detail: {
+                                                projectId: state.currentProject.id,
+                                                project: { ...state.currentProject }
+                                            }
+                                        },
+                                        doc
+                                    );
+                                } else if (domAPIlookup && typeof domAPIlookup.dispatchEvent === 'function') {
+                                    domAPIlookup.dispatchEvent(
+                                        doc,
+                                        handlers.createCustomEvent('projectSelected', {
+                                            detail: {
+                                                projectId: state.currentProject.id,
+                                                project: { ...state.currentProject }
+                                            }
+                                        })
+                                    );
+                                }
                             }
                         }
                     }
@@ -751,7 +790,7 @@ if (handlers?.dispatch) {
                         }
                         logDelivery.start();   // activate listener + batching now
                         logger.info('[serviceInit] LogDeliveryService started (pre-auth)',
-                                   { context: 'serviceInit:registerAdvancedServices' });
+                            { context: 'serviceInit:registerAdvancedServices' });
 
                         logger.debug('[serviceInit] LogDeliveryService registered', {
                             context: 'serviceInit:registerAdvancedServices'
@@ -1203,7 +1242,11 @@ if (handlers?.dispatch) {
                 logger,
                 domReadinessService,
                 safeHandler,
-                browserService
+                browserService,
+                // Phase-3: Inject central services for strict DI
+                eventService: DependencySystem.modules.get('eventService'),
+                appModule,
+                storageService: browserService // browserService implements storage API interface
             });
             DependencySystem.register('auth', authModule);
 
@@ -1215,10 +1258,29 @@ if (handlers?.dispatch) {
                 domReadinessService,
                 eventHandler: eventHandlers,
                 storageHandler: browserService,
-                sanitizer
+                sanitizer,
+                logger,
             });
             DependencySystem.register('modelConfig', modelConfigInstance);
             await modelConfigInstance.initWithReadiness();
+
+            // Phase 3.4a: Create ProjectDetails extracted modules first
+            const projectDetailsRenderer = createProjectDetailsRenderer({
+                domAPI,
+                sanitizer,
+                eventHandlers,
+                logger,
+                formatDate: uiUtils.formatDate,
+                formatBytes: uiUtils.formatBytes
+            });
+            DependencySystem.register('projectDetailsRenderer', projectDetailsRenderer);
+
+            const projectDataCoordinator = createProjectDataCoordinator({
+                projectManager: null, // will be set later
+                logger,
+                eventService: DependencySystem.modules.get('eventService')
+            });
+            DependencySystem.register('projectDataCoordinator', projectDataCoordinator);
 
             // Phase 3.4: ProjectDetailsComponent (partial)
             const projectDetailsComp = makeProjectDetailsComponent({
@@ -1244,8 +1306,16 @@ if (handlers?.dispatch) {
                 uiRenderer: DependencySystem.modules.get('uiRenderer'),
                 authModule: DependencySystem.modules.get('auth'),
                 tokenStatsManager: DependencySystem.modules.get('tokenStatsManager'),
-                chatUIEnhancements: DependencySystem.modules.get('chatUIEnhancements')
-                , uiUtils
+                chatUIEnhancements: DependencySystem.modules.get('chatUIEnhancements'),
+                // Phase-2: Inject extracted modules
+                projectDetailsRenderer,
+                projectDataCoordinator,
+                // Phase-2.3: State and event services
+                uiStateService: DependencySystem.modules.get('uiStateService'),
+                eventService: DependencySystem.modules.get('eventService'),
+                // Centralised project context service
+                projectContextService: DependencySystem.modules.get('projectContextService'),
+                uiUtils
             });
             DependencySystem.register('projectDetailsComponent', projectDetailsComp);
 
@@ -1282,7 +1352,7 @@ if (handlers?.dispatch) {
                         logger,
                         apiEndpoints: DependencySystem.modules.get('apiEndpoints'),
                         browserService,
-                        tokenStatsManager: DependencySystem.modules.get('tokenStatsManager'),
+                        tokenStatsManager: DependencySystem.modules.get('tokenStatsManagerProxy') || DependencySystem.modules.get('tokenStatsManager'),
                         modelConfig: DependencySystem.modules.get('modelConfig'),
                         eventBus: DependencySystem.modules.get('appBus') || DependencySystem.modules.get('eventBus'),
                         DependencySystem,
@@ -1354,7 +1424,7 @@ if (handlers?.dispatch) {
                     domAPI,
                     domReadinessService,
                     logger,
-                    navAPI        : navigationService,      // supply full NavigationService
+                    navAPI: navigationService,      // supply full NavigationService
                     browserService: browserService,         // timers, location helpers
                     isValidProjectId: globalUtils.isValidProjectId,
                     isAuthenticated: () => !!authModule.isAuthenticated?.(),
@@ -1370,6 +1440,7 @@ if (handlers?.dispatch) {
                     conversationManager: DependencySystem.modules.get('conversationManager'),
                     messageHandler: DependencySystem.modules.get('messageHandler'),
                     chatUIController: DependencySystem.modules.get('chatUIController'),
+                    eventService: DependencySystem.modules.get('eventService'),
                     APP_CONFIG
                 });
                 DependencySystem.register('chatManager', instance);
@@ -1436,7 +1507,7 @@ if (handlers?.dispatch) {
                 apiEndpoints: DependencySystem.modules.get('apiEndpoints'),
                 storage: browserService,
                 browserService: browserService,  // Phase-1.3: DI compliance - inject instead of runtime lookup
-                domAPI: domAPI,                   // Phase-1.3: DI compliance - inject instead of runtime lookup  
+                domAPI: domAPI,                   // Phase-1.3: DI compliance - inject instead of runtime lookup
                 eventHandlers: eventHandlers,     // Phase-1.3: DI compliance - inject instead of runtime lookup
                 authModule: DependencySystem.modules.get('auth'),                    // Phase-1.3: DI compliance
                 appBus: DependencySystem.modules.get('AppBus'),                      // Phase-1.3: DI compliance
@@ -1551,7 +1622,7 @@ if (handlers?.dispatch) {
 
             // preload dashboard templates centrally (no ctor side-effects)
             if (typeof projectDashboard.preloadTemplates === 'function') {
-              await projectDashboard.preloadTemplates();
+                await projectDashboard.preloadTemplates();
             }
 
             const plc = DependencySystem.modules.get('projectListComponent');
@@ -2061,12 +2132,17 @@ if (handlers?.dispatch) {
                     app: appModule, chatManager: DependencySystem.modules.get('chatManager'),
                     domReadinessService, DependencySystem
                 });
-                DependencySystem.register('tokenStatsManager', inst);
 
-                // Gap #3 – flush buffered calls from proxy
+                // Gap #3 – Replace proxy with real instance and flush buffered calls
                 const proxy = DependencySystem.modules.get('tokenStatsManagerProxy');
                 if (proxy && proxy.__isProxy && typeof proxy.setRealManager === 'function') {
                     proxy.setRealManager(inst);
+                    // Replace the proxy registration with the real instance
+                    DependencySystem.modules.delete('tokenStatsManager');
+                    DependencySystem.register('tokenStatsManager', inst);
+                } else {
+                    // Fallback if no proxy exists
+                    DependencySystem.register('tokenStatsManager', inst);
                 }
                 if (typeof inst.initialize === 'function') {
                     await inst.initialize().catch(err =>
@@ -2092,19 +2168,19 @@ if (handlers?.dispatch) {
                 // are present.  Without this call the project list remains
                 // in the loading state because ProjectDashboard never
                 // triggers showProjectList / _loadProjects.
-if (typeof pdDashboard.initialize === 'function' && !pdDashboard.__initialized) {
-    try {
-        await domReadinessService.waitForEvent('authReady', { timeout: 30000 });
-        if (!pdDashboard.__initialized) {
-            await pdDashboard.initialize();
-            pdDashboard.__initialized = true;
-        }
-    } catch (err) {
-        logger.error('[UIInit] ProjectDashboard.initialize failed', err, {
-            context: 'uiInit:projectDashboardInit'
-        });
-    }
-}
+                if (typeof pdDashboard.initialize === 'function' && !pdDashboard.__initialized) {
+                    try {
+                        await domReadinessService.waitForEvent('authReady', { timeout: 30000 });
+                        if (!pdDashboard.__initialized) {
+                            await pdDashboard.initialize();
+                            pdDashboard.__initialized = true;
+                        }
+                    } catch (err) {
+                        logger.error('[UIInit] ProjectDashboard.initialize failed', err, {
+                            context: 'uiInit:projectDashboardInit'
+                        });
+                    }
+                }
             }
             logger.log('[UIInit] Late-stage UI components registered', {
                 context: 'uiInit:createAndRegisterUIComponents'
@@ -2158,32 +2234,32 @@ if (typeof pdDashboard.initialize === 'function' && !pdDashboard.__initialized) 
                             const dash = DependencySystem.modules.get('projectDashboard');
                             if (dash?.showProjectDetails) {
                                 await dash.showProjectDetails(projectId);
-                    // Ensure KnowledgeBaseComponent is initialized once the
-                    // project details template (which contains its DOM nodes)
-                    // is in the document.  Initialize only once.
-                    const kbComp = DependencySystem.modules.get('knowledgeBaseComponent');
-                    if (kbComp && (!kbComp.isInitialized || kbComp.isInitialized() === false) && typeof kbComp.initialize === 'function') {
-                        try {
-                            await kbComp.initialize(true, null, projectId);
-                            logger.debug('[uiInit] KnowledgeBaseComponent initialized (projectDetails navigation)', { context: 'uiInit' });
-                        } catch (err) {
-                            logger.error('[uiInit] KnowledgeBaseComponent initialization failed during projectDetails navigation', err, { context: 'uiInit' });
-                        }
-                    }
+                                // Ensure KnowledgeBaseComponent is initialized once the
+                                // project details template (which contains its DOM nodes)
+                                // is in the document.  Initialize only once.
+                                const kbComp = DependencySystem.modules.get('knowledgeBaseComponent');
+                                if (kbComp && (!kbComp.isInitialized || kbComp.isInitialized() === false) && typeof kbComp.initialize === 'function') {
+                                    try {
+                                        await kbComp.initialize(true, null, projectId);
+                                        logger.debug('[uiInit] KnowledgeBaseComponent initialized (projectDetails navigation)', { context: 'uiInit' });
+                                    } catch (err) {
+                                        logger.error('[uiInit] KnowledgeBaseComponent initialization failed during projectDetails navigation', err, { context: 'uiInit' });
+                                    }
+                                }
                                 return true;
                             }
                             const pdc = DependencySystem.modules.get('projectDetailsComponent');
                             if (pdc?.showProjectDetails) {
                                 await pdc.showProjectDetails(projectId);
-                            const kbComp = DependencySystem.modules.get('knowledgeBaseComponent');
-                            if (kbComp && (!kbComp.isInitialized || kbComp.isInitialized() === false) && typeof kbComp.initialize === 'function') {
-                                try {
-                                    await kbComp.initialize(true, null, projectId);
-                                    logger.debug('[uiInit] KnowledgeBaseComponent initialized (fallback path)', { context: 'uiInit' });
-                                } catch (err) {
-                                    logger.error('[uiInit] KnowledgeBaseComponent initialization failed (fallback)', err, { context: 'uiInit' });
+                                const kbComp = DependencySystem.modules.get('knowledgeBaseComponent');
+                                if (kbComp && (!kbComp.isInitialized || kbComp.isInitialized() === false) && typeof kbComp.initialize === 'function') {
+                                    try {
+                                        await kbComp.initialize(true, null, projectId);
+                                        logger.debug('[uiInit] KnowledgeBaseComponent initialized (fallback path)', { context: 'uiInit' });
+                                    } catch (err) {
+                                        logger.error('[uiInit] KnowledgeBaseComponent initialization failed (fallback)', err, { context: 'uiInit' });
+                                    }
                                 }
-                            }
                                 return true;
                             }
                             throw new Error('[uiInit] Cannot show projectDetails');
@@ -2297,30 +2373,30 @@ if (typeof pdDashboard.initialize === 'function' && !pdDashboard.__initialized) 
                         /* ── NEW: explicit mobile-dock initialisation ───────────────────── */
                         const mobileDock = sidebar.getMobileDock?.();
                         if (mobileDock?.init) {
-                          await mobileDock.init();
-                          mobileDock.ensureMobileDock?.();   // guarantees DOM is present
-                          logger.debug('[uiInit] Mobile dock initialised by orchestrator', { context: 'uiInit' });
+                            await mobileDock.init();
+                            mobileDock.ensureMobileDock?.();   // guarantees DOM is present
+                            logger.debug('[uiInit] Mobile dock initialised by orchestrator', { context: 'uiInit' });
                         }
 
                         /* ── NEW: explicit Sidebar-Auth initialisation ─────── */
                         const sidebarAuth = sidebar.getSidebarAuth?.();
                         if (sidebarAuth?.init) {
-                          await sidebarAuth.init();
-                          sidebarAuth.setupInlineAuthForm?.();
+                            await sidebarAuth.init();
+                            sidebarAuth.setupInlineAuthForm?.();
 
-                          // Ensure the sidebar auth UI immediately reflects the current
-                          // canonical authentication state even if the authReady/authStateChanged
-                          // events fired before SidebarAuth listeners were wired (race condition
-                          // observed on fast connections).
-                          if (typeof sidebarAuth.forceAuthStateSync === 'function') {
-                            try {
-                              sidebarAuth.forceAuthStateSync();
-                            } catch (syncErr) {
-                              logger.warn('[uiInit] sidebarAuth.forceAuthStateSync threw', syncErr, { context: 'uiInit' });
+                            // Ensure the sidebar auth UI immediately reflects the current
+                            // canonical authentication state even if the authReady/authStateChanged
+                            // events fired before SidebarAuth listeners were wired (race condition
+                            // observed on fast connections).
+                            if (typeof sidebarAuth.forceAuthStateSync === 'function') {
+                                try {
+                                    sidebarAuth.forceAuthStateSync();
+                                } catch (syncErr) {
+                                    logger.warn('[uiInit] sidebarAuth.forceAuthStateSync threw', syncErr, { context: 'uiInit' });
+                                }
                             }
-                          }
 
-                          logger.debug('[uiInit] SidebarAuth initialised by orchestrator', { context: 'uiInit' });
+                            logger.debug('[uiInit] SidebarAuth initialised by orchestrator', { context: 'uiInit' });
                         }
                     } catch (err) {
                         logger.error('[uiInit] sidebar.init failed', err, { context: 'uiInit' });
@@ -2329,12 +2405,12 @@ if (typeof pdDashboard.initialize === 'function' && !pdDashboard.__initialized) 
 
                 const a11yUtils = DependencySystem.modules.get('accessibilityUtils');
                 if (a11yUtils?.init) {
-                  try {
-                    await a11yUtils.init();
-                    logger.debug('[uiInit] AccessibilityUtils initialised by orchestrator', { context: 'uiInit' });
-                  } catch (err) {
-                    logger.error('[uiInit] AccessibilityUtils.init failed', err, { context: 'uiInit' });
-                  }
+                    try {
+                        await a11yUtils.init();
+                        logger.debug('[uiInit] AccessibilityUtils initialised by orchestrator', { context: 'uiInit' });
+                    } catch (err) {
+                        logger.error('[uiInit] AccessibilityUtils.init failed', err, { context: 'uiInit' });
+                    }
                 }
 
                 _uiInitialized = true;

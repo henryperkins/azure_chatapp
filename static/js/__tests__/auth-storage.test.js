@@ -22,6 +22,9 @@ describe("Auth Token Storage Persistence", () => {
       apiEndpoints: { AUTH_CSRF: "/csrf", AUTH_LOGIN: "/login", AUTH_LOGOUT: "/logout", AUTH_REGISTER: "/register", AUTH_VERIFY: "/verify", AUTH_REFRESH: "/refresh" },
       safeHandler: jest.fn((fn) => fn),
       browserService: { FormData: function() {}, setInterval: jest.fn(), clearInterval: jest.fn(), getWindow: () => ({}) },
+      eventService: { getAuthBus: () => new EventTarget(), emit: jest.fn(), on: jest.fn(), off: jest.fn() },
+      appModule: { state: { isAuthenticated: false }, setAuthState: jest.fn() },
+      storageService: fakeStorage,
       DependencySystem: {
         modules: {
           get: (mod) => {
@@ -35,7 +38,7 @@ describe("Auth Token Storage Persistence", () => {
         }
       },
       logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn(), log: jest.fn() },
-      domReadinessService: { documentReady: () => Promise.resolve(), emitReplayable: jest.fn() },
+      domReadinessService: { documentReady: () => Promise.resolve(), emitReplayable: jest.fn(), waitForEvent: () => Promise.resolve() },
       modalManager: { hide: jest.fn(), show: jest.fn() }
     };
     auth = createAuth(mockDeps);

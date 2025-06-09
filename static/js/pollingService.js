@@ -18,7 +18,8 @@ export function createPollingService({
   logger,
   pollingInterval = 3000, // default 3 seconds
   domAPI = null,
-  authModule = null
+  authModule = null,
+  eventService = null
 } = {}) {
   // ────────────────────────────────────────────────────────────
   // Dependency validation (fail-fast, guard-rail requirement)
@@ -27,10 +28,7 @@ export function createPollingService({
   if (typeof apiClient !== 'function') throw new Error('[PollingService] Missing apiClient function');
   if (!eventHandlers) throw new Error('[PollingService] Missing eventHandlers');
   if (!logger) {
-    // Fall back to console, but flag loudly – polling is critical for UX.
-    // eslint-disable-next-line no-console
-    console.warn('[PollingService] Logger missing – falling back to `console`.');
-    logger = console;
+    throw new Error('[PollingService] Missing logger');
   }
 
   const MODULE = 'PollingService';
@@ -45,8 +43,7 @@ export function createPollingService({
   const _domAPI = domAPI || DependencySystem?.modules?.get?.('domAPI');
   const _authModule = authModule || DependencySystem?.modules?.get?.('auth');
 
-  // Local EventTarget for fine-grained UI listeners (optional).
-  const _bus = new EventTarget();
+  // Use eventService for unified event system instead of local EventTarget
 
   // Internal map: jobId → { intervalId, lastStatus }
   const _jobs = new Map();
@@ -71,7 +68,11 @@ export function createPollingService({
       const progress = typeof res?.progress === 'number' ? res.progress : null;
 
       // Notify local listeners first (fine-grained UI)
-      _bus.dispatchEvent(new CustomEvent('update', { detail: { jobId, status, progress, raw: res } }));
+      if (eventService?.emit) {
+        eventService.emit('polling:jobUpdate', { jobId, status, progress, raw: res });
+      } else if (_domAPI?.getDocument) {
+        _domAPI.getDocument().dispatchEvent(new CustomEvent('polling:jobUpdate', { detail: { jobId, status, progress, raw: res } }));
+      }
 
       // Analytics / global consumers
       _dispatchAppBusEvent('knowledgebase:jobProgress', { jobId, status, progress });
@@ -152,8 +153,15 @@ export function createPollingService({
     cleanup,
     onUpdate: (handler) => {
       if (typeof handler !== 'function') return () => {};
-      _bus.addEventListener('update', handler);
-      return () => _bus.removeEventListener('update', handler);
+      if (eventService?.on && eventService?.off) {
+        eventService.on('polling:jobUpdate', handler);
+        return () => eventService.off('polling:jobUpdate', handler);
+      } else if (_domAPI?.getDocument) {
+        const wrappedHandler = (event) => handler(event.detail ? event : { detail: event });
+        _domAPI.getDocument().addEventListener('polling:jobUpdate', wrappedHandler);
+        return () => _domAPI.getDocument().removeEventListener('polling:jobUpdate', wrappedHandler);
+      }
+      return () => {};
     }
   });
 }

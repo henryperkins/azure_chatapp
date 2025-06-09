@@ -41,10 +41,12 @@
   "static/js/chatUIController.js",
   "static/js/conversationManager.js",
   "static/js/messageHandler.js",
+  "static/js/projectDetailsRenderer.js",
+  "static/js/projectDataCoordinator.js",
   "static/js/services/starredStorage.js",
-  "services/authenticationService.js",
-  "services/projectContextService.js",
-    "services/eventService.js",
+  "static/services/authenticationService.js",
+  "static/services/projectContextService.js",
+  "static/services/eventService.js",
   "static/js/utils/apiClient.js",
   "static/js/utils/apiEndpoints.js",
   "static/js/utils/browserService.js",
@@ -58,5 +60,11 @@
   "static/js/utils/selectorConstants.js",
   "static/js/utils/session.js",
   "static/js/utils/storageService.js",
-  "static/js/uiStateService.js"
+  "static/js/uiStateService.js",
+  "static/js/authFormHandler.js",
+  "static/js/authApiService.js",
+  "static/js/authStateManager.js",
+  "static/js/modalRenderer.js",
+  "static/js/modalStateManager.js",
+  "static/js/modalFormHandler.js"
 ]

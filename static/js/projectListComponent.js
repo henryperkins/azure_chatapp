@@ -32,7 +32,8 @@ export function createProjectListComponent(deps) {
         domReadinessService,
         APP_CONFIG,
         logger,
-        DependencySystem
+        DependencySystem,
+        uiStateService = null
     } = deps;
 
     // Allow projectManager to be reassigned later via setProjectManager()
@@ -64,17 +65,36 @@ export function createProjectListComponent(deps) {
     let _doc = null;
     let element = null;
     let gridElement = null;
-    let state = {
-        projects: [],
-        filter: "all",
-        loading: false,
-        customization: _loadCustomization()
-    };
     let isRendering = false;
     const eventBus = new EventTarget();
 
+    // Migrate state to UIStateService
+    const STATE_COMPONENT = 'ProjectListComponent';
+    
+    function getState(key, defaultValue = null) {
+        return uiStateService ? uiStateService.getState(STATE_COMPONENT, key) || defaultValue : defaultValue;
+    }
+    
+    function setState(key, value) {
+        if (uiStateService) {
+            uiStateService.setState(STATE_COMPONENT, key, value);
+        }
+    }
+    
     function _setState(partial) {
-        state = { ...state, ...partial };
+        if (uiStateService) {
+            Object.entries(partial).forEach(([key, value]) => {
+                setState(key, value);
+            });
+        }
+    }
+    
+    // Initialize default state values
+    if (uiStateService) {
+        setState('projects', getState('projects', []));
+        setState('filter', getState('filter', 'all'));
+        setState('loading', getState('loading', false));
+        setState('customization', getState('customization', _loadCustomization()));
     }
     function _getProjectId(p) {
         /*

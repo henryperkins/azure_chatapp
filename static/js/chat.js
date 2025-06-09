@@ -20,10 +20,12 @@ export function createChatManager({
   domReadinessService,
   domAPI,
 
-  // Extracted sub-modules (required)
   conversationManager,
   messageHandler,
   chatUIController,
+
+  // Cross-app single event service (Phase-3 consolidation)
+  eventService,
 
   // Optional legacy module (until fully removed)
   chatUIEnhancements = null,
@@ -42,6 +44,7 @@ export function createChatManager({
     conversationManager,
     messageHandler,
     chatUIController,
+    eventService,
   };
 
   for (const [k, v] of Object.entries(REQUIRED)) {
@@ -51,7 +54,9 @@ export function createChatManager({
   /* ------------------------------------------------------------------ */
   /* Internal state                                                      */
   /* ------------------------------------------------------------------ */
-  const chatBus = new EventTarget();
+  // Use the unified eventService bus instead of a private EventTarget to
+  // avoid event-system fragmentation.
+  const chatBus = eventService?.getAppBus?.() || eventService?._getBus?.();
 
   let inputField = null;
   let sendButton = null;

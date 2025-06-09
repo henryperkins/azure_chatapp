@@ -34,6 +34,9 @@ export function createSidebar({
   authenticationService = null,
   authBus = null,
 
+  // Phase-3 event consolidation
+  eventService = null,
+
   ..._rest
 } = {}) {
   // ───────────────────────────────────────────────
@@ -61,7 +64,6 @@ export function createSidebar({
   if (!uiStateService) throw new Error('[Sidebar] uiStateService is required.');
 
   const MODULE = 'Sidebar';
-  const SidebarBus = new EventTarget();
 
   // Dependency fallback removal: all required deps MUST be passed by DI.
   // For backward-compatibility we still allow undefined optional deps, but we
@@ -110,9 +112,10 @@ export function createSidebar({
   // Centralised UI flags – synced with uiStateService
   // ------------------------------------------------------------------
   const STATE_COMPONENT = 'Sidebar';
-
+  // UI state flags stored centrally
   let visible = uiStateService.getState(STATE_COMPONENT, 'visible') || false;
   let pinned = uiStateService.getState(STATE_COMPONENT, 'pinned') || false;
+  let activeTab = uiStateService.getState(STATE_COMPONENT, 'activeTab') || 'recent';
 
   function setVisibleFlag(val) {
     visible = Boolean(val);
@@ -141,8 +144,11 @@ export function createSidebar({
 
   //   -- Easy event dispatch
   function dispatch(name, detail) {
-    if (typeof CustomEvent !== 'undefined') {
-      SidebarBus.dispatchEvent(new CustomEvent(name, { detail }));
+    if (eventService?.emit && typeof eventService.emit === 'function') {
+      eventService.emit(`sidebar:${name}`, detail);
+    } else if (typeof CustomEvent !== 'undefined') {
+      // Fallback to document-level events if eventService not available
+      domAPI.getDocument()?.dispatchEvent(new CustomEvent(`sidebar:${name}`, { detail }));
     }
   }
 
@@ -841,7 +847,7 @@ export function createSidebar({
     init,
     destroy,
     cleanup,
-    eventBus: SidebarBus,
+    eventService: eventService, // Expose unified eventService instead of SidebarBus
     toggleSidebar,
     closeSidebar,
     showSidebar,

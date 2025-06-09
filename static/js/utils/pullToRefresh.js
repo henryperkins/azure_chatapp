@@ -104,4 +104,11 @@ export function createPullToRefresh({
     handleTouchEnd,
     { context: ctx }
   );
+
+  return {
+    cleanup() {
+      eventHandlers.cleanupListeners({ context: ctx });
+      element.dataset.ptrBound = '';
+    }
+  };
 }

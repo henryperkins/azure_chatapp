@@ -43,6 +43,7 @@ export function createTokenStatsManagerProxy({ DependencySystem, logger } = {}) 
   const proxy = new Proxy(proxyTarget, {
     get(_obj, prop) {
       if (prop === 'setRealManager') return setRealManager;
+      if (prop === 'cleanup') return () => { callQueue.length = 0; realManager = null; };
       if (prop === '__isProxy') return true;
       return (...args) => {
         if (realManager && typeof realManager[prop] === 'function') {

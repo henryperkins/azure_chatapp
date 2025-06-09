@@ -45,6 +45,7 @@ export function createProjectManager({
   logger,
   timer,
   eventHandlers,  // Phase-1.3: Extract eventHandlers from otherDeps
+  eventService = null,
   ...otherDeps
 } = {}) {
   if (!DependencySystem) {
@@ -203,7 +204,8 @@ export function createProjectManager({
       domAPI = null,
       eventHandlers = null,      // Phase-1.3: DI compliance - injected instead of runtime lookup
       authModule = null,         // Phase-1.3: DI compliance - injected instead of runtime lookup
-      appBus = null              // Phase-1.3: DI compliance - injected instead of runtime lookup
+      appBus = null,             // Phase-1.3: DI compliance - injected instead of runtime lookup
+      eventService = null        // Phase-3: Unified event system
     } = {}) {
       if (!DependencySystem) {
         throw new Error('DependencySystem required');
@@ -232,9 +234,7 @@ export function createProjectManager({
       this.eventHandlers = eventHandlers;
       this.authModule = authModule;
       this.appBus = appBus;
-
-      // Instead of dispatching to DOM, maintain an EventTarget bus
-      this.eventBus = new EventTarget();
+      this.eventService = eventService;
 
       // track listeners if provided
       if (!listenerTracker) {
@@ -291,32 +291,31 @@ export function createProjectManager({
     }
 
     _emit(event, detail) {
-      /* dispatch on local bus (keeps module-internal listeners) */
-      this.eventBus.dispatchEvent(new CustomEvent(event, { detail }));
+      /* Use unified eventService for project events */
+      if (this.eventService?.emit) {
+        this.eventService.emit(`project:${event}`, detail);
+      } else {
+        /* Fallback to global document dispatch if eventService not available */
+        try {
+          if (this.domAPI?.getDocument) {
+            const doc = this.domAPI.getDocument();
+            if (doc) {
+              /* use DependencySystem-provided eventHandlers.createCustomEvent
+                 when available, else fall back to new CustomEvent               */
+              const evh = this.DependencySystem?.modules?.get?.('eventHandlers');
+              const domEvt = evh?.createCustomEvent
+                ? evh.createCustomEvent(`project:${event}`, { detail })
+                : new CustomEvent(`project:${event}`, { detail });
 
-      /* additionally broadcast to the global document so other components
-         (e.g. ProjectListComponent, ProjectDashboard) that listen on
-         document receive the same updates. All DOM access goes through
-         the DI-provided domAPI to respect guardrails. */
-      try {
-        if (this.domAPI?.getDocument) {
-          const doc = this.domAPI.getDocument();
-          if (doc) {
-            /* use DependencySystem-provided eventHandlers.createCustomEvent
-               when available, else fall back to new CustomEvent               */
-            const evh = this.DependencySystem?.modules?.get?.('eventHandlers');
-            const domEvt = evh?.createCustomEvent
-              ? evh.createCustomEvent(event, { detail })
-              : new CustomEvent(event, { detail });
-
-            this.domAPI.dispatchEvent(doc, domEvt);
+              this.domAPI.dispatchEvent(doc, domEvt);
+            }
           }
+        } catch (err) {
+          /* non-fatal: log and continue */
+          this.logger?.warn?.(`[ProjectManager] failed to rebroadcast "${event}"`, err, {
+            context: this.moduleName
+          });
         }
-      } catch (err) {
-        /* non-fatal: log and continue */
-        this.logger?.warn?.(`[ProjectManager] failed to rebroadcast "${event}"`, err, {
-          context: this.moduleName
-        });
       }
     }
 
@@ -1170,6 +1169,7 @@ export function createProjectManager({
     domReadinessService,
     logger,
     timer,
+    eventService,
     ...otherDeps
   };
   const instance = new ProjectManager(fullDeps);

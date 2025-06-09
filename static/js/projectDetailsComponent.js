@@ -33,7 +33,13 @@ export function createProjectDetailsComponent({
   authModule = null,
   tokenStatsManager = null,
   chatUIEnhancements = null,
-  projectContextService = null
+  projectContextService = null,
+  // Phase-2: Extracted modules
+  projectDetailsRenderer = null,
+  projectDataCoordinator = null,
+  // Phase-2.3: State and event services
+  uiStateService = null,
+  eventService = null
 } = {}) {
   const missing = [];
   if (!domAPI) missing.push("domAPI");
@@ -44,6 +50,11 @@ export function createProjectDetailsComponent({
   if (!sanitizer) missing.push("sanitizer");
   if (!logger) missing.push("logger");
   if (!uiUtils) missing.push("uiUtils");
+  if (!projectDetailsRenderer) missing.push("projectDetailsRenderer");
+  if (!projectDataCoordinator) missing.push("projectDataCoordinator");
+  if (!uiStateService) missing.push("uiStateService");
+  if (!eventService) missing.push("eventService");
+  if (!projectContextService) missing.push("projectContextService");
   if (missing.length) {
     if (logger && logger.error) {
       logger.error(`[${MODULE_CONTEXT}] Missing required dependencies: ${missing.join(", ")}`, { context: MODULE_CONTEXT });
@@ -82,7 +93,13 @@ export function createProjectDetailsComponent({
     authModule,
     tokenStatsManager,
     chatUIEnhancements,
-    projectContextService
+    projectContextService,
+    // Phase-2: Extracted modules
+    projectDetailsRenderer,
+    projectDataCoordinator,
+    // Phase-2.3: State and event services
+    uiStateService,
+    eventService
   });
 
   // Expose only the canonical public API for compliance (no dynamic shape)
@@ -116,6 +133,7 @@ export function createProjectDetailsComponent({
     cleanup: () => {
       eventHandlers.cleanupListeners({ context: "ProjectDetailsComponent" });
       instance.cleanup();
+      instance.uiStateService.clearState('ProjectDetailsComponent');
     }
   };
 }
@@ -143,9 +161,8 @@ class ProjectDetailsComponent {
     this.chatManager = deps.chatManager;
     this.apiClient = deps.apiClient;
 
-    // Phase-2.3: Centralised project context
-    this.projectContextService = deps.projectContextService ||
-      this.DependencySystem?.modules?.get?.('projectContextService');
+    // Phase-2.3: Centralised project context (injected only – no runtime lookup)
+    this.projectContextService = deps.projectContextService;
 
     if (!this.projectContextService?.getCurrentProjectId) {
       throw new Error('[ProjectDetailsComponent] projectContextService dependency missing or invalid');
@@ -154,12 +171,42 @@ class ProjectDetailsComponent {
     // Phase-1.3: Use injected uiRenderer instead of runtime lookup
     this.uiRenderer = deps.uiRenderer;
 
+    // Phase-2: Store extracted modules
+    this.projectDetailsRenderer = deps.projectDetailsRenderer;
+    this.projectDataCoordinator = deps.projectDataCoordinator;
+
     // Bridge legacy instance methods expected by earlier template listeners to
-    // the canonical uiRenderer implementation, preserving single-source logic
-    this.renderFiles = (...a) => this.uiRenderer?.renderFiles?.(...a);
-    this.renderConversations = (...a) => this.uiRenderer?.renderConversations?.(...a);
-    this.renderArtifacts = (...a) => this.uiRenderer?.renderArtifacts?.(...a);
-    this.renderStats = (...a) => this.uiRenderer?.renderStats?.(...a);
+    // the new extracted modules, preserving single-source logic
+    this.renderFiles = (files) => {
+      const container = this.elements?.filesList;
+      if (!container) return;
+      this.projectDetailsRenderer?.renderFiles?.(files, {
+        container,
+        onDownload: (fileId, fileName) => this._delegateDownloadFile(fileId, fileName),
+        onDelete: (fileId, fileName) => this._delegateDeleteFile(fileId, fileName),
+        listenersContext: this.listenersContext
+      });
+    };
+
+    this.renderConversations = (projectId, searchTerm) => {
+      // This method is used by sidebar rendering - delegate to uiRenderer for sidebar
+      if (this.uiRenderer?.renderConversations) {
+        this.uiRenderer.renderConversations(projectId, searchTerm);
+      }
+    };
+
+    this.renderArtifacts = (artifacts) => {
+      const container = this.elements?.artifactsList;
+      if (!container) return;
+      this.projectDetailsRenderer?.renderArtifacts?.(artifacts, {
+        container,
+        onDownload: (projectId, artifactId) => this._delegateDownloadArtifact(projectId, artifactId),
+        projectId: this.projectId,
+        listenersContext: this.listenersContext
+      });
+    };
+
+    this.renderProjectData = (...a) => this.projectDetailsRenderer?.renderProjectData?.(...a);
     this.containerId = "projectDetailsView";
     this.templatePath = "/static/html/project_details.html";
 
@@ -186,15 +233,12 @@ class ProjectDetailsComponent {
       configurable: true
     });
 
-    this.state = {
-      templateLoaded: false,
-      loading: false,
-      activeTab: "chat",
-      projectDataLoaded: false
-    };
+    // Remove local state object
+    // this.state = { ... }
+
     this.projectData = null;
     this.listenersContext = MODULE_CONTEXT + "_listeners";
-    this.bus = new EventTarget();
+    // this.bus = new EventTarget();
     this.fileUploadComponent = null;
     this.elements = {};
     // Phase-1.3: Store injected authModule instead of runtime lookup
@@ -222,17 +266,26 @@ class ProjectDetailsComponent {
       // Phase-1.3: Use injected app dependency instead of runtime lookup
       return Boolean(this.app?.state?.isAuthenticated);
     };
+
+    this.uiStateService = deps.uiStateService;
+    this.eventService = deps.eventService;
   }
 
   setProjectManager(pm) {
     this.projectManager = pm;
-    this._logInfo('ProjectManager set, dispatching projectManagerReady event', { hasProjectManager: !!pm });
-    // emit event so deferred show() can continue
+    if (this.projectDataCoordinator && pm) {
+      if (typeof this.projectDataCoordinator.setProjectManager === 'function') {
+        this.projectDataCoordinator.setProjectManager(pm);
+      } else {
+        this.projectDataCoordinator.projectManager = pm;
+      }
+    }
+    this._logInfo('ProjectManager set, emitting projectManagerReady event', { hasProjectManager: !!pm });
     try {
-      this.bus.dispatchEvent(new Event('projectManagerReady'));
-      this._logInfo('projectManagerReady event dispatched successfully');
+      this.eventService.emit('projectManagerReady', { projectManager: pm });
+      this._logInfo('projectManagerReady event emitted successfully');
     } catch (err) {
-      this._logError('Failed to dispatch projectManagerReady event', err);
+      this._logError('Failed to emit projectManagerReady event', err);
     }
   }
   /**
@@ -253,7 +306,7 @@ class ProjectDetailsComponent {
     this._logInfo('ChatManager instance received and set.', { hasChatManager: !!cm });
 
     // Re-initialize chat UI if user is currently on the Chat tab.
-    if ((this.state.activeTab === 'chat' || this.state.activeTab === 'conversations') && this.chatManager?.initialize) {
+    if ((this.uiStateService.getState('ProjectDetailsComponent', 'activeTab') === 'chat' || this.uiStateService.getState('ProjectDetailsComponent', 'activeTab') === 'conversations') && this.chatManager?.initialize) {
       try {
         this._restoreChatAndModelConfig();
       } catch (err) {
@@ -265,23 +318,22 @@ class ProjectDetailsComponent {
     this._updateNewChatButtonState();
   }
 
-  _logInfo(msg, meta) { try { this.logger.info(`[${MODULE_CONTEXT}] ${msg}`, { context: MODULE_CONTEXT, ...meta }); } catch (e) { return; } }
-  _logWarn(msg, meta) { try { this.logger.warn(`[${MODULE_CONTEXT}] ${msg}`, { context: MODULE_CONTEXT, ...meta }); } catch (e) { return; } }
+  _logInfo(msg, meta) { try { this.logger.info(`[${MODULE_CONTEXT}] ${msg}`, { context: MODULE_CONTEXT, ...meta }); } catch { return; } }
+  _logWarn(msg, meta) { try { this.logger.warn(`[${MODULE_CONTEXT}] ${msg}`, { context: MODULE_CONTEXT, ...meta }); } catch { return; } }
   _logError(msg, err, meta) {
     try { this.logger.error(`[${MODULE_CONTEXT}] ${msg}`, err && err.stack ? err.stack : err, { context: MODULE_CONTEXT, ...meta }); }
     catch { throw new Error(`[${MODULE_CONTEXT}] ${msg}: ${err && err.stack ? err.stack : err}`); }
   }
-  _setState(partial) { this.state = { ...this.state, ...partial }; }
 
   async _loadTemplate() {
-    if (this.state.templateLoaded) return true;
-    this._setState({ loading: true });
+    if (this.uiStateService.getState('ProjectDetailsComponent', 'templateLoaded')) return true;
+    this.uiStateService.setState('ProjectDetailsComponent', 'loading', true);
     let container = null;
     try {
       container = this.domAPI.getElementById(this.containerId);
       if (!container) {
         this._logError(`Container #${this.containerId} not found`);
-        this._setState({ loading: false });
+        this.uiStateService.setState('ProjectDetailsComponent', 'loading', false);
         return false;
       }
       const loadResult = await this.htmlTemplateLoader.loadTemplate({
@@ -290,11 +342,12 @@ class ProjectDetailsComponent {
         eventName: 'projectDetailsTemplateLoaded'
       });
       if (loadResult === false) {
-        this._setState({ loading: false });
+        this.uiStateService.setState('ProjectDetailsComponent', 'loading', false);
         return false;
       }
       this.elements.container = container;
-      this._setState({ templateLoaded: true, loading: false });
+      this.uiStateService.setState('ProjectDetailsComponent', 'templateLoaded', true);
+      this.uiStateService.setState('ProjectDetailsComponent', 'loading', false);
       this._logInfo("Template loaded");
 
       // ----------------------------------------------------------
@@ -323,13 +376,13 @@ class ProjectDetailsComponent {
     } catch (err) {
       this._logError(`Failed to load template`, err);
       if (container) this.domAPI.setInnerHTML(container, `<div class="p-4 text-error">Failed to load project details view.</div>`);
-      this._setState({ loading: false });
+      this.uiStateService.setState('ProjectDetailsComponent', 'loading', false);
       return false;
     }
   }
 
   async _ensureElementsReady() {
-    if (!this.state.templateLoaded || !this.elements.container) {
+    if (!this.uiStateService.getState('ProjectDetailsComponent', 'templateLoaded') || !this.elements.container) {
       this._logWarn(`Template not loaded. Cannot ensure elements are ready.`);
       return false;
     }
@@ -646,14 +699,13 @@ class ProjectDetailsComponent {
           // Only initialise after authentication; otherwise defer once.
           // Single source of truth – appModule.state.isAuthenticated
           const isAuthed = this._isAuthenticated();
-          const authModule = this.eventHandlers.DependencySystem?.modules?.get?.('auth');
 
           if (isAuthed) {
             _initKbc();
           } else {
             this._logWarn("User not authenticated – deferring KnowledgeBaseComponent initialization until login");
 
-            const authBus = authModule?.AuthBus || this.domAPI.getDocument();
+            const authBus = this.auth?.AuthBus || this.domAPI.getDocument();
             const onceAuth = this.safeHandler(() => {
               _initKbc();
             }, 'KBC_Init_AuthWait');
@@ -673,7 +725,7 @@ class ProjectDetailsComponent {
             // (re-)attempt ChatManager initialisation if the user is on the
             // chat-related tabs.  This prevents the earlier race condition
             // where ChatManager.initialise was invoked before KB readiness.
-            if ((this.state.activeTab === 'chat' || this.state.activeTab === 'conversations') && this.chatManager?.initialize) {
+            if ((this.uiStateService.getState('ProjectDetailsComponent', 'activeTab') === 'chat' || this.uiStateService.getState('ProjectDetailsComponent', 'activeTab') === 'conversations') && this.chatManager?.initialize) {
               this._restoreChatAndModelConfig();
             }
           }
@@ -685,9 +737,8 @@ class ProjectDetailsComponent {
 
     /* ───────── Auth state synchronisation ───────── */
     {
-      // Resolve AuthBus (preferred) or fall back to document
-      const authMod = this.eventHandlers.DependencySystem?.modules?.get?.('auth');
-      const authTarget = authMod?.AuthBus || this.domAPI.getDocument();
+      // Resolve AuthBus via injected authModule or fall back to document
+      const authTarget = this.auth?.AuthBus || this.domAPI.getDocument();
 
       const _handleAuth = this.safeHandler((ev) => {
         const authed = ev?.detail?.authenticated ?? this._isAuthenticated();
@@ -698,7 +749,7 @@ class ProjectDetailsComponent {
         // 2️⃣ toggle chat UI availability
         if (!authed) {
           this.disableChatUI('Sign-in required');
-        } else if (this.state.activeTab === 'chat' || this.state.activeTab === 'conversations') {
+        } else if (this.uiStateService.getState('ProjectDetailsComponent', 'activeTab') === 'chat' || this.uiStateService.getState('ProjectDetailsComponent', 'activeTab') === 'conversations') {
           // re-enable / re-initialise chat when user logs in
           this._restoreChatAndModelConfig();
         }
@@ -717,7 +768,7 @@ class ProjectDetailsComponent {
 
   switchTab(tabName) {
     if (!this.elements.tabs[tabName]) return;
-    this._setState({ activeTab: tabName });
+    this.uiStateService.setState('ProjectDetailsComponent', 'activeTab', tabName);
     this.elements.tabBtns?.forEach(btn => {
       const active = btn.dataset.tab === tabName;
       btn.classList.toggle("tab-active", active);
@@ -739,13 +790,16 @@ class ProjectDetailsComponent {
     if (!this.projectId) return;
     switch (tab) {
       case "files":
-        this.projectManager.loadProjectFiles(this.projectId);
+        // Delegate file loading to extracted coordinator
+        this.projectDataCoordinator.loadProjectFiles(this.projectId);
         break;
       case "chat":
-        this.projectManager.loadProjectConversations(this.projectId);
+        // Delegate conversation loading to extracted coordinator
+        this.projectDataCoordinator.loadProjectConversations(this.projectId);
         break;
       case "artifacts":
-        this.projectManager.loadProjectArtifacts(this.projectId);
+        // Delegate artifact loading to extracted coordinator
+        this.projectDataCoordinator.loadProjectArtifacts(this.projectId);
         break;
       case "details":
         this.projectManager.loadProjectStats(this.projectId);
@@ -767,31 +821,23 @@ class ProjectDetailsComponent {
 
         /* 1️⃣ Attempt immediate initialisation only if authenticated */
         if (isAuthed && !tryInit()) {
-          /* 2️⃣ Try resolving the instance from the DI container */
-          const kbc = this.eventHandlers?.DependencySystem?.modules?.get?.('knowledgeBaseComponent');
-          if (kbc) {
-            this.setKnowledgeBaseComponent(kbc);
-            if (tryInit()) break;
-          }
-
-          /* 3️⃣ Still unavailable – set up a one-time listener to retry after injection */
+          /* KnowledgeBaseComponent not yet available. Set up a one-time listener
+             to retry initialization after the component signals it is ready. */
           this._logWarn("KnowledgeBaseComponent not ready – deferring initialization until available");
+
           const onceHandler = this.safeHandler(() => {
-            const cmp = this.eventHandlers?.DependencySystem?.modules?.get?.('knowledgeBaseComponent');
-            if (cmp) {
-              this.setKnowledgeBaseComponent(cmp);
-              tryInit();
-            }
+            // Attempt initialisation again now that KnowledgeBaseComponent is ready
+            tryInit();
             this.domAPI.getDocument().removeEventListener('knowledgebasecomponent:initialized', onceHandler);
           }, 'KnowledgeTabDeferredInit');
+
           this.domAPI
             .getDocument()
             .addEventListener('knowledgebasecomponent:initialized', onceHandler, { once: true });
         } else if (!isAuthed) {
           this._logWarn("User not authenticated – deferring KnowledgeBaseComponent initialization until login");
 
-          const authModule = this.eventHandlers.DependencySystem?.modules?.get?.('auth');
-          const authBus = authModule?.AuthBus || this.domAPI.getDocument();
+          const authBus = this.auth?.AuthBus || this.domAPI.getDocument();
 
           const authOnce = this.safeHandler(() => {
             // Re-invoke _loadTabContent('knowledge') after auth to run regular logic
@@ -806,13 +852,21 @@ class ProjectDetailsComponent {
   }
 
   async _fetchProjectData(projectId) {
-    this._logInfo(`Fetching data for project ${projectId}... (About to call loadProjectDetails)`, {
+    this._logInfo(`Fetching data for project ${projectId}... (About to call loadProjectData)`, {
       projectId,
       context: "projectDetailsComponent._fetchProjectData",
       stack: (new Error().stack || "").split('\n')[2] || "unknown"
     });
     try {
-      const project = await this.projectManager.loadProjectDetails(projectId);
+      let project;
+
+      // Use data coordinator if available, fallback to project manager
+      if (this.projectDataCoordinator?.loadProjectData) {
+        project = await this.projectDataCoordinator.loadProjectData(projectId);
+      } else {
+        project = await this.projectManager.loadProjectDetails(projectId);
+      }
+
       this.projectData = project || null;
       if (!this.projectData) {
         this._logError(`Unable to load project ${projectId}`);
@@ -822,92 +876,105 @@ class ProjectDetailsComponent {
            structure). */
         try {
           this.navigationService?.navigateToProjectList?.({ replace: true });
-        } catch (_) {
+        } catch {
           /* navigation failure is non-fatal; we already logged the original error */
         }
       } else {
         this._logInfo(`Project data loaded`, { projectId });
       }
-      this._setState({ projectDataLoaded: Boolean(this.projectData) });
+      this.uiStateService.setState('ProjectDetailsComponent', 'projectDataLoaded', Boolean(this.projectData));
     } catch (err) {
       this._logError(`Error loading project data`, err);
       this.projectData = null;
-      this._setState({ projectDataLoaded: false });
+      this.uiStateService.setState('ProjectDetailsComponent', 'projectDataLoaded', false);
     }
   }
 
   _renderProjectData() {
     if (!this.elements.container || !this.projectData) return;
-    const { name, description, goals, customInstructions, created_at, archived } = this.projectData;
-    if (this.elements.title) this.elements.title.textContent = this.sanitizer.sanitize(name || "Untitled Project");
-    if (this.elements.projectNameDisplay) {
-      this.elements.projectNameDisplay.textContent = this.sanitizer.sanitize(name || "Untitled Project");
-    }
-    if (this.elements.projectDescriptionDisplay) {
-      this.domAPI.setInnerHTML(this.elements.projectDescriptionDisplay,
-        this.sanitizer.sanitize(description || "No description provided."));
-    }
-    if (this.elements.projectGoalsDisplay) {
-      this.domAPI.setInnerHTML(this.elements.projectGoalsDisplay,
-        this.sanitizer.sanitize(goals || "No goals specified."));
-    }
-    if (this.elements.projectInstructionsDisplay) {
-      this.domAPI.setInnerHTML(this.elements.projectInstructionsDisplay,
-        this.sanitizer.sanitize(customInstructions || "No custom instructions."));
-    }
-    if (this.elements.projectCreatedDate && created_at) {
-      this.elements.projectCreatedDate.textContent = this.sanitizer.sanitize(this.formatDate(created_at));
-    }
-    
-    // Update archive button and badge based on project status
-    this._updateArchiveButton(archived);
-    this._updateArchiveBadge(archived);
-  }
 
-  _updateArchiveButton(isArchived) {
-    const archiveBtn = this.elements.container?.querySelector('#archiveProjectBtn');
-    if (!archiveBtn) return;
-
-    // Update button text and icon based on archive status
-    if (isArchived) {
-      // Project is archived - show unarchive option
-      this.domAPI.setInnerHTML(archiveBtn, this.sanitizer.sanitize(`
-        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4
-                   M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8
-                   m-9 4h4" />
-        </svg>
-        Unarchive Project
-      `));
-      archiveBtn.className = 'btn btn-success w-full';
-      archiveBtn.setAttribute('aria-label', 'Unarchive this project');
+    // Delegate to extracted renderer
+    if (this.projectDetailsRenderer?.renderProjectData) {
+      this.projectDetailsRenderer.renderProjectData(this.projectData, this.elements);
     } else {
-      // Project is active - show archive option
-      this.domAPI.setInnerHTML(archiveBtn, this.sanitizer.sanitize(`
-        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4
-                   M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8
-                   m-9 4h4" />
-        </svg>
-        Archive Project
-      `));
-      archiveBtn.className = 'btn btn-warning w-full';
-      archiveBtn.setAttribute('aria-label', 'Archive this project');
+      // Fallback implementation
+      const { name, description, goals, customInstructions, created_at } = this.projectData;
+      if (this.elements.title) this.elements.title.textContent = this.sanitizer.sanitize(name || "Untitled Project");
+      if (this.elements.projectNameDisplay) {
+        this.elements.projectNameDisplay.textContent = this.sanitizer.sanitize(name || "Untitled Project");
+      }
+      if (this.elements.projectDescriptionDisplay) {
+        this.domAPI.setInnerHTML(this.elements.projectDescriptionDisplay,
+          this.sanitizer.sanitize(description || "No description provided."));
+      }
+      if (this.elements.projectGoalsDisplay) {
+        this.domAPI.setInnerHTML(this.elements.projectGoalsDisplay,
+          this.sanitizer.sanitize(goals || "No goals specified."));
+      }
+      if (this.elements.projectInstructionsDisplay) {
+        this.domAPI.setInnerHTML(this.elements.projectInstructionsDisplay,
+          this.sanitizer.sanitize(customInstructions || "No custom instructions."));
+      }
+      if (this.elements.projectCreatedDate && created_at) {
+        this.elements.projectCreatedDate.textContent = this.sanitizer.sanitize(this.formatDate(created_at));
+      }
+      // Archive button and badge handled by renderer
     }
   }
 
-  _updateArchiveBadge(isArchived) {
-    const archiveBadge = this.elements.container?.querySelector('#projectArchivedBadge');
-    if (!archiveBadge) return;
+  // Removed: _updateArchiveButton and _updateArchiveBadge (handled by projectDetailsRenderer)
 
-    if (isArchived) {
-      archiveBadge.classList.remove('hidden');
-    } else {
-      archiveBadge.classList.add('hidden');
+  // Delegate file operations to data coordinator
+  async _delegateDownloadFile(fileId, fileName) {
+    if (!this.projectId || !fileId) return;
+    try {
+      if (this.projectDataCoordinator?.downloadFile) {
+        await this.projectDataCoordinator.downloadFile(this.projectId, fileId, fileName);
+      } else {
+        await this.projectManager.downloadFile(this.projectId, fileId);
+      }
+    } catch (e) {
+      this._logError("Error downloading file", e);
     }
   }
+
+  async _delegateDeleteFile(fileId, fileName) {
+    if (!this.projectId || !fileId) return;
+    if (!this.modalManager) return;
+
+    this.modalManager.confirmAction({
+      title: "Delete file",
+      message: `Delete "${this.sanitizer.sanitize(fileName || fileId)}" permanently?`,
+      confirmText: "Delete",
+      confirmClass: "btn-error",
+      onConfirm: this.safeHandler(async () => {
+        try {
+          if (this.projectDataCoordinator?.deleteFile) {
+            await this.projectDataCoordinator.deleteFile(this.projectId, fileId);
+          } else {
+            await this.projectManager.deleteFile(this.projectId, fileId);
+            await this.projectManager.loadProjectFiles(this.projectId);
+          }
+        } catch (e) {
+          this._logError('Error deleting file', e);
+        }
+      }, "ConfirmDeleteFile")
+    });
+  }
+
+  async _delegateDownloadArtifact(projectId, artifactId) {
+    try {
+      if (this.projectDataCoordinator?.downloadArtifact) {
+        await this.projectDataCoordinator.downloadArtifact(projectId, artifactId);
+      } else {
+        await this.projectManager.downloadArtifact(projectId, artifactId);
+      }
+    } catch (e) {
+      this._logError("Error downloading artifact", e);
+    }
+  }
+
+  // Removed: _fileItem, _conversationItem, _artifactItem (all rendering now handled by projectDetailsRenderer)
 
   disableChatUI(reason = 'Chat unavailable') {
     try {
@@ -927,420 +994,33 @@ class ProjectDetailsComponent {
     }
   }
 
-  _fileItem(file) {
-    const doc = this.domAPI.getDocument();
-    const div = doc.createElement("div");
-    div.className = "flex items-center justify-between gap-3 p-3 bg-base-100 rounded-box shadow-xs hover:bg-base-200 transition-colors max-w-full w-full overflow-x-auto";
-    div.dataset.fileId = file.id;
-    this.domAPI.setInnerHTML(div, `
-      <div class="flex items-center gap-3 min-w-0 flex-1">
-        <span class="text-xl text-primary">📄</span>
-        <div class="flex flex-col min-w-0 flex-1">
-          <div class="font-medium truncate" title="${this.sanitizer.sanitize(file.filename)}">${this.sanitizer.sanitize(file.filename)}</div>
-          <div class="text-xs text-base-content/70">
-            ${this.sanitizer.sanitize(this.formatBytes(file.file_size))} · ${this.sanitizer.sanitize(this.formatDate(file.created_at))}
-          </div>
-        </div>
-      </div>
-      <div class="flex gap-2">
-        <button class="btn btn-ghost btn-xs btn-square text-info hover:bg-info/10" aria-label="Download" data-action="download">
-          ⬇
-        </button>
-        <button class="btn btn-ghost btn-xs btn-square text-error hover:bg-error/10" aria-label="Delete" data-action="delete">
-          ✕
-        </button>
-      </div>`);
-    const [downloadBtn, deleteBtn] = div.querySelectorAll("button");
-    this.eventHandlers.trackListener(
-      downloadBtn, "click",
-      this.safeHandler(() => this._downloadFile(file.id, file.filename), `DownloadFile_${file.id}`),
-      { context: this.listenersContext, description: `DownloadFile_${file.id}` });
-    this.eventHandlers.trackListener(
-      deleteBtn, "click",
-      this.safeHandler(() => this._confirmDeleteFile(file.id, file.filename), `DeleteFile_${file.id}`),
-      { context: this.listenersContext, description: `DeleteFile_${file.id}` });
-    return div;
-  }
-
-  _conversationItem(cv) {
-    const doc = this.domAPI.getDocument();
-    const div = doc.createElement("div");
-    div.className = "conversation-item";
-    div.dataset.conversationId = cv.id;
-    this.domAPI.setInnerHTML(div, `
-      <h4 class="font-medium truncate mb-1">${this.sanitizer.sanitize(cv.title || "Untitled conversation")}</h4>
-      <p class="text-sm text-base-content/60 truncate leading-tight mt-0.5">${this.sanitizer.sanitize(cv.last_message || "No messages yet")}</p>
-      <div class="flex justify-between mt-1 text-xs text-base-content/60">
-        <span>${this.sanitizer.sanitize(this.formatDate(cv.updated_at))}</span>
-        <span class="badge badge-ghost badge-sm">${this.sanitizer.sanitize(cv.message_count || 0)} msgs</span>
-      </div>
-    `);
-    // No click handler here; chatUIEnhancements handles it.
-    return div;
-  }
-
   /**
    * Render the conversation list inside the chat tab (#conversationsList).
-   * Replaces existing items and updates the conversations counter.
-   *
-   * @param {Array<object>} conversations - Array of conversation objects.
+   * Delegates to the extracted renderer module.
    */
   _renderConversationList(conversations = []) {
     try {
-      const listContainer = this.elements?.conversationsList || this.domAPI.getElementById?.('conversationsList');
-      if (!listContainer) {
+      const container = this.elements?.conversationsList || this.domAPI.getElementById?.('conversationsList');
+      if (!container) {
         this._logWarn('Conversations list container not found – skipping render');
         return;
       }
 
-      // Clear previous contents
-      this.domAPI.setInnerHTML(listContainer, '');
-
-      if (!Array.isArray(conversations) || conversations.length === 0) {
-        // Provide a graceful empty-state message expected by project-details-enhancements.js
-        const empty = this.domAPI.createElement('div');
-        empty.className = 'empty-state text-center p-4 text-base-content/60';
-        this.domAPI.setTextContent(empty, 'No conversations yet');
-        this.domAPI.appendChild(listContainer, empty);
-      } else {
-        conversations.forEach((cv) => {
-          const item = this._conversationItem(cv);
-          this.domAPI.appendChild(listContainer, item);
-        });
-      }
-
-      // Update badge count in header if present
-      const countEl = this.domAPI.getElementById?.('conversationCount');
-      if (countEl) {
-        this.domAPI.setTextContent(countEl, String(conversations.length));
-      }
+      this.projectDetailsRenderer?.renderConversations?.(conversations, {
+        container,
+        projectId: this.projectId
+      });
     } catch (err) {
       this._logError('Failed to render conversation list', err);
     }
   }
 
-  _artifactItem(art) {
-    const doc = this.domAPI.getDocument();
-    const div = doc.createElement("div");
-    div.className = "p-3 border-b border-base-300 hover:bg-base-200 transition-colors max-w-full w-full overflow-x-auto";
-    div.dataset.artifactId = art.id;
-    this.domAPI.setInnerHTML(div, `
-      <div class="flex justify-between items-center">
-        <h4 class="font-medium truncate">${this.sanitizer.sanitize(art.name || "Untitled artifact")}</h4>
-        <span class="text-xs text-base-content/60">${this.sanitizer.sanitize(this.formatDate(art.created_at))}</span>
-      </div>
-      <p class="text-sm text-base-content/70 truncate mt-1">${this.sanitizer.sanitize(art.description || art.type || "No description")}</p>
-      <div class="mt-2">
-        <button class="btn btn-xs btn-outline" data-action="download">Download</button>
-      </div>`);
-    const btn = div.querySelector("[data-action=download]");
-    this.eventHandlers.trackListener(
-      btn, "click",
-      this.safeHandler(() => this.projectManager.downloadArtifact(this.projectId, art.id), `DownloadArtifact_${art.id}`),
-      { context: this.listenersContext, description: `DownloadArtifact_${art.id}` });
-    return div;
-  }
-
-  async _confirmDeleteFile(fileId, fileName) {
-    if (!this.projectId || !fileId) return;
-    if (!this.modalManager) return;
-    this.modalManager.confirmAction({
-      title: "Delete file",
-      message: `Delete “${this.sanitizer.sanitize(fileName || fileId)}” permanently?`,
-      confirmText: "Delete",
-      confirmClass: "btn-error",
-      onConfirm: this.safeHandler(async () => {
-        try {
-          await this.projectManager.deleteFile(this.projectId, fileId);
-          await this.projectManager.loadProjectFiles(this.projectId);
-        } catch (e) { this._logError('Error deleting file', e); }
-      }, "ConfirmDeleteFile")
-    });
-  }
-
-  async _downloadFile(fileId, fileName) {
-    if (!this.projectId || !fileId) return;
-    try { await this.projectManager.downloadFile(this.projectId, fileId); }
-    catch (e) { this._logError("Error downloading file", e); }
-  }
-
-
-  _cleanupPendingOperations() {
-    if (this._pendingOperations) {
-      for (const op of this._pendingOperations.values()) {
-        op.cancel();
-      }
-      this._pendingOperations.clear();
-    }
-  }
-
-
-  async initialize() {
-    await this.domReadinessService.waitForEvent('app:ready');
-    this._logInfo("Initializing...");
-
-    /* ──────────────────────────────────────────────────────────────
-     * Browser Back-Forward Cache (bfcache) handling
-     * ──────────────────────────────────────────────────────────── */
-    try {
-      const win = this.domAPI?.getWindow?.();
-      if (win && this.eventHandlers?.trackListener) {
-        this.eventHandlers.trackListener(
-          win,
-          'pageshow',
-          this.safeHandler((event) => {
-            // If the page is restored from the bfcache (`event.persisted === true`)
-            // many runtime connections (e.g., MessagePorts) are severed. Performing
-            // a hard reload ensures the entire application stack is re-initialised
-            // in a clean state.
-            if (event?.persisted) {
-              this._logInfo('Page restored from Back-Forward Cache. Reloading application.');
-              if (typeof this.navigationService?.reload === 'function') {
-                this.navigationService.reload();
-              } else if (typeof win.location?.reload === 'function') {
-                win.location.reload();
-              }
-            }
-          }, 'PageShowBFCacheHandler'),
-          { context: 'ProjectDetailsComponent', description: 'PageShowBFCacheHandler' }
-        );
-      }
-    } catch (err) {
-      this._logError('Failed to register pageshow handler', err);
-    }
-
-    this._logInfo("Initialized successfully.");
-  }
-
-  async show({ projectId, activeTab } = {}) {
-    this._logInfo("show() invoked", { projectId, activeTab });
-    this._logInfo("Loading project details template", { projectId });
-    if (!projectId) {
-      this._logError("No projectId provided. Redirecting to project list.");
-      this.navigationService.navigateToProjectList();
-      return;
-    }
-    if (!this.projectManager) {
-      // Try to get ProjectManager from DI system as fallback
-      const pmFromDI = this.eventHandlers?.DependencySystem?.modules?.get?.('projectManager');
-      if (pmFromDI) {
-        this._logInfo('ProjectManager found in DI system, setting it directly', { projectId, activeTab });
-        this.setProjectManager(pmFromDI);
-        // Continue with show() since we now have projectManager
-      } else {
-        this._logWarn('ProjectManager not yet available – defer show()', { projectId, activeTab });
-        // Re-attempt once the DI setter provides the projectManager
-        this._logInfo('Setting up projectManagerReady event listener for deferred show()');
-        this.bus.addEventListener(
-          'projectManagerReady',
-          this.safeHandler(() => {
-            this._logInfo('projectManagerReady event received, retrying show()', { projectId, activeTab });
-            this.show({ projectId, activeTab });
-          }, 'DeferredShow'),
-          { once: true }
-        );
-        return;
-      }
-    }
-    this.projectId = projectId;
-    this._setState({ loading: true });
-    const templateLoaded = await this._loadTemplate();
-    this._logInfo(`Template loaded: ${templateLoaded}`, { projectId });
-    if (!templateLoaded) return this._setState({ loading: false });
-
-    const elementsReady = await this._ensureElementsReady();
-    this._logInfo(`Elements ready: ${elementsReady}`, { projectId });
-    if (!elementsReady) {
-      this._logError("Project details UI elements not ready, aborting show", new Error("Elements not ready"), { projectId });
-      if (this.elements.container) {
-        this.domAPI.setInnerHTML(
-          this.elements.container,
-          `<div class="p-4 text-error">Failed to initialize project details UI elements.</div>`
-        );
-      }
-      return this._setState({ loading: false });
-    }
-
-    this.elements.container.classList.remove("hidden");
-    this._logInfo("Fetching project data", { projectId });
-    await this._fetchProjectData(this.projectId);
-    this._renderProjectData();
-
-    /* Abort further initialisation when the project payload is missing (e.g.
-       404 or invalid response) – the user has already been redirected back to
-       the project list view inside _fetchProjectData(). */
-    if (!this.projectData) {
-      this._setState({ loading: false });
-      return;
-    }
-
-    /* ── Ensure KB is fetched early so Chat UI can initialise ── */
-    try {
-      if (this.projectManager?.loadProjectKnowledgeBase) {
-        await this.projectManager.loadProjectKnowledgeBase(this.projectId);
-      }
-    } catch (err) {
-      this._logError('Error loading knowledge base during show()', err);
-    }
-
-    // (moved above, after KB load)
-
-    this._logInfo("Initializing subcomponents", { projectId });
-    await this._initSubComponents();
-
-    try {
-      const tsm = this.eventHandlers.DependencySystem?.modules?.get?.('tokenStatsManager');
-      if (tsm?.initialize) await tsm.initialize();
-    } catch (e) {
-      this._logWarn('TokenStatsManager initialise failed (non-blocking)', { err: e?.message });
-    }
-
-    try {
-      const pde =
-        this.eventHandlers?.DependencySystem?.modules?.get?.(
-          'projectDetailsEnhancements'
-        );
-      if (pde?.initialize) {
-        await pde.initialize();
-      }
-    } catch (err) {
-      this._logError(
-        'Failed to invoke projectDetailsEnhancements.initialize',
-        err
-      );
-    }
-
-    this._bindEventListeners();
-    this._logInfo("Event listeners bound for project details view", { projectId });
-    /* Re-request conversation list now that listeners are active.
-       The initial load in loadProjectDetails may have fired before
-       listeners were registered, leaving the UI empty. */
-    try {
-      if (this.projectManager?.loadProjectConversations) {
-        this._logInfo('Reloading conversations post listener-binding', {
-          projectId
-        });
-        await this.projectManager.loadProjectConversations(projectId);
-      }
-    } catch (err) {
-      this._logError('Error reloading conversations after listener bind', err);
-    }
-    this._restoreKnowledgeTab();
-    this._restoreStatsCounts();
-    this.switchTab(activeTab || "chat");
-    this._setState({ loading: false });
-    this._logInfo(`View for project ${this.projectId} is now visible.`);
-  }
-
-  hide() {
-    if (this.elements.container) {
-      this.elements.container.classList.add("hidden");
-      this._logInfo("View hidden.");
-    }
-    this.eventHandlers.cleanupListeners({ context: 'Sidebar' });
-  }
-
-  destroy() {
-    // Ensure cleanup of all listeners for this context
-    this.eventHandlers.cleanupListeners({ context: 'ProjectDetailsComponent' });
-    this.hide();
-    this._cleanupPendingOperations();
-    this._logInfo("Destroyed.");
-  }
-
-  cleanup() { this.destroy(); }
-
-  renderProject(projectObj) {
-    if (!projectObj) return;
-    this.projectData = projectObj;
-    this._renderProjectData();
-  }
-
-  _updateNewChatButtonState() {
-    const newChatBtn = this.elements.container?.querySelector("#newConversationBtn");
-    if (!newChatBtn) return;
-    const ready = this.state.projectDataLoaded && this._isAuthenticated();
-    newChatBtn.disabled = !ready;
-    newChatBtn.classList.toggle("btn-disabled", !ready);
-    newChatBtn.title = ready ? 'Start a new conversation' : 'Sign-in required';
-    // No click handler here; chatUIEnhancements handles it.
-  }
-
-
-  async _restoreChatAndModelConfig() {
-    const tab = this.state.activeTab;
-    // Bail out early until the Knowledge Base for the current project is
-    // available and active.  ChatManager cannot finish initialisation without
-    // an active KB and will otherwise reject with
-    // "Project has no knowledge base", emitting a misleading error and
-    // leaving the UI in a broken state.  We therefore postpone ChatManager
-    // initialisation until `projectKnowledgeBaseLoaded` has fired and the
-    // KB is confirmed active.
-
-    // Phase 2 refactor: Chat should initialise even if the Knowledge Base is
-    // inactive or still indexing so that users can at least start a basic
-    // conversation.  Any KB-powered features will gracefully degrade on the
-    // backend / ChatManager side.
-
-    if ((tab === "conversations" || tab === "chat") && this.chatManager?.initialize) {
-      const chatTabContent = this.elements.tabs.chat;
-      if (chatTabContent) {
-        this._logInfo("Initializing chatManager for chat tab", { projectId: this.projectId });
-
-        try {
-          // First, load the chat UI template into the container using injected htmlTemplateLoader
-          if (this.htmlTemplateLoader?.loadTemplate) {
-            await this.htmlTemplateLoader.loadTemplate({
-              url: '/static/html/chat_ui.html',
-              containerSelector: SELECTORS.chatUIContainer,
-              eventName: 'chatUITemplateLoaded',
-              append: false // Replace content instead of appending
-            });
-
-            this._logInfo('Chat UI template loaded successfully', { projectId: this.projectId });
-
-            // Wait a moment for DOM to be ready
-            await new Promise((resolve) => setTimeout(resolve, 100));
-
-            // After template is loaded, initialize the chat manager
-            await this.chatManager.initialize({
-              projectId: this.projectId,
-              /* container is the #chatUIContainer element itself – no inner
-                 .chat-container required (template only has the outer div) */
-              containerSelector: SELECTORS.chatUIContainer,
-              messageContainerSelector: SELECTORS.chatMessages,
-              inputSelector: SELECTORS.chatInput,
-              sendButtonSelector: SELECTORS.chatSendBtn,
-              titleSelector: SELECTORS.chatTitle
-            });
-
-            // After chatManager is ready, ensure chatUIEnhancements is initialized
-            try {
-              const chatUIEnh = this.eventHandlers?.DependencySystem?.modules?.get?.('chatUIEnhancements');
-              if (chatUIEnh?.initialize) {
-                await chatUIEnh.initialize({ projectId: this.projectId });
-              }
-            } catch (e) {
-              this._logWarn('chatUIEnhancements initialize failed (non-blocking)', { err: e?.message });
-            }
-
-            this._logInfo("ChatManager initialized successfully", { projectId: this.projectId });
-          } else {
-            this._logError("htmlTemplateLoader not available in dependencies");
-          }
-        } catch (err) {
-          this._logError("Failed to load chat UI template or initialize chat manager", err);
-        }
-      }
-    }
-  }
-
   _restoreKnowledgeTab() {
-    if (this.knowledgeBaseComponent && typeof this.knowledgeBaseComponent.initialize === "function" && this.state.activeTab === "knowledge") {
+    if (this.knowledgeBaseComponent && typeof this.knowledgeBaseComponent.initialize === "function" && this.uiStateService.getState('ProjectDetailsComponent', 'activeTab') === "knowledge") {
       const kbData = this.projectData?.knowledge_base;
       this.knowledgeBaseComponent.initialize(true, kbData, this.projectId)
         .catch(e => this._logError("Error re-initializing knowledge base component", e));
-    } else if (this.state.activeTab === "knowledge") {
+    } else if (this.uiStateService.getState('ProjectDetailsComponent', 'activeTab') === "knowledge") {
       this._logWarn("KnowledgeBaseComponent not ready - skipping re-initialization");
     }
   }
@@ -1355,12 +1035,10 @@ class ProjectDetailsComponent {
 
   // (No _safeTxt or _safeAttr helpers remain)
 
-  getEventBus() { return this.bus; }
-
   setKnowledgeBaseComponent(kbcInstance) {
     this.knowledgeBaseComponent = kbcInstance;
     this._logInfo("KnowledgeBaseComponent instance received and set.", { kbcInstance: !!kbcInstance });
-    if (this.state.activeTab === "knowledge") {
+    if (this.uiStateService.getState('ProjectDetailsComponent', 'activeTab') === "knowledge") {
       if (!this.knowledgeBaseComponent || typeof this.knowledgeBaseComponent.initialize !== "function") {
         if (!this._kbcFirstWarned) {
           this._logWarn("KnowledgeBaseComponent instance missing or invalid after set - skipping re-initialization");
@@ -1374,5 +1052,31 @@ class ProjectDetailsComponent {
           .catch(e => this._logError("Error re-initializing knowledge base component after set", e));
       }
     }
+  }
+
+  async show({ projectId, activeTab } = {}) {
+    if (!this.projectManager) {
+      this._logWarn('ProjectManager not yet available – defer show()', { projectId, activeTab });
+      this._logInfo('Setting up projectManagerReady event listener for deferred show()');
+      const deferredShowHandler = this.safeHandler(() => {
+        this._logInfo('projectManagerReady event received, retrying show()', { projectId, activeTab });
+        this.show({ projectId, activeTab });
+        this.eventService.off('projectManagerReady', deferredShowHandler);
+      }, 'DeferredShow');
+      this.eventService.on('projectManagerReady', deferredShowHandler);
+      return;
+    }
+    this.projectId = projectId;
+    this.elements.activeTab = activeTab;
+    this._logInfo(`Showing project details for projectId: ${projectId}, activeTab: ${activeTab}`);
+    this._loadTemplate()
+      .then(() => this._ensureElementsReady())
+      .then(() => this._initSubComponents())
+      .then(() => this._bindEventListeners())
+      .then(() => {
+        this._loadTabContent(activeTab);
+        this.uiStateService.setState('ProjectDetailsComponent', 'active', true);
+      })
+      .catch(err => this._logError('Error during show()', err));
   }
 }

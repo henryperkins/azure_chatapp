@@ -72,7 +72,7 @@ const RULE_DESC = {
   5: "Every listener and log must include a `{ context }` tag.",
   6: "Always call `sanitizer.sanitize()` before inserting user HTML.",
   7: "DOM/app readiness handled *only* by DI-injected `domReadinessService`.",
-  8: "Never mutate global state (e.g., `app.state`) directly; use canonical services (`authenticationService`, `projectContextService`, `uiStateService`).",
+  8: "Never mutate global state (e.g., `app.state`) or keep module-scope mutable variables; use canonical services (authenticationService, projectContextService, uiStateService).",
   9: "All cross-module events must flow through DI-injected `eventService.emit/on/off`.  No direct `dispatchEvent()` or ad-hoc EventTarget buses.",
   10: "All routing via DI-injected `navigationService.navigateTo()`.",
   11: "All network calls via DI-injected `apiClient`.",
@@ -1027,6 +1027,38 @@ function vState(err, file, isBootstrapFile, config) {
   const globalAppNames = Array.isArray(globalAppName) ? globalAppName : [globalAppName];
 
   return {
+    /* ------------------------------------------------------------------ */
+    /* 8.a  – Top-level mutable variables (anti-pattern)                  */
+    /* ------------------------------------------------------------------ */
+    Program(path) {
+      // Iterate over top-level statements only.  We purposefully ignore
+      //   const declarations because they are effectively immutable.
+      path.get("body").forEach(stmtPath => {
+        if (!stmtPath.isVariableDeclaration()) return;
+        if (!["let", "var"].includes(stmtPath.node.kind)) return;
+        // Allow test files to declare mocks freely.
+        if ( /[/\\]tests?[/\\]/i.test(file) ) return;
+
+        const isModuleScope = stmtPath.parentPath && stmtPath.parentPath.isProgram();
+        if (!isModuleScope) return;
+
+        stmtPath.node.declarations.forEach(decl => {
+          if (decl.id.type !== "Identifier") return; // Skip patterns/arrays
+          const varName = decl.id.name;
+          // Whitelist obvious harmless flags/constants
+          if (/^MODULE(_CONTEXT|_NAME)?$/i.test(varName)) return;
+          if (/^DEBUG|TEST|FLAG/i.test(varName)) return; // debug toggles are OK
+
+          err.push(E(
+            file,
+            decl.loc.start.line,
+            8,
+            `Top-level mutable variable '${varName}' detected. Module-scope state violates single-source-of-truth and DI guard-rails.`,
+            `Store view flags in 'uiStateService' or persistent data in a dedicated service. Do not declare '${varName}' at module scope.`
+          ));
+        });
+      });
+    },
     AssignmentExpression(p) {
       const left = p.node.left;
       if ( left.type === "MemberExpression" && left.object.type === "MemberExpression" && left.object.object.type === "Identifier" && globalAppNames.includes(left.object.object.name) && !p.scope.hasBinding(left.object.object.name) && left.object.property.name === statePropName ) {

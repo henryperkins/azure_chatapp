@@ -21,22 +21,40 @@ import { SELECTORS } from './utils/selectorConstants.js';
 
 export function createChatUIEnhancements(deps = {}) {
   // Validate required dependencies
-  const required = ['domAPI', 'eventHandlers', 'browserService', 'domReadinessService', 'logger', 'sanitizer', 'DependencySystem', 'chatManager', 'modalManager'];
+  const required = ['domAPI', 'eventHandlers', 'browserService', 'domReadinessService', 'logger', 'sanitizer', 'DependencySystem', 'modalManager'];
   required.forEach(dep => { if (!deps[dep]) throw new Error(`Missing ${dep}`); });
 
-  const { domAPI, eventHandlers, browserService, domReadinessService, logger, sanitizer, chatManager, modalManager, DependencySystem } = deps;
+  const { domAPI, eventHandlers, browserService, domReadinessService, logger, sanitizer, chatManager: initialChatManager, modalManager, DependencySystem, eventService = null, uiStateService = null } = deps;
   const MODULE_CONTEXT = 'chatUIEnhancements';
 
-  if (!chatManager)  throw new Error('Missing chatManager');
   if (!modalManager) throw new Error('Missing modalManager');
 
-  const state = {
-    typingIndicatorVisible: false,
-    messageContainer: null,
-    activeTab: null,
-    projectId: null,
-    isMobile: browserService?.isMobile || false
-  };
+  // Allow chatManager to be resolved later via DependencySystem if not provided now.
+  function getChatManager() {
+    return initialChatManager || DependencySystem?.modules?.get?.('chatManager') || null;
+  }
+
+  // Initialize state in UIStateService instead of local object
+  const STATE_COMPONENT = 'ChatUIEnhancements';
+  
+  function getState(key, defaultValue = null) {
+    return uiStateService ? uiStateService.getState(STATE_COMPONENT, key) || defaultValue : defaultValue;
+  }
+  
+  function setState(key, value) {
+    if (uiStateService) {
+      uiStateService.setState(STATE_COMPONENT, key, value);
+    }
+  }
+  
+  // Initialize default values
+  if (uiStateService) {
+    setState('typingIndicatorVisible', getState('typingIndicatorVisible', false));
+    setState('messageContainer', getState('messageContainer', null));
+    setState('activeTab', getState('activeTab', null));
+    setState('projectId', getState('projectId', null));
+    setState('isMobile', getState('isMobile', browserService?.isMobile || false));
+  }
 
   // -------------------------------------------------------------------
   // Phase-2 de-duplication: delegate heavy UI helpers to ChatUIController
@@ -62,7 +80,7 @@ function createMessageElement(message, sender, timestamp = Date.now(), messageId
 
   function setMessageContainer(container) {
     _getChatController()?.setMessageContainer?.(container);
-    state.messageContainer = container; // keep local state for legacy callers
+    setState('messageContainer', container); // keep state for legacy callers
   }
 
   function showTypingIndicator() {
@@ -90,12 +108,6 @@ function createMessageElement(message, sender, timestamp = Date.now(), messageId
   }
 
   const safeHandler = getSafeHandler(DependencySystem);
-  const chatUIBus = new EventTarget();
-  if (typeof DependencySystem?.modules?.register === 'function') {
-    DependencySystem.modules.register('chatUIBus', chatUIBus);
-  } else if (typeof DependencySystem?.register === 'function') {
-    DependencySystem.register('chatUIBus', chatUIBus);
-  }
 
   // Use utility helper for DOM waiting
   const waitForElements = createDomWaitHelper(domReadinessService, logger);
@@ -118,7 +130,7 @@ function createMessageElement(message, sender, timestamp = Date.now(), messageId
       attempt += 1;
 
       // Propagate optional projectId on every attempt so latest value is used
-      if (options.projectId) state.projectId = options.projectId;
+      if (options.projectId) setState('projectId', options.projectId);
 
       const CHAT_SELECTORS = [SELECTORS.chatInput, SELECTORS.chatMessages, SELECTORS.chatSendBtn];
       const context = `${MODULE_CONTEXT}::initialize_attempt_${attempt}`;
@@ -146,7 +158,7 @@ function createMessageElement(message, sender, timestamp = Date.now(), messageId
       const chatContainer = domAPI.getElementById(SELECTORS.chatMessages.slice(1));
       const doc = domAPI.getDocument();
 
-      state.messageContainer = chatContainer;
+      setState('messageContainer', chatContainer);
 
       if (doc) {
         eventHandlers.trackListener(
@@ -158,11 +170,11 @@ function createMessageElement(message, sender, timestamp = Date.now(), messageId
       }
 
       setupChatHeaderCollapse();
-      if (state.isMobile) setupMobileEnhancements();
-      if (state.projectId) setupProjectChatEnhancements();
+      if (getState('isMobile')) setupMobileEnhancements();
+      if (getState('projectId')) setupProjectChatEnhancements();
 
       logger.info(`[${MODULE_CONTEXT}] Chat UI enhancements initialized on attempt ${attempt}`,
-        { context: MODULE_CONTEXT, projectId: state.projectId || 'global' });
+        { context: MODULE_CONTEXT, projectId: getState('projectId') || 'global' });
     };
 
     // Kick off first attempt (immediately)
@@ -227,7 +239,10 @@ function createMessageElement(message, sender, timestamp = Date.now(), messageId
     // Setup pull-to-refresh for chat messages
     createPullToRefresh({
       element        : domAPI.getElementById(SELECTORS.chatMessages.slice(1)),
-      onRefresh      : ()=> chatManager.loadConversation(chatManager.currentConversationId),
+      onRefresh      : () => {
+        const cm = getChatManager();
+        cm?.loadConversation?.(cm.currentConversationId);
+      },
       eventHandlers, domAPI, browserService,
       ctx            : MODULE_CONTEXT
     });
@@ -245,8 +260,9 @@ function createMessageElement(message, sender, timestamp = Date.now(), messageId
         newConversationBtn,
         'click',
         safeHandler(() => {
-          if (chatManager && typeof chatManager.createNewConversation === 'function') {
-            chatManager.createNewConversation()
+          const cm = getChatManager();
+          if (cm?.createNewConversation) {
+            cm.createNewConversation()
               .catch(err => {
                 logger.error('[chatUIEnhancements] Error creating new conversation', err, {
                   context: MODULE_CONTEXT
@@ -287,7 +303,8 @@ function createMessageElement(message, sender, timestamp = Date.now(), messageId
         if (!conversationId) return;
 
         // Load conversation if chatManager is available
-        if (chatManager && typeof chatManager.loadConversation === 'function') {
+        const cm = getChatManager();
+        if (cm?.loadConversation) {
           // Highlight active conversation
           domAPI.querySelectorAll('.conversation-item.active').forEach(item => {
             domAPI.removeClass(item, 'active');
@@ -295,7 +312,7 @@ function createMessageElement(message, sender, timestamp = Date.now(), messageId
           domAPI.addClass(conversationItem, 'active');
 
           // Load conversation
-          chatManager.loadConversation(conversationId)
+          cm.loadConversation(conversationId)
             .catch(err => {
               logger.error('[chatUIEnhancements] Error loading conversation', err, {
                 context: MODULE_CONTEXT,
@@ -320,7 +337,7 @@ function createMessageElement(message, sender, timestamp = Date.now(), messageId
 
     const { message, sender, timestamp, messageId } = event.detail;
     const messageEl = createMessageElement(message, sender, timestamp, messageId);
-    const chatContainer = state.messageContainer || domAPI.getElementById(SELECTORS.chatMessages.slice(1));
+    const chatContainer = getState('messageContainer') || domAPI.getElementById(SELECTORS.chatMessages.slice(1));
 
     if (chatContainer && messageEl) {
       domAPI.appendChild(chatContainer, messageEl);
@@ -563,14 +580,14 @@ function _legacyHeavyCreateMessageElement(message, sender, timestamp = Date.now(
 // Legacy heavyweight duplicate – not used anymore.
 function _legacyShowTypingIndicatorHeavy() {
     const context = `${MODULE_CONTEXT}::showTypingIndicator`;
-    if (state.typingIndicatorVisible) {
+    if (getState('typingIndicatorVisible')) {
       logger.debug(`[${MODULE_CONTEXT}] Typing indicator already visible, skipping`, {
         context
       });
       return;
     }
 
-    const container = state.messageContainer || domAPI.getElementById(SELECTORS.chatMessages.slice(1));
+    const container = getState('messageContainer') || domAPI.getElementById(SELECTORS.chatMessages.slice(1));
     if (!container) {
       logger.warn(`[${MODULE_CONTEXT}] Cannot show typing indicator, container not found`, {
         context
@@ -597,7 +614,7 @@ function _legacyShowTypingIndicatorHeavy() {
     domAPI.appendChild(container, indicatorEl);
 
     scrollToBottom(container);
-    state.typingIndicatorVisible = true;
+    setState('typingIndicatorVisible', true);
 
     logger.debug(`[${MODULE_CONTEXT}] Typing indicator shown`, {
       context
@@ -611,7 +628,7 @@ function _legacyShowTypingIndicatorHeavy() {
 // Legacy heavyweight duplicate – not used anymore.
 function _legacyHideTypingIndicatorHeavy() {
     const context = `${MODULE_CONTEXT}::hideTypingIndicator`;
-    if (!state.typingIndicatorVisible) {
+    if (!getState('typingIndicatorVisible')) {
       logger.debug(`[${MODULE_CONTEXT}] No typing indicator visible, skipping`, {
         context
       });
@@ -621,7 +638,7 @@ function _legacyHideTypingIndicatorHeavy() {
     const indicator = domAPI.getElementById('typingIndicator');
     if (indicator && indicator.parentNode) {
       domAPI.removeChild(indicator.parentNode, indicator);
-      state.typingIndicatorVisible = false;
+      setState('typingIndicatorVisible', false);
       logger.debug(`[${MODULE_CONTEXT}] Typing indicator removed`, {
         context
       });
@@ -630,7 +647,7 @@ function _legacyHideTypingIndicatorHeavy() {
         context
       });
       // Reset state anyway to avoid getting stuck
-      state.typingIndicatorVisible = false;
+      setState('typingIndicatorVisible', false);
     }
   }
 
@@ -647,8 +664,8 @@ function _legacyHideTypingIndicatorHeavy() {
 
     /* remember the active container so showTypingIndicator/… work for both
        the global chat and the per-project chat inside Project Details */
-    state.messageContainer = messageContainer || null; // Cache the provided container
-    state.typingIndicatorVisible = false; // reset state for new pane
+    setState('messageContainer', messageContainer || null); // Cache the provided container
+    setState('typingIndicatorVisible', false); // reset state for new pane
 
     logger.debug(`[${MODULE_CONTEXT}] Message container set`, {
       context,
@@ -838,32 +855,16 @@ function _legacyHideTypingIndicatorHeavy() {
     eventHandlers.cleanupListeners({ context: MODULE_CONTEXT });
 
     // Reset state
-    state.typingIndicatorVisible = false;
-    state.messageContainer = null;
+    setState('typingIndicatorVisible', false);
+    setState('messageContainer', null);
 
     logger.info(`[${MODULE_CONTEXT}] Chat UI enhancements cleaned up`, {
       context
     });
   }
 
-  // Central message-append helper for ChatManager
-  function appendMessage(role, content, id = null, thinking = null, redacted = false) {
-    const msgEl = createMessageElement(content, role === 'user' ? 'user' : 'ai', Date.now(), id);
-    if (state.messageContainer) domAPI.appendChild(state.messageContainer, msgEl);
-    if (role !== 'user' && (thinking || redacted)) showTypingIndicator();
-  }
-
-  // Gap #2 – Expose helper to clear conversation list (called by ChatManager)
-  function clearConversationList() {
-    const container = domAPI.getElementById('conversationList');
-    if (container) {
-      try {
-        domAPI.replaceChildren(container);
-      } catch (err) {
-        logger.error('[chatUIEnhancements] Failed to clear conversation list', err, { context: MODULE_CONTEXT });
-      }
-    }
-  }
+  // NOTE: appendMessage and clearConversationList are already defined above (lines 80-90)
+  // Removing duplicate definitions to fix lint errors
 
   // Public API
   const apiObject = {
@@ -891,11 +892,7 @@ function _legacyHideTypingIndicatorHeavy() {
   apiObject.appendMessage          = appendMessage;
   apiObject.clearConversationList  = clearConversationList;
 
-  if (typeof DependencySystem?.modules?.register === 'function') {
-    DependencySystem.modules.register('chatUIEnhancements', apiObject);
-  } else if (typeof DependencySystem?.register === 'function') {
-    DependencySystem.register('chatUIEnhancements', apiObject);
-  }
+  // Registration is handled by appInitializer.js to avoid duplicate DI entries.
 
   return apiObject;
 }

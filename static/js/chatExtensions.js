@@ -55,6 +55,9 @@ export function createChatExtensions(options = {}) {
 
   const MODULE_CONTEXT = "chatExtensions";
 
+  // Capture unified application EventBus once to avoid runtime look-ups.
+  const AppBus = DependencySystem?.modules?.get('AppBus') || DependencySystem?.modules?.get('eventBus');
+
   // Register the factory instance in the DI container so other modules can
   // lazily resolve it without violating guard-rails (no direct imports).
   if (typeof DependencySystem?.register === 'function' && !DependencySystem.modules?.get('chatExtensionsFactory')) {
@@ -116,9 +119,8 @@ export function createChatExtensions(options = {}) {
         titleEl.textContent = newTitle.trim();
 
         // Notify others via unified bus if available.
-        const appBus = DependencySystem.modules.get('AppBus') || DependencySystem.modules.get('eventBus');
-        if (appBus) {
-          appBus.dispatchEvent(new CustomEvent('conversation:titleEdited', {
+        if (AppBus) {
+          AppBus.dispatchEvent(new CustomEvent('conversation:titleEdited', {
             detail: {
               conversationId: chatManager?.currentConversationId || null,
               newTitle: newTitle.trim(),
