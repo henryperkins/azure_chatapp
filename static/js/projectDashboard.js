@@ -24,7 +24,8 @@ export function createProjectDashboard({
   domReadinessService,
   logger,
   sanitizer,
-  APP_CONFIG
+  APP_CONFIG,
+  moduleResolver
 }) {
   // ─────────────────────────────────────────────────────────────────────────
   // 1) Validate dependencies upfront
@@ -58,6 +59,9 @@ export function createProjectDashboard({
   if (!sanitizer) {
     throw new Error('[createProjectDashboard] sanitizer dependency is required');
   }
+  if (!moduleResolver || typeof moduleResolver !== 'function') {
+    throw new Error('[createProjectDashboard] moduleResolver function is required');
+  }
   if (!APP_CONFIG) {
     throw new Error('[createProjectDashboard] APP_CONFIG dependency is required');
   }
@@ -89,13 +93,34 @@ export function createProjectDashboard({
       this.safeHandler = _safeHandler;
 
       // Modules retrieved from dependencySystem
-      this.getModule = (key) => {
-        const module = this.dependencySystem.modules.get(key);
-        if (!module) {
-          logger.error('[ProjectDashboard][getModule]', `Missing required module "${key}"`, { context: 'projectDashboard' });
-          throw new Error(`[ProjectDashboard] Module "${key}" not found`);
+      // Capture required modules once to avoid runtime look-ups later.
+      this._moduleCache = new Map();
+      // Pre-populate cache with commonly used modules at construction time so
+      // that no DependencySystem look-ups occur after the factory finishes.
+      const _bootstrapKeys = [
+        'app',
+        'projectManager',
+        'auth',
+        'navigationService',
+        'appModule',
+        // Optional UI components
+        'projectListComponent',
+        'projectDetailsComponent'
+      ];
+      _bootstrapKeys.forEach((k) => {
+        try {
+          const mod = moduleResolver(k);
+          if (mod) this._moduleCache.set(k, mod);
+        } catch (_) {
+          /* intentionally ignore – optional modules handled downstream */
         }
-        return module;
+      });
+
+      this.getModule = (key) => {
+        if (this._moduleCache.has(key)) return this._moduleCache.get(key);
+        const missingMsg = `[ProjectDashboard] Module "${key}" not pre-resolved and cannot be accessed at runtime (guard-rails)`;
+        logger.error('[ProjectDashboard][getModule]', missingMsg, { context: 'projectDashboard' });
+        throw new Error(missingMsg);
       };
 
       try {
@@ -103,6 +128,7 @@ export function createProjectDashboard({
         this.projectManager = this.getModule('projectManager');
         this.auth = this.getModule('auth');
         this.navigationService = this.getModule('navigationService');
+        this.appModule = this.getModule('appModule');
       } catch (err) {
         logger.error('[ProjectDashboard][constructor]', err, { context: 'projectDashboard' });
         throw err;
@@ -132,7 +158,7 @@ export function createProjectDashboard({
      * Logs a warning instead of throwing.
      */
     getModuleSafe(key) {
-      const mod = this.dependencySystem.modules.get(key);
+      const mod = this._moduleCache.get(key);
       if (!mod) {
         logger.error('[ProjectDashboard][getModuleSafe]', `Optional module "${key}" not found`, { context: 'projectDashboard' });
         return null;
@@ -189,7 +215,7 @@ export function createProjectDashboard({
       const initStartTime = Date.now();
       const runInitialize = async () => {
         try {
-          const appModule = this.dependencySystem.modules.get('appModule');
+          const appModule = this.appModule;
           if (!appModule?.state?.isReady) {
             logger.debug?.('[ProjectDashboard] Proceeding before app:ready (bootstrap phase).', { context: 'projectDashboard' });
           }
@@ -930,7 +956,7 @@ export function createProjectDashboard({
       }
 
       // Retain appIsReady check for details, as details may depend on full app config
-      const appIsReady = this.dependencySystem.modules.get('appModule')?.state?.isReady === true;
+      const appIsReady = this.appModule?.state?.isReady === true;
       if (appIsReady && this.components.projectDetails?.initialize) {
         try {
           await this.domReadinessService.dependenciesAndElements({

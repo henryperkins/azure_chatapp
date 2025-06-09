@@ -1,0 +1,49 @@
+🛡️ Frontend Pattern Checker - Scanning...
+
+Scanning: testBus.js                                                                      ┌──────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│                      🛡️ Violations in: testBus.js (3)                       │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────────┬─────┐
+│Pattern Rule                                                            │Count│
+├────────────────────────────────────────────────────────────────────────┼─────┤
+│🔒 1.  Factory Function Export                                          │1    │
+│🔒 9.  Unified Event Service                                            │1    │
+│🔒 19. Unauthorised Module Path                                         │1    │
+└────────────────────────────────────────────────────────────────────────┴─────┘
+
+Detailed Violations:
+
+• Rule 1: Factory Function Export
+  Export `createXyz` factory, validate deps, expose cleanup, no top-level code.
+
+L1:   export function createFoo({ eventService }) {
+  ⚠  Violation: Factory 'createFoo' must validate its dependencies.
+  💡 Hint:
+     Example: if (!deps.logger) throw new Error("Missing logger dependency");
+
+• Rule 9: Unified Event Service
+  All cross-module events must flow through DI-injected `eventService.emit/on/off`.  No direct `dispatchEvent()` or ad-hoc EventTarget buses.
+
+L3:   bus.dispatchEvent(new Event('foo'));
+  ⚠  Violation: Direct 'dispatchEvent()' usage is forbidden – use DI-provided 'eventService.emit()'.
+  💡 Hint:
+     Inject 'eventService' and call eventService.emit('evtName', detail). Legacy AppBus/AuthBus patterns are deprecated.
+
+• Rule 19: Unauthorised Module Path
+  Files added outside the approved module manifest are forbidden.
+
+L1:   export function createFoo({ eventService }) {
+  ⚠  Violation: File not present in allowed-modules manifest.
+  💡 Hint:
+     Add this path to allowed-modules.json as part of an approved refactor, or move logic into an existing module.
+
+--------------------------------------------------------------------------------
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│              🚨 Found 3 violation(s) in 1 of 1 file(s) scanned.              │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+

@@ -103,6 +103,9 @@ class VectorDB:
         self._initialize_faiss()
         self._initialize_embedding_model()
 
+        # Future returned by thread-pool if model load is in progress
+        self._embedding_model_future = getattr(self, "_embedding_model_future", None)
+
         # In-memory storage
         self.vectors: dict[str, List[float]] = {}  # doc_id -> vector
         self.metadata: dict[str, dict[str, Any]] = {}  # doc_id -> metadata
@@ -118,22 +121,37 @@ class VectorDB:
 
     def _initialize_embedding_model(self) -> None:
         """Initialize the embedding model with proper error handling."""
-        self.embedding_model = None
+        """Lazy-initialise sentence-transformer model without blocking the event-loop."""
+        self.embedding_model = None  # type: ignore
+
         if not SENTENCE_TRANSFORMERS_AVAILABLE or not SentenceTransformer:
+            # Will fall back to external embedding API later
             logger.info(
-                f"Using external embedding API for model: {self.embedding_model_name}"
+                "sentence-transformers not available – will use remote embedding API"
             )
             return
 
+        import asyncio
+
+        def _load_model_sync() -> "SentenceTransformer":  # noqa: ANN001
+            return SentenceTransformer(self.embedding_model_name)
+
         try:
-            self.embedding_model = SentenceTransformer(self.embedding_model_name)
-            logger.info(
-                f"Initialized local embedding model: {self.embedding_model_name}"
-            )
-            self._warmup_embedding_model()
-        except Exception as e:
-            logger.error(f"Error initializing embedding model: {str(e)}")
-            raise VectorDBError(f"Failed to initialize embedding model: {str(e)}")
+            try:
+                loop = asyncio.get_running_loop()
+                # We are inside an asyncio loop → off-load to thread pool and
+                # *store* the Future so first call to generate_embeddings can
+                # await it.
+                self._embedding_model_future = loop.run_in_executor(None, _load_model_sync)
+            except RuntimeError:
+                # No running loop → safe to load synchronously (startup script)
+                self.embedding_model = _load_model_sync()
+                self._embedding_model_future = None
+
+            logger.info("Embedding model initialisation scheduled (%s)", self.embedding_model_name)
+        except Exception as exc:
+            logger.error("Failed to schedule embedding model load: %s", exc, exc_info=True)
+            raise VectorDBError("Failed to initialise embedding model") from exc
 
     def _warmup_embedding_model(self) -> None:
         """Perform initial warmup of the embedding model."""
@@ -197,6 +215,12 @@ class VectorDB:
             return []
 
         try:
+            # Ensure local model (if any) is ready
+            if self.embedding_model is None and getattr(self, "_embedding_model_future", None):
+                # Await background loading once, then cache result
+                self.embedding_model = await self._embedding_model_future  # type: ignore[attr-defined]
+                self._embedding_model_future = None
+
             if self.embedding_model and hasattr(self.embedding_model, "encode"):
                 return await self._generate_local_embeddings(texts)
             return await self._generate_api_embeddings(texts)
@@ -402,13 +426,17 @@ class VectorDB:
                 for dist, idx in zip(distances[0], indices[0]):
                     if 0 <= idx < len(self.id_map):
                         doc_id = self.id_map[idx]
-                        if doc_id in self.metadata:
-                            if filter_metadata and not self._matches_filter(
-                                self.metadata[doc_id], filter_metadata
-                            ):
-                                continue
-                            score = max(0.0, 1.0 - (dist / 100.0))
-                            results.append(self._format_result(doc_id, score))
+                        if doc_id not in self.metadata:
+                            continue
+
+                        # Apply optional metadata filter first
+                        if filter_metadata and not self._matches_filter(
+                            self.metadata[doc_id], filter_metadata
+                        ):
+                            continue
+
+                        score = max(0.0, 1.0 - (dist / 100.0))
+                        results.append(self._format_result(doc_id, score))
         except Exception as e:
             logger.error(f"FAISS search failed: {str(e)}")
             raise VectorDBError(f"Search operation failed: {str(e)}") from e

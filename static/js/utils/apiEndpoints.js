@@ -19,9 +19,25 @@ export function createApiEndpoints({ logger, DependencySystem, config } = {}) {
     'AUTH_CSRF', 'AUTH_LOGIN', 'AUTH_LOGOUT', 'AUTH_REGISTER', 'AUTH_VERIFY', 'AUTH_REFRESH'
   ];
 
+  // Optional helper endpoints that do not break core auth flow if missing.
+  // We still add them to the canonical list so consumers have a single
+  // source of truth, but we do NOT fail validation if they are absent.
+  const OPTIONAL_DYNAMIC_ENDPOINTS = {
+    // Gap #4 remediation – dynamic path for token estimation
+    ESTIMATE_TOKENS: (projectId, conversationId) =>
+      `/api/projects/${projectId}/conversations/${conversationId}/estimate-tokens`
+  };
+
   // Allow passing custom overrides via config
   const userCfg = config || {};
   let endpoints = { ...config.API_ENDPOINTS };
+
+  // Merge optional helpers if they are not already supplied via config
+  for (const [k, v] of Object.entries(OPTIONAL_DYNAMIC_ENDPOINTS)) {
+    if (!(k in endpoints)) {
+      endpoints[k] = v;
+    }
+  }
 
   // Validation
   const missingKeys = [];

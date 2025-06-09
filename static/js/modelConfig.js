@@ -27,9 +27,10 @@ export function createModelConfig({
     return ['info', 'warn', 'error', 'debug', 'log']
       .reduce((acc, m) => { acc[m] = () => {}; return acc; }, {});
   }
-  const localLogger = logger
-    || dependencySystem?.modules?.get?.('logger')
-    || createNoopLogger();
+  if (!logger) {
+    throw new Error(`[${MODULE_CONTEXT}] logger dependency is required`);
+  }
+  const localLogger = logger;
 
   // Validate required dependencies
   if (!dependencySystem) {
@@ -925,7 +926,10 @@ export function createModelConfig({
       cleanup: () => cleanup(api),
       initWithReadiness: async () => {
         // We rely entirely on the DI-provided domReadinessService for readiness gating.
-        await api.ds.modules.get("domReadinessService").dependenciesAndElements(["app", "domAPI"]);
+        if (!domReadinessService?.dependenciesAndElements) {
+          throw new Error(`[${MODULE_CONTEXT}] domReadinessService missing or invalid during initWithReadiness()`);
+        }
+        await domReadinessService.dependenciesAndElements(["app", "domAPI"]);
         initializeUI(api, state);
       },
       // Provide a handle for advanced usage if another module wants to manually track or dispatch

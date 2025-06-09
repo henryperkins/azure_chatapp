@@ -14,26 +14,28 @@ import time
 from uuid import UUID
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
-from fastapi.responses import JSONResponse  # NEW
-from pydantic import BaseModel, Field, ValidationError
+from fastapi import APIRouter, Depends, HTTPException, status, Query
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
-# Removed unused SQLAlchemy project imports after refactor
+from sqlalchemy.future import select
+from sqlalchemy.orm import selectinload
+from models.project import Project
 from sentry_sdk import (
     capture_exception,
     configure_scope,
     start_transaction,
+    start_span,
     metrics,
     capture_message,
 )
 
 from db import get_async_session
 from services.conversation_service import ConversationService, get_conversation_service
-from services.token_service import estimate_input_tokens
 from utils.auth_utils import get_current_user_and_token
-from utils.sentry_utils import sentry_span_context, make_sentry_trace_response
+from utils.sentry_utils import make_sentry_trace_response
 from services.project_service import validate_project_access
 from utils.serializers import serialize_conversation
+from services.conversation_service import validate_model_and_params
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Project Conversations"])
@@ -52,13 +54,16 @@ class ConversationCreate(BaseModel):
 
     title: str = Field(..., min_length=1, max_length=100)
     model_id: str = Field("claude-3-sonnet-20240229")
-    model_params: Optional[dict] = Field(
-        default_factory=dict, alias="model_config"
-    )  # ← NEW
+    # The request JSON can supply "model_config" which populates `model_params` internally.
+    model_params: Optional[dict] = Field(default_factory=dict, alias="model_config")
     kb_enabled: Optional[bool] = False
     sentry_trace: Optional[str] = Field(None, description="Frontend trace ID")
 
-    model_config = {"populate_by_name": True, "extra": "allow"}  # keep aliases working
+    # Rename this to avoid conflict with the field alias in Pydantic v2
+    pydantic_config = {
+        "populate_by_name": True,
+        "extra": "allow",
+    }
 
 
 class ConversationUpdate(BaseModel):
@@ -66,13 +71,14 @@ class ConversationUpdate(BaseModel):
 
     title: Optional[str] = Field(None, min_length=1, max_length=100)
     model_id: Optional[str] = None
-    model_params: Optional[dict] = Field(
-        default_factory=dict, alias="model_config"
-    )  # ← NEW
+    model_params: Optional[dict] = Field(default_factory=dict, alias="model_config")
     kb_enabled: Optional[bool] = False
     sentry_trace: Optional[str] = Field(None, description="Frontend trace ID")
 
-    model_config = {"populate_by_name": True, "extra": "allow"}
+    pydantic_config = {
+        "populate_by_name": True,
+        "extra": "allow",
+    }
 
 
 class MessageCreate(BaseModel):
@@ -102,7 +108,7 @@ class BatchConversationIds(BaseModel):
 # =============================================================================
 
 
-@router.get("/{project_id}/conversations", response_class=JSONResponse)
+@router.get("/{project_id}/conversations", response_model=dict)
 async def list_project_conversations(
     project_id: UUID,
     current_user_tuple: tuple = Depends(get_current_user_and_token),
@@ -111,35 +117,23 @@ async def list_project_conversations(
     limit: int = Query(100, ge=1, le=500),
     conv_service: ConversationService = Depends(get_conversation_service),
 ):
-    """Return a paginated list of conversations for a project.
-
-    Implements the unified error-handling contract so that the handler never
-    completes without either returning a dictionary or raising an
-    `HTTPException`. This prevents FastAPI from emitting a
-    `ResponseValidationError` when the function would otherwise have returned
-    `None`.
-    """
-
-    try:
-        with sentry_span_context(
-            op="conversation",
-            description=f"List conversations for project {project_id}",
-        ) as span:
+    """List all conversations for a project with full monitoring"""
+    with start_span(
+        op="conversation",
+        name="List Project Conversations",
+        description=f"List all conversations for project {project_id}",
+    ) as span:
+        try:
             current_user = current_user_tuple[0]
-
             span.set_tag("project.id", str(project_id))
             span.set_tag("user.id", str(current_user.id))
             span.set_data("pagination.skip", skip)
             span.set_data("pagination.limit", limit)
 
-            # ------------------------------------------------------------------
-            # Access control
-            # ------------------------------------------------------------------
+            # Validate access
             await validate_project_access(project_id, current_user, db)
 
-            # ------------------------------------------------------------------
-            # Fetch conversations
-            # ------------------------------------------------------------------
+            # Get conversations
             start_time = time.time()
             conversations = await conv_service.list_conversations(
                 user_id=current_user.id, project_id=project_id, skip=skip, limit=limit
@@ -147,7 +141,9 @@ async def list_project_conversations(
             duration = (time.time() - start_time) * 1000
 
             span.set_data("db_query_time_ms", duration)
-            metrics.distribution("conversation.list.duration", duration, unit="millisecond")
+            metrics.distribution(
+                "conversation.list.duration", duration, unit="millisecond"
+            )
 
             payload = {
                 "status": "success",
@@ -161,22 +157,20 @@ async def list_project_conversations(
                 ],
                 "count": len(conversations),
             }
-
             return make_sentry_trace_response(payload, span)
+        except HTTPException:
+            raise
+        except Exception as e:
+            span.set_tag("error", True)
+            capture_exception(e)
+            metrics.incr("conversation.list.failure")
+            logger.error(f"Failed to list conversations: {str(e)}")
+            raise HTTPException(
+                status_code=500, detail="Failed to retrieve conversations"
+            ) from e
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception("Unhandled error while listing conversations")
-        capture_exception(e)
-        metrics.incr("conversation.list.failure")
-        raise HTTPException(
-            status_code=500,
-            detail="Internal server error while retrieving conversations",
-        ) from e
 
-
-@router.post("/{project_id}/conversations", response_class=JSONResponse)
+@router.post("/{project_id}/conversations", response_model=dict)
 async def create_conversation(
     project_id: UUID,
     conversation_data: ConversationCreate,
@@ -202,17 +196,67 @@ async def create_conversation(
             transaction.set_tag("user.id", str(current_user.id))
             transaction.set_tag("model.id", conversation_data.model_id)
 
-            # Create conversation (ConversationService handles all validations)
-            with sentry_span_context(op="db.create", description="Create conversation record"):
-                conv = await conv_service.create_conversation(
-                    user_id=current_user.id,
-                    title=conversation_data.title,
-                    model_id=conversation_data.model_id,
-                    project_id=project_id,
-                    model_config=conversation_data.model_params,
-                    kb_enabled=conversation_data.kb_enabled or False,
+            # Validate project access
+            with start_span(op="access.check", description="Validate project access"):
+                await validate_project_access(project_id, current_user, db)
+
+            # Fetch Project and eagerly load its knowledge_base
+            stmt = (
+                select(Project)
+                .options(selectinload(Project.knowledge_base))
+                .where(Project.id == project_id)
+            )
+            result = await db.execute(stmt)
+            project = result.scalar_one_or_none()
+            if not project:
+                transaction.set_tag("error.type", "project_retrieval")
+                metrics.incr(
+                    "conversation.create.failure",
+                    tags={"reason": "project_not_found_post_validation"},
                 )
-                transaction.set_tag("conversation.id", str(conv.id))
+                logger.error(f"Project {project_id} not found after access validation.")
+                raise HTTPException(
+                    status_code=404,
+                    detail="Project not found despite access validation.",
+                )
+
+            # Knowledge Base Validation
+            if not project.knowledge_base:
+                transaction.set_tag("error.type", "validation")
+                metrics.incr(
+                    "conversation.create.failure", tags={"reason": "kb_missing"}
+                )
+                raise HTTPException(
+                    status_code=400, detail="Project has no knowledge base"
+                )
+            kb_id = project.knowledge_base.id
+
+            # Create conversation
+            with start_span(op="db.create", description="Create conversation record"):
+                from sqlalchemy.exc import IntegrityError
+
+                try:
+                    conv = await conv_service.create_conversation(
+                        user_id=current_user.id,
+                        title=conversation_data.title,
+                        model_id=conversation_data.model_id,
+                        project_id=project_id,
+                        model_config=conversation_data.model_params,
+                        kb_enabled=conversation_data.kb_enabled,
+                    )
+                    transaction.set_tag("conversation.id", str(conv.id))
+                except IntegrityError as db_exc:
+                    logger.exception(
+                        f"[create_conversation route] Database error with project_id={project_id}, user_id={current_user.id}"
+                    )
+                    metrics.incr(
+                        "conversation.create.failure",
+                        tags={"reason": "db_integrity_error"},
+                    )
+                    raise HTTPException(
+                        status_code=500,
+                        detail="Database error. Possibly a foreign key violation or concurrency issue.",
+                    ) from db_exc
 
             # Set user context
             with configure_scope() as scope:
@@ -267,7 +311,7 @@ async def create_conversation(
         ) from e
 
 
-@router.get("/{project_id}/conversations/{conversation_id}", response_class=JSONResponse)
+@router.get("/{project_id}/conversations/{conversation_id}", response_model=dict)
 async def get_project_conversation(
     project_id: UUID,
     conversation_id: UUID,
@@ -276,9 +320,10 @@ async def get_project_conversation(
     conv_service: ConversationService = Depends(get_conversation_service),
 ):
     """Get conversation with performance tracing"""
-    with sentry_span_context(
+    with start_span(
         op="conversation",
-        description=f"Get Conversation: Get conversation {conversation_id}",
+        name="Get Conversation",
+        description=f"Get conversation {conversation_id}",
     ) as span:
         try:
             current_user = current_user_tuple[0]
@@ -302,7 +347,6 @@ async def get_project_conversation(
                 "conversation": {
                     **conv_data,
                     "project_id": str(project_id),
-                    # user_id usually in conv_data already
                 },
             }
             return make_sentry_trace_response(payload, span)
@@ -319,7 +363,7 @@ async def get_project_conversation(
             ) from e
 
 
-@router.patch("/{project_id}/conversations/{conversation_id}", response_class=JSONResponse)
+@router.patch("/{project_id}/conversations/{conversation_id}", response_model=dict)
 async def update_project_conversation(
     project_id: UUID,
     conversation_id: UUID,
@@ -346,8 +390,7 @@ async def update_project_conversation(
             transaction.set_tag("user.id", str(current_user.id))
 
             # Validate access
-            with sentry_span_context(op="access.check", description="Validate project access"):
-                await validate_project_access(project_id, current_user, db)
+            await validate_project_access(project_id, current_user, db)
 
             # Track changes
             changes = {}
@@ -364,7 +407,7 @@ async def update_project_conversation(
                 project_id=project_id,
                 title=update_data.title,
                 model_id=update_data.model_id,
-                model_config=update_data.model_params,  # ← CHANGED
+                model_config=update_data.model_params,
                 kb_enabled=update_data.kb_enabled,
             )
 
@@ -401,7 +444,7 @@ async def update_project_conversation(
         ) from e
 
 
-@router.delete("/{project_id}/conversations/{conversation_id}", response_class=JSONResponse)
+@router.delete("/{project_id}/conversations/{conversation_id}", response_model=dict)
 async def delete_project_conversation(
     project_id: UUID,
     conversation_id: UUID,
@@ -460,16 +503,17 @@ async def delete_project_conversation(
 
 @router.post(
     "/{project_id}/conversations/{conversation_id}/messages",
-    response_class=JSONResponse,
+    response_model=dict,
     status_code=status.HTTP_201_CREATED,
 )
 async def create_project_conversation_message(
     project_id: UUID,
     conversation_id: UUID,
-    payload: dict = Body(...),
+    new_msg: MessageCreate,
     current_user_tuple: tuple = Depends(get_current_user_and_token),
     conv_service: ConversationService = Depends(get_conversation_service),
     db: AsyncSession = Depends(get_async_session),
+    _valid: None = Depends(validate_model_and_params),
 ):
     """Process message with AI response tracing"""
     transaction = start_transaction(
@@ -480,53 +524,6 @@ async def create_project_conversation_message(
 
     try:
         with transaction:
-            # ---- Extract/validate message payload (supports wrapper or flat) ----
-            msg_dict = payload.get("new_msg") or payload
-
-            # Merge top-level overrides into msg_dict before instantiation
-            override_fields = (
-                "vision_detail",
-                "enable_web_search",
-                "enable_thinking",
-                "thinking_budget",
-                "reasoning_effort",
-                "temperature",
-                "max_tokens",
-            )
-            merged_dict = dict(msg_dict)
-            for fld in override_fields:
-                if fld in payload:
-                    merged_dict[fld] = payload[fld]
-
-            # Defensive: Replace any FieldInfo values with their default or a safe fallback
-            from pydantic.fields import FieldInfo
-
-            for k, v in merged_dict.items():
-                if isinstance(v, FieldInfo):
-                    # Use default if available, else sensible fallback
-                    merged_dict[k] = (
-                        v.default
-                        if v.default is not None
-                        else (
-                            ""
-                            if k
-                            in [
-                                "raw_text",
-                                "role",
-                                "vision_detail",
-                                "reasoning_effort",
-                                "sentry_trace",
-                                "image_data",
-                            ]
-                            else False
-                        )
-                    )
-
-            try:
-                new_msg = MessageCreate(**merged_dict)
-            except ValidationError as ve:
-                raise HTTPException(status_code=422, detail=ve.errors()) from ve
-
             current_user = current_user_tuple[0]
             # Set context from frontend if available
             if new_msg.sentry_trace:
@@ -556,24 +553,14 @@ async def create_project_conversation_message(
 
             # Process message
             message_metrics = {}
-            with sentry_span_context(
-                op="message.process", description="Handle message"
-            ) as span:
+            with start_span(op="message.process", description="Handle message") as span:
                 start_time = time.time()
-
-                # Defensive: ensure raw_text and role are strings before using .strip()/.lower()
-                raw_text_val = new_msg.raw_text
-                if not isinstance(raw_text_val, str):
-                    raw_text_val = "" if raw_text_val is None else str(raw_text_val)
-                role_val = new_msg.role
-                if not isinstance(role_val, str):
-                    role_val = "user" if role_val is None else str(role_val)
 
                 response = await conv_service.create_message(
                     conversation_id=conversation_id,
                     user_id=current_user.id,
-                    content=raw_text_val.strip(),
-                    role=role_val.lower().strip(),
+                    content=new_msg.raw_text.strip(),
+                    role=new_msg.role.lower().strip(),
                     project_id=project_id,
                     image_data=new_msg.image_data,
                     vision_detail=new_msg.vision_detail,
@@ -590,11 +577,8 @@ async def create_project_conversation_message(
                 message_metrics["processing_time_ms"] = duration
 
             # AI response processing
-            role_val = new_msg.role
-            if not isinstance(role_val, str):
-                role_val = "user" if role_val is None else str(role_val)
-            if role_val.lower() == "user":
-                with sentry_span_context(
+            if new_msg.role.lower() == "user":
+                with start_span(
                     op="ai.response", description="Generate AI response"
                 ) as ai_span:
                     ai_start = time.time()
@@ -660,7 +644,7 @@ async def create_project_conversation_message(
 
 
 @router.post(
-    "/{project_id}/conversations/{conversation_id}/summarize", response_class=JSONResponse
+    "/{project_id}/conversations/{conversation_id}/summarize", response_model=dict
 )
 async def summarize_conversation(
     project_id: UUID,
@@ -709,7 +693,7 @@ async def summarize_conversation(
                 return {"summary": "No messages to summarize", "message_count": 0}
 
             # Generate summary
-            with sentry_span_context(op="ai.summarize", description="Generate summary") as span:
+            with start_span(op="ai.summarize", description="Generate summary") as span:
                 start_time = time.time()
 
                 summary = await conv_service.generate_conversation_summary(
@@ -766,7 +750,7 @@ async def summarize_conversation(
 # =============================================================================
 
 
-@router.post("/{project_id}/conversations/batch-delete", response_class=JSONResponse)
+@router.post("/{project_id}/conversations/batch-delete", response_model=dict)
 async def batch_delete_conversations(
     project_id: UUID,
     batch_data: BatchConversationIds,
@@ -795,7 +779,7 @@ async def batch_delete_conversations(
             failed_ids = []
 
             for conv_id in batch_data.conversation_ids:
-                with sentry_span_context(
+                with start_span(
                     op="db.delete", description=f"Delete {conv_id}"
                 ) as span:
                     try:
@@ -853,8 +837,6 @@ async def batch_delete_conversations(
 # Utility Endpoints
 # =============================================================================
 
-# --- Token Estimation Endpoint for Live Chat Input ---
-
 
 class TokenEstimationRequest(BaseModel):
     current_input: str
@@ -878,133 +860,34 @@ async def estimate_tokens_for_input_in_conversation(
     db: AsyncSession = Depends(get_async_session),
     conv_service: ConversationService = Depends(get_conversation_service),
 ):
-    """Estimate token count for a chat input against a conversation/model context."""
+    """
+    Estimate token count for a chat input against a conversation/model context.
+    """
     try:
         current_user = current_user_tuple[0]
         await validate_project_access(project_id, current_user, db)
-        input_tokens = await estimate_input_tokens(
-            conversation_id=conversation_id,
-            input_text=request_data.current_input,
-            db=db,
-            user_id=current_user.id,
-            project_id=project_id,
+        conv = await conv_service.get_conversation(
+            conversation_id, current_user.id, project_id
         )
+        import utils.ai_helper as ai_helper
+
+        model_id = conv.get("model_id") or conv.get("model_config", {}).get("model_id")
+        if not model_id:
+            raise HTTPException(
+                status_code=400, detail="Model not set for conversation."
+            )
+
+        input_tokens = ai_helper.count_tokens_text(request_data.current_input, model_id)
         return TokenEstimationResponse(estimated_tokens_for_input=input_tokens)
     except Exception as e:
         logger.exception(f"Token estimation failed: {str(e)}")
         raise HTTPException(
             status_code=500, detail=f"Failed to estimate tokens: {str(e)}"
-        )
-
-
-class TokenStatsResponse(BaseModel):
-    """Response model for token statistics API"""
-
-    context_token_usage: int
-    message_count: int
-    user_msg_tokens: int
-    ai_msg_tokens: int
-    system_msg_tokens: int
-    knowledge_tokens: int
-    total_tokens: int
+        ) from e
 
 
 @router.get(
-    "/{project_id}/conversations/{conversation_id}/token-stats",
-    response_model=TokenStatsResponse,
-    summary="Get detailed token statistics for a conversation",
-    tags=["Conversations"],
-)
-async def get_conversation_token_stats(
-    project_id: UUID,
-    conversation_id: UUID,
-    current_user_tuple: tuple = Depends(get_current_user_and_token),
-    db: AsyncSession = Depends(get_async_session),
-    conv_service: ConversationService = Depends(get_conversation_service),
-):
-    """Get detailed token usage statistics for a conversation"""
-    with sentry_span_context(
-        op="conversation",
-        description=f"Get Token Stats: Get token stats for conversation {conversation_id}",
-    ) as span:
-        try:
-            current_user = current_user_tuple[0]
-            span.set_tag("project.id", str(project_id))
-            span.set_tag("conversation.id", str(conversation_id))
-            span.set_tag("user.id", str(current_user.id))
-
-            # Validate access
-            await validate_project_access(project_id, current_user, db)
-
-            # Get conversation data with context token usage
-            conv_data = await conv_service.get_conversation(
-                conversation_id=conversation_id,
-                user_id=current_user.id,
-                project_id=project_id,
-            )
-
-            # Get messages to calculate token breakdowns
-            messages = await conv_service.list_messages(
-                conversation_id=conversation_id,
-                user_id=current_user.id,
-                project_id=project_id,
-                skip=0,
-                limit=9999,
-            )
-
-            # Calculate token breakdowns - handle None values properly
-            user_msg_tokens = sum(
-                msg.get("token_count") or 0
-                for msg in messages
-                if msg.get("role") == "user"
-            )
-            ai_msg_tokens = sum(
-                msg.get("token_count") or 0
-                for msg in messages
-                if msg.get("role") == "assistant"
-            )
-            system_msg_tokens = sum(
-                msg.get("token_count") or 0
-                for msg in messages
-                if msg.get("role") == "system"
-            )
-
-            # Get knowledge tokens from metadata if available
-            knowledge_tokens = 0
-            for msg in messages:
-                if msg.get("role") == "system" and msg.get("extra_data", {}).get(
-                    "used_knowledge_context"
-                ):
-                    knowledge_tokens += msg.get("token_count") or 0
-
-            # Calculate total tokens
-            total_tokens = user_msg_tokens + ai_msg_tokens + system_msg_tokens
-
-            # Return token stats
-            return TokenStatsResponse(
-                context_token_usage=conv_data.get("context_token_usage") or 0,
-                message_count=len(messages),
-                user_msg_tokens=user_msg_tokens,
-                ai_msg_tokens=ai_msg_tokens,
-                system_msg_tokens=system_msg_tokens,
-                knowledge_tokens=knowledge_tokens,
-                total_tokens=total_tokens,
-            )
-
-        except HTTPException:
-            raise
-        except Exception as e:
-            span.set_tag("error", True)
-            capture_exception(e)
-            metrics.incr("conversation.token_stats.failure")
-            logger.error(f"Failed to get token stats: {str(e)}")
-            raise HTTPException(
-                status_code=500, detail="Failed to retrieve token statistics"
-            ) from e
-
-
-@router.get(
-    "/{project_id}/conversations/{conversation_id}/messages", response_class=JSONResponse
+    "/{project_id}/conversations/{conversation_id}/messages", response_model=dict
 )
 async def list_project_conversation_messages(
     project_id: UUID,
@@ -1016,9 +899,10 @@ async def list_project_conversation_messages(
     conv_service: ConversationService = Depends(get_conversation_service),
 ):
     """List messages with performance tracing"""
-    with sentry_span_context(
+    with start_span(
         op="conversation",
-        description=f"List Messages: List messages for {conversation_id}",
+        name="List Messages",
+        description=f"List messages for {conversation_id}",
     ) as span:
         try:
             current_user = current_user_tuple[0]

@@ -16,6 +16,7 @@ export function createUiRenderer(deps) {
     onProjectSelect,
     domReadinessService,
     logger,
+    safeHandler: injectedSafeHandler = null,
     DependencySystem
   } = deps;
 
@@ -95,12 +96,10 @@ export function createUiRenderer(deps) {
     return [];
   }
 
-  const safeHandlerRaw = DependencySystem.modules.get('safeHandler');
-  const safeHandler = (
-    typeof safeHandlerRaw === 'function'
-      ? safeHandlerRaw
-      : (typeof safeHandlerRaw?.safeHandler === 'function' ? safeHandlerRaw.safeHandler : (fn) => fn)
-  );
+  const safeHandler = injectedSafeHandler || DependencySystem?.modules?.get('safeHandler');
+  if (typeof safeHandler !== 'function') {
+    throw new Error('[UiRenderer] safeHandler dependency missing – must be injected');
+  }
 
   function _createConversationListItem(
     conversation,

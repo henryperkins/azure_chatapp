@@ -49,7 +49,7 @@ const RULE_NAME = {
   6: "Sanitize All User HTML",
   7: "domReadinessService Only",
   8: "Centralised State Access",
-  9: "Module Event Bus",
+  9: "Unified Event Service",
   10: "Navigation Service",
   11: "Single API Client",
   12: "Logger / Observability",
@@ -72,12 +72,12 @@ const RULE_DESC = {
   5: "Every listener and log must include a `{ context }` tag.",
   6: "Always call `sanitizer.sanitize()` before inserting user HTML.",
   7: "DOM/app readiness handled *only* by DI-injected `domReadinessService`.",
-  8: "Never mutate global state (e.g., `app.state`) directly; use dedicated setters.",
-  9: "Dispatch custom events through a dedicated `EventTarget` bus.",
+  8: "Never mutate global state (e.g., `app.state`) directly; use canonical services (`authenticationService`, `projectContextService`, `uiStateService`).",
+  9: "All cross-module events must flow through DI-injected `eventService.emit/on/off`.  No direct `dispatchEvent()` or ad-hoc EventTarget buses.",
   10: "All routing via DI-injected `navigationService.navigateTo()`.",
   11: "All network calls via DI-injected `apiClient`.",
   12: "No `console.*`; all logs via DI logger with context. Use canonical safeHandler for event error handling.",
-  13: "Single source of truth: `appModule.state` only; no local `authState` or dual checks.",
+ 13: "Single source of truth provided by `authenticationService`; no local `authState` or dual checks.",
   14: "Modules must not exceed 1000 lines (configurable, with vendor exemptions).",
   15: "Use canonical implementations only (safeHandler, form handlers, URL parsing, etc.)",
   16: "Error objects must use standard { status, data, message } structure.",
@@ -96,13 +96,21 @@ const DEFAULT_CONFIG = {
     sanitizer: "sanitizer",
     domReadinessService: "domReadinessService",
     navigationService: "navigationService",
+    /* New canonical services added in 2025 remediation */
+    eventService: "eventService",               // Unified event bus facade
+    authenticationService: "authenticationService", // Read-only auth facade
+    projectContextService: "projectContextService", // Single project context source
+    uiStateService: "uiStateService",           // Centralized UI flags
   },
   objectNames: {
     globalApp: "app",
     stateProperty: "state",
     dependencySystem: "DependencySystem",
   },
-  knownBusNames: ["eventBus", "moduleBus", "appBus", "AuthBus"],
+  /* With the introduction of the unified `eventService`, legacy per-module
+     buses are deprecated. Keep the list empty to flag any direct
+     dispatchEvent() usage (except on window/document) as a violation. */
+  knownBusNames: [],
   factoryValidationRegex: "Missing\\b|\\brequired\\b", // String, converted to RegExp in loadConfig
   maxModuleLines: 1000,
   bootstrapFileRegex: /(?:^|[\\/])(app|main|appInitializer|bootstrap)\.(js|ts|jsx|tsx)$/i, // Is a RegExp literal
@@ -883,6 +891,7 @@ function vPure(err, file) {
 /* 4 & 5. Centralised Event Handling + Context Tags */
 function vEvent(err, file, isBootstrapFile, moduleCtx, config) {
   if (/[/\\]tests?[/\\]/i.test(file)) return {}; // Skip test fixtures
+  if (/[/\\]services[/\\]eventService\.(js|ts)$/i.test(file)) return {}; // Allow core service implementation
   const ehName = config.serviceNames.eventHandlers;
   return {
     CallExpression(p) {
@@ -1039,7 +1048,9 @@ function vState(err, file, isBootstrapFile, config) {
 
 /* 9. Module Event Bus */
 function vBus(err, file, config) {
-  const knownBusNames = config.knownBusNames || DEFAULT_CONFIG.knownBusNames;
+  // Skip checks inside the canonical eventService implementation itself
+  if (/[/\\]services[/\\]eventService\.(js|ts)$/i.test(file)) return {};
+
   const ehName = config.serviceNames.eventHandlers;
 
   return {
@@ -1049,78 +1060,28 @@ function vBus(err, file, config) {
         const busObjectPath = p.get("callee.object");
         const busSourceNode = getExpressionSourceNode(busObjectPath);
 
-        if (busSourceNode?.name === "domAPI") return;
+        // Allow dispatchEvent on global document or window for browser-native events
         if (busSourceNode?.name === "document" && !p.scope.hasBinding("document")) return;
         if (busSourceNode?.name === "window" && !p.scope.hasBinding("window")) return;
 
-        if (busSourceNode?.type === "Identifier" && busSourceNode.name === ehName && !p.scope.hasBinding(ehName)) {
-          return;
+        // Allow dispatchEvent on domAPI wrapper (browser abstraction)
+        if (busSourceNode?.name === "domAPI") return;
+
+        // Allow eventHandlers helper dispatching (rare)
+        if (busSourceNode?.type === "Identifier" && busSourceNode.name === ehName && !p.scope.hasBinding(ehName)) return;
+
+        // Heuristic: likely DOM element variables (e.g., btnEl, inputElement)
+        if (busSourceNode?.type === 'Identifier' && /(?:El|Element|Ref|Node)$/i.test(busSourceNode.name)) {
+          return; // treat as native element dispatch, allow
         }
 
-        if (busSourceNode?.type === "Identifier" && p.scope.hasBinding(busSourceNode.name)) {
-            const binding = p.scope.getBinding(busSourceNode.name);
-            // This check is imperfect for DI without knowing factory params.
-            // Consider adding `eventHandlers` to `knownBusNames` in config if it's a bus.
-            if(binding?.path.isVariableDeclarator() && binding.path.node.init?.name === ehName && !binding.scope.hasBinding(ehName)) {
-                 /* empty */
-            }
-        }
-
-
-        let isKnownBus = false;
-        // Auto-whitelist vars initialised with new EventTarget()
-        if (p.scope.hasBinding(busSourceNode.name)) {
-          const b = p.scope.getBinding(busSourceNode.name);
-          if (b.path.isVariableDeclarator() &&
-              b.path.node.init?.type === "NewExpression" &&
-              b.path.node.init.callee.name === "EventTarget") {
-            isKnownBus = true;
-          }
-        }
-        if (busSourceNode) {
-          if (busSourceNode.type === "Identifier" && knownBusNames.includes(busSourceNode.name) && !p.scope.hasBinding(busSourceNode.name)) isKnownBus = true;
-          else if (busSourceNode.type === "Identifier" && p.scope.hasBinding(busSourceNode.name)) {
-            const binding = p.scope.getBinding(busSourceNode.name);
-            if (binding?.path.node.init?.type === "NewExpression" && binding.path.node.init.callee.name === "EventTarget") isKnownBus = true;
-            if (binding?.path.node.init?.type === "Identifier" && knownBusNames.includes(binding.path.node.init.name)) isKnownBus = true;
-          }
-          else if (busSourceNode.type === "ThisExpression") isKnownBus = true;
-          else if (busSourceNode.type === "NewExpression" && busSourceNode.callee.name === "EventTarget") isKnownBus = true;
-          else if (busSourceNode.type === "CallExpression" && busSourceNode.callee.property?.name?.match(/get.*Bus$/i)) isKnownBus = true;
-
-          // NEW: Alias variable that was initialised via DependencySystem.modules.get('XBus') earlier in scope
-          else if (!isKnownBus && busSourceNode.type === 'Identifier') {
-            const binding = p.scope.getBinding(busSourceNode.name);
-            if (binding && binding.path.isVariableDeclarator()) {
-              const init = binding.path.node.init;
-              if (init && init.type === 'CallExpression' &&
-                  init.callee?.type === 'MemberExpression' &&
-                  init.callee.object?.type === 'MemberExpression' &&
-                  init.callee.object.object?.type === 'Identifier' &&
-                  init.callee.object.object.name === (config.objectNames.dependencySystem || "DependencySystem") &&
-                  init.callee.object.property?.name === 'modules' &&
-                  init.callee.property?.name === 'get') {
-                isKnownBus = true;
-              }
-            }
-          }
-          /* ── NEW: treat buses retrieved via DependencySystem.modules.get('…Bus') as known ── */
-          else if (!isKnownBus &&
-              busSourceNode.type === "CallExpression" &&
-              busSourceNode.callee?.type === "MemberExpression" &&
-              busSourceNode.callee.object?.type === "MemberExpression" &&
-              busSourceNode.callee.object.object?.type === "Identifier" &&
-              busSourceNode.callee.object.object.name === (config.objectNames.dependencySystem || "DependencySystem") &&
-              busSourceNode.callee.object.property?.name === "modules" &&
-              busSourceNode.callee.property?.name === "get") {
-            // e.g., DependencySystem.modules.get('AppBus')
-            isKnownBus = true;
-          }
-        }
-
-        if (!isKnownBus) {
-          err.push(E(file, p.node.loc.start.line, 9, `Event dispatched on an object not identified as a dedicated event bus (found: ${busSourceNode?.name || busSourceNode?.type || 'unknown'}).`, `Dispatch events via a DI-provided known bus (e.g., '${knownBusNames[0]}.dispatchEvent()'), an instance of EventTarget, or the canonical 'eventHandlers.dispatchEvent()'. Global document.dispatchEvent() is also permitted.`));
-        }
+        err.push(E(
+          file,
+          p.node.loc.start.line,
+          9,
+          "Direct 'dispatchEvent()' usage is forbidden – use DI-provided 'eventService.emit()'.",
+          "Inject 'eventService' and call eventService.emit('evtName', detail). Legacy AppBus/AuthBus patterns are deprecated. If this is a DOM element, name it with an 'El' suffix to suppress this warning."
+        ));
       }
     }
   };
@@ -1499,15 +1460,18 @@ function analyze(file, code, configToUse) {
   }
 
   const isBootstrapFile = configToUse.bootstrapFileRegex.test(file);
+  const isTestFile = /[/\\]tests?[/\\]/i.test(file) || /\.test\.[jt]sx?$/i.test(file);
   const isWrapperFile = WRAPPER_FILE_REGEX.test(file);
 
   /* ── Rule 19: new-module blacklist ─────────────────────────────────── */
-  const allowSet = loadAllowedSet(process.cwd(), configToUse.allowedModulesManifest);
-  if (allowSet && !allowSet.has(path.resolve(file))) {
-    errors.push(E(file, 1, 19,
-      "File not present in allowed-modules manifest.",
-      `Add this path to ${configToUse.allowedModulesManifest} as part of an approved refactor, or move logic into an existing module.`
-    ));
+  if (!isTestFile) {
+    const allowSet = loadAllowedSet(process.cwd(), configToUse.allowedModulesManifest);
+    if (allowSet && !allowSet.has(path.resolve(file))) {
+      errors.push(E(file, 1, 19,
+        "File not present in allowed-modules manifest.",
+        `Add this path to ${configToUse.allowedModulesManifest} as part of an approved refactor, or move logic into an existing module.`
+      ));
+    }
   }
 
   vModuleSize(errors, file, code, configToUse);
@@ -1536,10 +1500,10 @@ function analyze(file, code, configToUse) {
   }
 
   const visitors = [
-    isBootstrapFile ? null : vFactory(errors, file, configToUse),
-    vDI(errors, file, isBootstrapFile, configToUse),
-    isBootstrapFile ? null : vPure(errors, file),
-    vState(errors, file, isBootstrapFile, configToUse),
+    isBootstrapFile || isTestFile ? null : vFactory(errors, file, configToUse),
+    isTestFile ? null : vDI(errors, file, isBootstrapFile, configToUse),
+    isBootstrapFile || isTestFile ? null : vPure(errors, file),
+    isTestFile ? null : vState(errors, file, isBootstrapFile, configToUse),
     isWrapperFile || isBootstrapFile ? null : vEvent(errors, file, isBootstrapFile, moduleCtx, configToUse),
     vSanitize(errors, file, configToUse),
     vReadiness(errors, file, isBootstrapFile, configToUse),

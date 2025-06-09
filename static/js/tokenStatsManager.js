@@ -18,9 +18,16 @@ export function createTokenStatsManager({
   app,
   chatManager,
   domReadinessService,
+  safeHandler: injectedSafeHandler = null,
   DependencySystem
 } = {}) {
   const MODULE_CONTEXT = 'tokenStatsManager';
+
+  // Local event bus so external modules (e.g., UI components) can subscribe
+  const tokenStatsBus = new EventTarget();
+  if (DependencySystem?.modules?.register) {
+    DependencySystem.modules.register('tokenStatsBus', tokenStatsBus);
+  }
 
   // Validate required dependencies
   if (!apiClient) throw new Error(`[${MODULE_CONTEXT}] Missing required dependency: apiClient`);
@@ -33,9 +40,11 @@ export function createTokenStatsManager({
     throw new Error(`[${MODULE_CONTEXT}] Missing required dependency: domReadinessService`);
   if (!DependencySystem) throw new Error('Missing DependencySystem');
 
-  // Use canonical safeHandler from DI
-  const safeHandler = DependencySystem.modules.get('safeHandler');
-  if (!safeHandler) throw new Error('safeHandler missing from DependencySystem');
+  // Use injected safeHandler (preferred) or resolve from DS ONLY if explicitly allowed (during early bootstrap)
+  const safeHandler = injectedSafeHandler || DependencySystem?.modules?.get('safeHandler');
+  if (typeof safeHandler !== 'function') {
+    throw new Error('[tokenStatsManager] safeHandler dependency missing – must be provided via DI');
+  }
 
   // Module state
   const state = {
@@ -641,6 +650,14 @@ export function createTokenStatsManager({
     const liveTokenCountEl = domAPI.getElementById('liveTokenCount');
     if (liveTokenCountEl) {
       liveTokenCountEl.textContent = count.toLocaleString();
+    }
+
+    // Emit event so any interested UI component can react (Gap #8)
+    try {
+      tokenStatsBus.dispatchEvent(new CustomEvent('inputTokenCountChanged', { detail: { count } }));
+    } catch (err) {
+      // Non-fatal
+      _logError('Failed to dispatch inputTokenCountChanged event', err);
     }
   }
 

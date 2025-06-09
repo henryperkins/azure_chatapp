@@ -8,7 +8,7 @@
  * 4. Ensure deterministic cleanup (all timers cleared, listeners removed) to prevent memory leaks.
  *
  * Factory signature – called exclusively by appInitializer.js.  All other modules must
- * obtain the created instance via `DependencySystem.modules.get('pollingService')`.
+* obtain the created instance via the DI container (e.g., DependencySystem.modules.get('pollingService')) – look-up happens during app bootstrap, not at runtime inside the service.
  */
 
 export function createPollingService({
@@ -16,7 +16,9 @@ export function createPollingService({
   apiClient,
   eventHandlers,
   logger,
-  pollingInterval = 3000 // default 3 seconds
+  pollingInterval = 3000, // default 3 seconds
+  domAPI = null,
+  authModule = null
 } = {}) {
   // ────────────────────────────────────────────────────────────
   // Dependency validation (fail-fast, guard-rail requirement)
@@ -33,8 +35,15 @@ export function createPollingService({
 
   const MODULE = 'PollingService';
 
-  // Global AppBus – already registered by appInitializer.
-  const AppBus = DependencySystem.modules.get('AppBus');
+  // ------------------------------------------------------------------
+  // Resolve once at factory-time – no runtime container look-ups later.
+  // ------------------------------------------------------------------
+
+  const AppBus = DependencySystem?.modules?.get?.('AppBus');
+
+  // Prefer injected domAPI/authModule; fall back to DI container (one-time).
+  const _domAPI = domAPI || DependencySystem?.modules?.get?.('domAPI');
+  const _authModule = authModule || DependencySystem?.modules?.get?.('auth');
 
   // Local EventTarget for fine-grained UI listeners (optional).
   const _bus = new EventTarget();
@@ -120,16 +129,15 @@ export function createPollingService({
 
   // View lifecycle / logout integration – auto-cleanup
   (function _setupLifecycleHooks() {
-    const doc = DependencySystem.modules.get('domAPI')?.getDocument?.();
+    const doc = _domAPI?.getDocument?.();
     if (doc) {
       eventHandlers.trackListener(doc, 'navigation:deactivateView', cleanup, {
         context: MODULE, description: 'PollingService_DeactivateView'
       });
     }
 
-    const auth = DependencySystem.modules.get('auth');
-    if (auth?.AuthBus) {
-      eventHandlers.trackListener(auth.AuthBus, 'authStateChanged', (e) => {
+    if (_authModule?.AuthBus) {
+      eventHandlers.trackListener(_authModule.AuthBus, 'authStateChanged', (e) => {
         if (e?.detail?.authenticated === false) {
           cleanup();
         }

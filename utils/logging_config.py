@@ -17,6 +17,7 @@ class ContextFilter(logging.Filter):
     """
     A logging filter to add request_id and trace_id from contextvars to log records.
     """
+
     def filter(self, record: logging.LogRecord) -> bool:
         setattr(record, "request_id", request_id_var.get())
         setattr(record, "trace_id", trace_id_var.get())
@@ -28,6 +29,7 @@ class RateLimitingFilter(logging.Filter):
     Rate limiting filter to prevent log storms by limiting identical messages.
     Allows up to LOG_DUP_MAX identical messages per minute (default: 50).
     """
+
     _cache: Dict[tuple[str, str], tuple[int, float]] = {}
 
     def filter(self, record: logging.LogRecord) -> bool:
@@ -45,13 +47,26 @@ class SensitiveDataFilter(logging.Filter):
     """
     Enhanced PII protection filter that redacts sensitive information from log messages.
     """
+
     SENSITIVE_PATTERNS = [
-        (re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"), "[EMAIL_REDACTED]"),
+        (
+            re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"),
+            "[EMAIL_REDACTED]",
+        ),
         (re.compile(r"\b\d{3}-\d{2}-\d{4}\b"), "[SSN_REDACTED]"),
-        (re.compile(r"\bBearer\s+[A-Za-z0-9\-._~+/]+=*", re.IGNORECASE), "Bearer [TOKEN_REDACTED]"),
+        (
+            re.compile(r"\bBearer\s+[A-Za-z0-9\-._~+/]+=*", re.IGNORECASE),
+            "Bearer [TOKEN_REDACTED]",
+        ),
         (re.compile(r"\b[A-Za-z0-9]{32,}\b"), "[TOKEN_REDACTED]"),
-        (re.compile(r'password["\s]*[:=]["\s]*[^"\s,}]+', re.IGNORECASE), 'password="[REDACTED]"'),
-        (re.compile(r'api[_-]?key["\s]*[:=]["\s]*[^"\s,}]+', re.IGNORECASE), 'api_key="[REDACTED]"'),
+        (
+            re.compile(r'password["\s]*[:=]["\s]*[^"\s,}]+', re.IGNORECASE),
+            'password="[REDACTED]"',
+        ),
+        (
+            re.compile(r'api[_-]?key["\s]*[:=]["\s]*[^"\s,}]+', re.IGNORECASE),
+            'api_key="[REDACTED]"',
+        ),
     ]
 
     def filter(self, record: logging.LogRecord) -> bool:
@@ -96,6 +111,7 @@ class CustomJsonFormatter(logging.Formatter):
     """
     A custom JSON formatter to structure log records.
     """
+
     def format(self, record: logging.LogRecord) -> str:
         log_record: Dict[str, Any] = {
             "timestamp": self.formatTime(record, self.datefmt),
@@ -118,11 +134,31 @@ class CustomJsonFormatter(logging.Formatter):
         # Preserve any extra fields
         for key, val in record.__dict__.items():
             if key not in {
-                "name", "msg", "args", "levelname", "levelno", "pathname",
-                "filename", "module", "exc_info", "exc_text", "stack_info",
-                "lineno", "funcName", "created", "msecs", "relativeCreated",
-                "thread", "threadName", "processName", "process",
-                "timestamp", "level", "message", "request_id", "trace_id"
+                "name",
+                "msg",
+                "args",
+                "levelname",
+                "levelno",
+                "pathname",
+                "filename",
+                "module",
+                "exc_info",
+                "exc_text",
+                "stack_info",
+                "lineno",
+                "funcName",
+                "created",
+                "msecs",
+                "relativeCreated",
+                "thread",
+                "threadName",
+                "processName",
+                "process",
+                "timestamp",
+                "level",
+                "message",
+                "request_id",
+                "trace_id",
             }:
                 log_record[key] = val
 
@@ -134,14 +170,20 @@ class CustomJsonFormatter(logging.Formatter):
 
 # ─── human-readable, colourised console formatter ────────────────
 try:
-    from colorama import init as _c_init, Fore, Style
-    _c_init()
+    import colorama
+
+    colorama.init()
+    from colorama import Fore, Style
 except ImportError:
-    class Fore:
+    # Fallback classes when colorama is not available
+    class _ForeStub:
         RED = YELLOW = CYAN = GREEN = MAGENTA = RESET = ""
 
-    class Style:
+    class _StyleStub:
         BRIGHT = NORMAL = DIM = RESET_ALL = ""
+
+    Fore = _ForeStub()
+    Style = _StyleStub()
 
 
 class ColoredTextFormatter(logging.Formatter):
@@ -238,10 +280,13 @@ def init_structured_logging() -> None:
     log_file = os.getenv("LOG_FILE")
     if log_file:
         from logging.handlers import RotatingFileHandler
+
         fh = RotatingFileHandler(log_file, maxBytes=10 * 1024 * 1024, backupCount=3)
-        fh.setFormatter(CustomJsonFormatter(
-            "%(timestamp)s %(level)s %(name)s %(module)s %(funcName)s %(lineno)d %(message)s %(request_id)s %(trace_id)s"
-        ))
+        fh.setFormatter(
+            CustomJsonFormatter(
+                "%(timestamp)s %(level)s %(name)s %(module)s %(funcName)s %(lineno)d %(message)s %(request_id)s %(trace_id)s"
+            )
+        )
         fh.addFilter(ctx_filter)
         fh.addFilter(rate_filter)
         fh.addFilter(pii_filter)
@@ -262,7 +307,7 @@ def init_structured_logging() -> None:
     logging.getLogger("utils.auth_utils").addFilter(auth_noise_filter)
 
     # Attach AuthNoiseFilter to common Uvicorn loggers to suppress auth token spam
-    for lg_name in ("uvicorn.access", "uvicorn.error", ""):       # root as ""  
+    for lg_name in ("uvicorn.access", "uvicorn.error", ""):  # root as ""
         lg = logging.getLogger(lg_name)
         if not any(isinstance(f, AuthNoiseFilter) for f in lg.filters):
             lg.addFilter(auth_noise_filter)
@@ -279,7 +324,9 @@ if __name__ == "__main__":
 
     logger = logging.getLogger("my_app_test")
     logger.info("This is an info message.")
-    logger.warning("This is a warning message.", extra={"user_id": "user_xyz", "action": "login"})
+    logger.warning(
+        "This is a warning message.", extra={"user_id": "user_xyz", "action": "login"}
+    )
     try:
         1 / 0
     except ZeroDivisionError:

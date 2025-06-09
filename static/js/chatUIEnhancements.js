@@ -38,9 +38,64 @@ export function createChatUIEnhancements(deps = {}) {
     isMobile: browserService?.isMobile || false
   };
 
+  // -------------------------------------------------------------------
+  // Phase-2 de-duplication: delegate heavy UI helpers to ChatUIController
+  // -------------------------------------------------------------------
+
+  function _getChatController() {
+    return DependencySystem?.modules?.get?.('chatUIController') || null;
+  }
+
+  // -------------------------------------------------------------------
+  // Thin wrapper helpers (delegating heavy lifting to ChatUIController)
+  // -------------------------------------------------------------------
+
+  // LEGACY duplicate implementation – renamed to prevent shadowing
+// Legacy heavyweight duplicate – retained for reference but no longer used.
+function createMessageElement(message, sender, timestamp = Date.now(), messageId = null) {
+    return _getChatController()?.createMessageElement?.(message, sender, timestamp, messageId) || null;
+  }
+
+  function scrollToBottom() {
+    _getChatController()?.scrollToBottom?.();
+  }
+
+  function setMessageContainer(container) {
+    _getChatController()?.setMessageContainer?.(container);
+    state.messageContainer = container; // keep local state for legacy callers
+  }
+
+  function showTypingIndicator() {
+    _getChatController()?.showTypingIndicator?.();
+  }
+
+  function hideTypingIndicator() {
+    _getChatController()?.hideTypingIndicator?.();
+  }
+
+  function appendMessage(role, content, id = null, thinking = null, redacted = false) {
+    const ctrl = _getChatController();
+    if (!ctrl) return;
+    const msgEl = ctrl.createMessageElement(content, role === 'user' ? 'user' : 'ai', Date.now(), id);
+    ctrl.appendMessage(msgEl);
+    if (role !== 'user' && (thinking || redacted)) ctrl.showTypingIndicator();
+  }
+
+  function clearConversationList() {
+    _getChatController()?.clearConversationList?.();
+  }
+
+  function renderCitationsAsDOM(content) {
+    return _getChatController()?.renderCitationsAsDOM?.(content) || null;
+  }
+
   const safeHandler = getSafeHandler(DependencySystem);
   const chatUIBus = new EventTarget();
-  DependencySystem.modules.register('chatUIBus', chatUIBus);
+  if (typeof DependencySystem?.modules?.register === 'function') {
+    DependencySystem.modules.register('chatUIBus', chatUIBus);
+  } else if (typeof DependencySystem?.register === 'function') {
+    DependencySystem.register('chatUIBus', chatUIBus);
+  }
 
   // Use utility helper for DOM waiting
   const waitForElements = createDomWaitHelper(domReadinessService, logger);
@@ -53,63 +108,65 @@ export function createChatUIEnhancements(deps = {}) {
    * @param {string} [options.projectId] - Optional project ID for project-specific chat
    * @returns {Promise<void>} A promise that resolves when initialization is complete or fails.
    */
+  // Gap #5 – Retry-capable initialize implementation (exponential back-off)
   async function initialize(options = {}) {
-    // Store project ID if provided
-    if (options.projectId) {
-      state.projectId = options.projectId;
-    }
+    const MAX_RETRIES = 4;
+    const BASE_DELAY_MS = 250;
+    let attempt = 0;
 
-    // Project-only selectors for chat UI
-    const CHAT_SELECTORS = [
-      SELECTORS.chatInput,
-      SELECTORS.chatMessages,
-      SELECTORS.chatSendBtn
-    ];
-    const context = `${MODULE_CONTEXT}::initialize`;
+    const tryInit = async () => {
+      attempt += 1;
 
-    try {
-      await waitForElements({
-        domSelectors: CHAT_SELECTORS,
-        timeout: 8000,
-        context
-      });
-    } catch (err) {
-      logger.error('[chatUIEnhancements] Error during chat UI initialization', err, { context });
-      logger.warn('[chatUIEnhancements] Chat UI not yet in DOM – will retry later', err, { context });
-      return;
-    }
+      // Propagate optional projectId on every attempt so latest value is used
+      if (options.projectId) state.projectId = options.projectId;
 
-    const chatInput = domAPI.getElementById(SELECTORS.chatInput.slice(1));
-    const sendBtn = domAPI.getElementById(SELECTORS.chatSendBtn.slice(1));
-    const chatContainer = domAPI.getElementById(SELECTORS.chatMessages.slice(1));
-    const doc = domAPI.getDocument();
+      const CHAT_SELECTORS = [SELECTORS.chatInput, SELECTORS.chatMessages, SELECTORS.chatSendBtn];
+      const context = `${MODULE_CONTEXT}::initialize_attempt_${attempt}`;
 
-    // Cache default container
-    state.messageContainer = chatContainer;
+      try {
+        await waitForElements({
+          domSelectors: CHAT_SELECTORS,
+          timeout: 8000,
+          context
+        });
+      } catch (err) {
+        logger.warn(`[chatUIEnhancements] Required elements missing – attempt ${attempt}/${MAX_RETRIES}`, err, { context });
+        if (attempt < MAX_RETRIES) {
+          const delay = Math.min(BASE_DELAY_MS * 2 ** (attempt - 1), 4000);
+          browserService.setTimeout(tryInit, delay);
+        } else {
+          logger.error('[chatUIEnhancements] Initialization failed after maximum retries', err, { context });
+        }
+        return;
+      }
 
-    // Only add event listener for new message event (no input/send listeners here)
-    if (doc) {
-      eventHandlers.trackListener(doc, 'chatNewMessage', safeHandler(handleNewMessage, 'chatNewMessage'), { context: MODULE_CONTEXT, description: 'New message handler' });
-    }
+      // Elements present – proceed with normal initialization
+      const chatInput = domAPI.getElementById(SELECTORS.chatInput.slice(1));
+      const sendBtn = domAPI.getElementById(SELECTORS.chatSendBtn.slice(1));
+      const chatContainer = domAPI.getElementById(SELECTORS.chatMessages.slice(1));
+      const doc = domAPI.getDocument();
 
-    // Setup chat header collapse functionality
-    setupChatHeaderCollapse();
+      state.messageContainer = chatContainer;
 
-    // Setup mobile-specific enhancements
-    if (state.isMobile) {
-      setupMobileEnhancements();
-    }
+      if (doc) {
+        eventHandlers.trackListener(
+          doc,
+          'chatNewMessage',
+          safeHandler(handleNewMessage, 'chatNewMessage'),
+          { context: MODULE_CONTEXT, description: 'New message handler' }
+        );
+      }
 
-    // Setup project-specific enhancements if in project context
-    if (state.projectId) {
-      setupProjectChatEnhancements();
-    }
+      setupChatHeaderCollapse();
+      if (state.isMobile) setupMobileEnhancements();
+      if (state.projectId) setupProjectChatEnhancements();
 
-    logger.info(`[${MODULE_CONTEXT}] Chat UI enhancements initialized`, {
-      context,
-      projectId: state.projectId || 'global'
-    });
+      logger.info(`[${MODULE_CONTEXT}] Chat UI enhancements initialized on attempt ${attempt}`,
+        { context: MODULE_CONTEXT, projectId: state.projectId || 'global' });
+    };
 
+    // Kick off first attempt (immediately)
+    await tryInit();
     return;
   }
 
@@ -273,72 +330,8 @@ export function createChatUIEnhancements(deps = {}) {
     }
   }
 
-  /**
-   * Transforms [[cite:XYZ]] markers in AI message content into clickable superscript elements.
-   * Builds DOM nodes using domAPI to avoid innerHTML for complex content.
-   *
-   * @param {string} content - The message content potentially containing citation markers.
-   * @returns {DocumentFragment} A document fragment containing the processed message DOM structure.
-   */
-  function renderCitationsAsDOM(content) {
-    const fragment = domAPI.createDocumentFragment();
-    if (typeof content !== "string") {
-      domAPI.appendChild(fragment, domAPI.createTextNode(String(content)));
-      return fragment;
-    }
 
-    const citeRegex = /\[\[cite:(\w+)\]\]/g;
-    let lastIndex = 0;
-    let match;
-    let idx = 1;
-
-    while ((match = citeRegex.exec(content)) !== null) {
-      // Add text before the citation
-      if (match.index > lastIndex) {
-        const textBefore = content.substring(lastIndex, match.index);
-        domAPI.appendChild(fragment, domAPI.createTextNode(textBefore));
-      }
-
-      // Create citation element
-      const citeId = match[1];
-      const citeEl = domAPI.createElement('sup');
-      citeEl.className = 'citation';
-      citeEl.dataset.citeId = citeId;
-
-      // Create clickable link inside sup
-      const citeLink = domAPI.createElement('a');
-      citeLink.href = '#';
-      citeLink.className = 'citation-link';
-      citeLink.textContent = `[${idx}]`;
-
-      // Add click handler to citation
-      eventHandlers.trackListener(
-        citeLink,
-        'click',
-        safeHandler((e) => {
-          e.preventDefault();
-          // Dispatch citation click event on dedicated bus
-          const event = new CustomEvent('citationClick', { detail: { citeId } });
-          chatUIBus.dispatchEvent(event);
-        }, 'citationClick'),
-        { context: MODULE_CONTEXT }
-      );
-
-      domAPI.appendChild(citeEl, citeLink);
-      domAPI.appendChild(fragment, citeEl);
-
-      lastIndex = match.index + match[0].length;
-      idx++;
-    }
-
-    // Add remaining text after last citation
-    if (lastIndex < content.length) {
-      const textAfter = content.substring(lastIndex);
-      domAPI.appendChild(fragment, domAPI.createTextNode(textAfter));
-    }
-
-    return fragment;
-  }
+  // NOTE: duplicate legacy implementation of renderCitationsAsDOM removed – now delegated to ChatUIController via thin wrapper above.
 
   /**
    * Creates a message element for display in the chat UI.
@@ -348,7 +341,8 @@ export function createChatUIEnhancements(deps = {}) {
    * @param {string|number} [messageId] - Optional message ID.
    * @returns {HTMLElement} The created message element.
    */
-  function createMessageElement(message, sender, timestamp = Date.now(), messageId = null) {
+// Legacy heavyweight duplicate – not used anymore.
+function _legacyHeavyCreateMessageElement(message, sender, timestamp = Date.now(), messageId = null) {
     const context = `${MODULE_CONTEXT}::createMessageElement`;
     try {
       const isUser = sender === 'user';
@@ -560,23 +554,14 @@ export function createChatUIEnhancements(deps = {}) {
   }
 
 
-  /**
-   * Scroll a container to the bottom.
-   * @param {HTMLElement} container - The container to scroll.
-   */
-  function scrollToBottom(container) {
-    if (!container) return;
-
-    // Use requestAnimationFrame for smooth scrolling after DOM updates
-    browserService.requestAnimationFrame(() => {
-      container.scrollTop = container.scrollHeight;
-    });
-  }
+  // Duplicate legacy scrollToBottom removed – ChatUIController implementation used through thin wrapper.
 
   /**
    * Show typing indicator in the chat UI.
    */
-  function showTypingIndicator() {
+// LEGACY duplicate implementation – renamed to prevent shadowing
+// Legacy heavyweight duplicate – not used anymore.
+function _legacyShowTypingIndicatorHeavy() {
     const context = `${MODULE_CONTEXT}::showTypingIndicator`;
     if (state.typingIndicatorVisible) {
       logger.debug(`[${MODULE_CONTEXT}] Typing indicator already visible, skipping`, {
@@ -622,7 +607,9 @@ export function createChatUIEnhancements(deps = {}) {
   /**
    * Hide typing indicator in the chat UI.
    */
-  function hideTypingIndicator() {
+// LEGACY duplicate implementation – renamed to prevent shadowing
+// Legacy heavyweight duplicate – not used anymore.
+function _legacyHideTypingIndicatorHeavy() {
     const context = `${MODULE_CONTEXT}::hideTypingIndicator`;
     if (!state.typingIndicatorVisible) {
       logger.debug(`[${MODULE_CONTEXT}] No typing indicator visible, skipping`, {
@@ -652,7 +639,8 @@ export function createChatUIEnhancements(deps = {}) {
    * This allows the module to work with different chat containers.
    * @param {HTMLElement} messageContainer - The container element for chat messages.
    */
-  function setMessageContainer(messageContainer) {
+  // LEGACY duplicate implementation – renamed to prevent shadowing
+  function legacySetMessageContainer(messageContainer) {
     const context = `${MODULE_CONTEXT}::setMessageContainer`;
 
     hideTypingIndicator(); // remove orphan indicator from old pane if any
@@ -865,9 +853,22 @@ export function createChatUIEnhancements(deps = {}) {
     if (role !== 'user' && (thinking || redacted)) showTypingIndicator();
   }
 
+  // Gap #2 – Expose helper to clear conversation list (called by ChatManager)
+  function clearConversationList() {
+    const container = domAPI.getElementById('conversationList');
+    if (container) {
+      try {
+        domAPI.replaceChildren(container);
+      } catch (err) {
+        logger.error('[chatUIEnhancements] Failed to clear conversation list', err, { context: MODULE_CONTEXT });
+      }
+    }
+  }
+
   // Public API
   const apiObject = {
     initialize,
+    // Wrapped helpers – implemented via ChatUIController
     showTypingIndicator,
     hideTypingIndicator,
     cleanup,
@@ -878,10 +879,23 @@ export function createChatUIEnhancements(deps = {}) {
     setMessageContainer,
     setupMobileEnhancements,
     setupProjectChatEnhancements,
-    appendMessage
+    appendMessage,
+    clearConversationList
   };
 
-  DependencySystem.modules.register('chatUIEnhancements', apiObject);
+  // Ensure wrapper helpers override any legacy implementations defined earlier.
+  apiObject.createMessageElement   = createMessageElement;
+  apiObject.showTypingIndicator    = showTypingIndicator;
+  apiObject.hideTypingIndicator    = hideTypingIndicator;
+  apiObject.setMessageContainer    = setMessageContainer;
+  apiObject.appendMessage          = appendMessage;
+  apiObject.clearConversationList  = clearConversationList;
+
+  if (typeof DependencySystem?.modules?.register === 'function') {
+    DependencySystem.modules.register('chatUIEnhancements', apiObject);
+  } else if (typeof DependencySystem?.register === 'function') {
+    DependencySystem.register('chatUIEnhancements', apiObject);
+  }
 
   return apiObject;
 }

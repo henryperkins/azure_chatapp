@@ -17,7 +17,7 @@ export function createSidebar({
   storageAPI,
   projectManager,
   modelConfig,
-  app,
+  app: appModule,
   projectDashboard,
   viewportAPI,
   accessibilityUtils,
@@ -26,6 +26,11 @@ export function createSidebar({
   logger,
   safeHandler,
   APP_CONFIG,
+
+  // Phase-1 remediation – new explicit dependencies
+  authenticationService = null,
+  authBus = null,
+
   ..._rest
 } = {}) {
   // ───────────────────────────────────────────────
@@ -54,18 +59,16 @@ export function createSidebar({
   const MODULE = 'Sidebar';
   const SidebarBus = new EventTarget();
 
-  // Attempt to fill optional dependencies if not passed
-  app = app || tryResolve('app');
-  projectDashboard = projectDashboard || tryResolve('projectDashboard');
+  // Dependency fallback removal: all required deps MUST be passed by DI.
+  // For backward-compatibility we still allow undefined optional deps, but we
+  // never query DependencySystem at runtime anymore (Phase-1 compliance).
 
-  function tryResolve(depName) {
-    if (DependencySystem?.modules?.get) {
-      return DependencySystem.modules.get(depName);
-    }
-    if (DependencySystem?.get) {
-      return DependencySystem.get(depName);
-    }
-    return undefined;
+  if (!appModule) {
+    logger.warn('[Sidebar] appModule not provided – some features may be disabled', { context: 'Sidebar' });
+  }
+
+  if (!authenticationService) {
+    logger.warn('[Sidebar] authenticationService not provided – auth-dependent UI will use anonymous mode', { context: 'Sidebar' });
   }
 
   // Sub-factories
@@ -301,8 +304,7 @@ export function createSidebar({
       section.dataset.initialised = 'true';
     }
     // Also check authentication
-    const appModule = DependencySystem.modules?.get('appModule');
-    if (!appModule?.state?.isAuthenticated) {
+    if (!authenticationService?.isAuthenticated?.()) {
       uiRenderer.renderProjects?.([]);
       return;
     }
@@ -317,8 +319,7 @@ export function createSidebar({
         // Auto-select first if none selected
         const currentProject = projectManager.getCurrentProject?.();
         if (!currentProject && projects.length > 0) {
-          const appModule = DependencySystem.modules.get('appModule');
-          appModule?.setCurrentProject(projects[0]);
+          appModule?.setCurrentProject?.(projects[0]);
         }
       } catch (err) {
         logger.error('[Sidebar] Failed to load projects', err, { context: MODULE });
@@ -725,10 +726,6 @@ export function createSidebar({
 
       // Listen for authentication state changes and update sidebar UI
       // Prefer AuthBus if available, otherwise fall back to document
-      let authBus = null;
-      if (DependencySystem?.modules?.get('auth')?.eventBus) {
-        authBus = DependencySystem.modules.get('auth').eventBus;
-      }
       const authEventTarget = authBus || domAPI.getDocument();
       eventHandlers.trackListener(
         authEventTarget,
@@ -787,14 +784,12 @@ export function createSidebar({
   // Debug
   function debugAuthState() {
     logger.info('[Sidebar] Manual auth state check', { context: MODULE });
-    const appMod = DependencySystem.modules?.get('appModule');
-    const isAuth = appMod?.state?.isAuthenticated ?? false;
-    const user = appMod?.state?.currentUser;
-    const auth = DependencySystem.modules?.get('auth');
-    const modState = auth ? {
-      isAuthenticated: auth.isAuthenticated?.(),
-      currentUser: auth.getCurrentUserObject?.()
-    } : {};
+    const isAuth = authenticationService?.isAuthenticated?.() ?? false;
+    const user = authenticationService?.getCurrentUser?.();
+    const modState = {
+      isAuthenticated: isAuth,
+      currentUser: user
+    };
     const debugInfo = {
       fromAppModule: { isAuth, user },
       fromAuthModule: modState

@@ -44,6 +44,7 @@ export function createProjectManager({
   domReadinessService,
   logger,
   timer,
+  eventHandlers,  // Phase-1.3: Extract eventHandlers from otherDeps
   ...otherDeps
 } = {}) {
   if (!DependencySystem) {
@@ -199,7 +200,10 @@ export function createProjectManager({
       apiRequest = null,
       browserService = null,
       domReadinessService,
-      domAPI = null
+      domAPI = null,
+      eventHandlers = null,      // Phase-1.3: DI compliance - injected instead of runtime lookup
+      authModule = null,         // Phase-1.3: DI compliance - injected instead of runtime lookup
+      appBus = null              // Phase-1.3: DI compliance - injected instead of runtime lookup
     } = {}) {
       if (!DependencySystem) {
         throw new Error('DependencySystem required');
@@ -216,28 +220,31 @@ export function createProjectManager({
       this.DependencySystem = DependencySystem;
       this.domReadinessService = domReadinessService;
 
-      this.app = app ?? DependencySystem.modules.get('appModule');
-      this.chatManager = chatManager ?? DependencySystem.modules.get('chatManager');
-      this.modelConfig = modelConfig ?? DependencySystem.modules.get('modelConfig');
+      // Phase-1.3: Store injected dependencies (no runtime lookups)
+      this.app = app;
+      this.chatManager = chatManager;
+      this.modelConfig = modelConfig;
       this.timer = timerFunc;
       this.storage = storage;
       this.apiRequest = apiRequest ?? this.app?.apiRequest;
-      this.browserService =
-        browserService ?? DependencySystem.modules.get?.('browserService') ?? null;
-      this.domAPI = domAPI ?? DependencySystem.modules.get('domAPI') ?? null;
+      this.browserService = browserService;
+      this.domAPI = domAPI;
+      this.eventHandlers = eventHandlers;
+      this.authModule = authModule;
+      this.appBus = appBus;
 
       // Instead of dispatching to DOM, maintain an EventTarget bus
       this.eventBus = new EventTarget();
 
       // track listeners if provided
       if (!listenerTracker) {
-        const ev = DependencySystem.modules.get('eventHandlers');
-        if (!ev?.trackListener) {
+        // Phase-1.3: Use injected eventHandlers instead of runtime lookup
+        if (!this.eventHandlers?.trackListener) {
           throw new Error('eventHandlers.trackListener missing');
         }
         listenerTracker = {
-          add: (t, e, h, dsc) => ev.trackListener(t, e, h, { description: dsc, context: MODULE }),
-          remove: () => ev.cleanupListeners?.({ context: MODULE })
+          add: (t, e, h, dsc) => this.eventHandlers.trackListener(t, e, h, { description: dsc, context: MODULE }),
+          remove: () => this.eventHandlers.cleanupListeners?.({ context: MODULE })
         };
       }
       this.listenerTracker = listenerTracker;
@@ -1002,8 +1009,9 @@ export function createProjectManager({
       });
       this.logger.debug(`[${MODULE}] Core dependencies (app, auth, AppBus, eventHandlers) ready.`, { context: MODULE });
 
-      const auth = this.DependencySystem.modules.get('auth');
-      const appModule = this.DependencySystem.modules.get('appModule');
+      // Phase-1.3: Use injected dependencies instead of runtime lookup
+      const auth = this.authModule;
+      const appModule = this.app;
 
       /* ---------------------------------------------------------------------
        * Guard against legacy or partially-initialised auth modules that do
@@ -1043,7 +1051,8 @@ export function createProjectManager({
           } else {
             /* No AuthBus available – poll appModule.state as last resort */
             const poll = setInterval(() => {
-              if (this.DependencySystem.modules.get('appModule')?.state?.isAuthenticated) {
+              // Phase-1.3: Use injected dependency instead of runtime lookup
+              if (this.app?.state?.isAuthenticated) {
                 clearInterval(poll);
                 resolve();
               }
@@ -1071,8 +1080,9 @@ export function createProjectManager({
 
     _setupEventListeners() {
       this.logger.debug(`[${MODULE}] Setting up event listeners.`, { context: MODULE });
-      const appBus = this.DependencySystem.modules.get('AppBus');
-      const authBus = this.DependencySystem.modules.get('auth')?.AuthBus;
+      // Phase-1.3: Use injected dependencies instead of runtime lookup
+      const appBus = this.appBus;
+      const authBus = this.authModule?.AuthBus;
 
       if (appBus) {
         this.listenerTracker.add(appBus, 'currentProjectChanged', this._handleCurrentProjectChanged.bind(this), 'ProjectManager_AppBus_CurrentProjectChanged');
@@ -1168,11 +1178,13 @@ export function createProjectManager({
   function cleanup() {
     // Canonical event listener cleanup per guardrails
     // Centralized cleanup for event listeners via eventHandlers module per guardrails
-    const eventHandlers = DependencySystem.modules.get('eventHandlers');
+    // Phase-1.3: Use injected eventHandlers parameter instead of runtime lookup
+    // const eventHandlers = deps.eventHandlers;  // eventHandlers is now in scope from factory parameters
     if (eventHandlers?.cleanupListeners) {
       eventHandlers.cleanupListeners({ context: MODULE });
     }
-    DependencySystem.modules.get('eventHandlers')?.cleanupListeners?.({ context: "ProjectManager" });
+    // Phase-1.3: Remove duplicate runtime lookup - already handled above
+    // Event listeners cleaned via injected eventHandlers – no container look-up needed here.
     instance.destroy();
   }
 

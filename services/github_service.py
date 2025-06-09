@@ -60,7 +60,9 @@ class GitHubService:
             Repo.clone_from(repo_url_with_token, temp_dir, branch=branch)
             return temp_dir
         except GitCommandError as e:
-            logger.error(f"Failed to clone repository: {e}")
+            # Redact any token that may have leaked into the exception message
+            err_msg = str(e).replace(self.token or "", "****") if self.token else str(e)
+            logger.error("Failed to clone repository: %s", err_msg)
             raise
 
     def fetch_files(self, repo_path: str, file_paths: List[str]) -> List[str]:

@@ -32,6 +32,7 @@ function _resolveDependencies(opts) {
     eventHandlers: _getDependency(opts.eventHandlers, 'eventHandlers', DependencySystem),
     projectManager: _getDependency(opts.projectManager, 'projectManager', DependencySystem),
     modalManager: _getDependency(opts.modalManager, 'modalManager', DependencySystem),
+    projectModal: _getDependency(opts.projectModal, 'projectModal', DependencySystem, false),
     sanitizer: _getDependency(opts.sanitizer, 'sanitizer', DependencySystem),
     domAPI: _getDependency(opts.domAPI, 'domAPI', DependencySystem), // Add domAPI
     // Optional formatters
@@ -50,15 +51,16 @@ function createUIUtils({ eventHandlers, _sanitizer, domAPI, gUtils }) {
 
 // The following helper function signatures and calls enforce strict DI as positional parameters, no destructuring/closure DI
 
-function bindEditButton(eventHandlers, domAPI, projectManager, DependencySystem) {
+function bindEditButton(eventHandlers, domAPI, projectManager, projectModal, logger) {
   const editBtn = domAPI.getElementById('editProjectBtn');
   if (!editBtn) return;
 
   const handler = () => {
     const currentProject = projectManager?.currentProject;
-    const pm = DependencySystem?.modules?.get?.('projectModal');
-    if (currentProject && pm?.openModal) {
-      pm.openModal(currentProject);
+    if (currentProject && projectModal?.openModal) {
+      projectModal.openModal(currentProject);
+    } else {
+      logger && logger.warn?.('[ProjectDashboardUtils] projectModal not available – cannot open edit modal', { context: MODULE });
     }
   };
   eventHandlers.trackListener(editBtn, 'click', handler, {
@@ -125,8 +127,8 @@ function bindArchiveButton(eventHandlers, logger, domAPI, projectManager, modalM
 
 
 // --- setupEventListeners refactored (Guideline #2) ---
-function setupEventListeners(eventHandlers, logger, domAPI, projectManager, modalManager, DependencySystem) {
-  bindEditButton(eventHandlers, domAPI, projectManager, DependencySystem);
+function setupEventListeners(eventHandlers, logger, domAPI, projectManager, modalManager, projectModal) {
+  bindEditButton(eventHandlers, domAPI, projectManager, projectModal, logger);
   bindPinButton(eventHandlers, logger, domAPI, projectManager);
   bindArchiveButton(eventHandlers, logger, domAPI, projectManager, modalManager);
 }
@@ -140,11 +142,14 @@ export function createProjectDashboardUtils(options = {}) {
 
   // Resolve all dependencies using the helper
   const deps = _resolveDependencies({ DependencySystem, ...options });
-  const { eventHandlers, projectManager, modalManager, sanitizer, domAPI } = deps;
+  const { eventHandlers, projectManager, modalManager, sanitizer, domAPI, projectModal } = deps;
   const logger = _getDependency(options.logger, 'logger', DependencySystem, false);
-  // Only use canonical bus found via DependencySystem.modules.get('eventBus')
+  // Event bus should be injected via DI (eventBus) – avoid container look-ups.
   const eventBus = DependencySystem?.modules?.get?.("eventBus");
-  const gUtils = DependencySystem.modules.get('globalUtils');
+  const gUtils = options.globalUtils || null;
+  if (!gUtils) {
+    throw new Error(`[${MODULE}] globalUtils dependency is required`);
+  }
 
   return {
     UIUtils: createUIUtils({
@@ -156,7 +161,7 @@ export function createProjectDashboardUtils(options = {}) {
 
     init: function () {
       try {
-        setupEventListeners(eventHandlers, logger, domAPI, projectManager, modalManager, DependencySystem);
+        setupEventListeners(eventHandlers, logger, domAPI, projectManager, modalManager, projectModal);
         const doc = domAPI.getDocument();
         if (doc) {
           domAPI.dispatchEvent(doc, new CustomEvent('projectDashboardUtilsInitialized'));

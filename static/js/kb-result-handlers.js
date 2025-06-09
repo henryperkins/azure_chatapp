@@ -21,39 +21,50 @@
  *  - NO direct window, document, or singleton usage is permitted; safe for SSR/testing.
  */
 
-const MODULE_CONTEXT = 'KbResultHandlers';
-
 export function createKbResultHandlers({
   eventHandlers,
   browserService,          // NEW – safe window provider
   domAPI,
   sanitizer,               // NEW – replaces DOMPurify
   logger,
+  safeHandler,
   DependencySystem
 } = {}) {
-  if (!browserService) browserService = DependencySystem?.modules?.get('browserService');
   if (!browserService) throw new Error('[kb-result-handlers] browserService dependency required');
-  if (!sanitizer)      sanitizer      = DependencySystem?.modules?.get('sanitizer');
-  if (!sanitizer)  throw new Error('[kb-result-handlers] sanitizer dependency required');
+  if (!sanitizer)      throw new Error('[kb-result-handlers] sanitizer dependency required');
   if (!eventHandlers) throw new Error('[kb-result-handlers] eventHandlers dependency required');
   if (!domAPI) throw new Error('[kb-result-handlers] domAPI dependency required');
   if (!logger) throw new Error('[kb-result-handlers] logger dependency required');
+  if (!safeHandler) throw new Error('[kb-result-handlers] safeHandler dependency required');
   if (!DependencySystem) throw new Error('Missing DependencySystem');
 
-  const MODULE_CONTEXT = 'KbResultHandlers';
+  const MODULE_CONTEXT = 'KbResultHandlers'; // single declaration
   const wnd = browserService.getWindow?.();
-
-  // Use canonical safeHandler from DI
-  const safeHandler = DependencySystem.modules.get('safeHandler');
-  if (!safeHandler) throw new Error('safeHandler missing from DependencySystem');
 
   // Keep reference to MutationObserver for cleanup
   let observer = null;
 
   // -- Init function, call once when DOM is ready and deps are injected
+  function _cleanup() {
+    if (observer && typeof observer.disconnect === 'function') {
+      try {
+        observer.disconnect();
+      } catch (err) {
+        logger?.warn?.(`[${MODULE_CONTEXT}] Failed to disconnect observer`, err, { context: MODULE_CONTEXT });
+      }
+      observer = null;
+    }
+    eventHandlers.cleanupListeners({ context: MODULE_CONTEXT });
+  }
+
   function init() {
     initializeKnowledgeCopyFeatures();
     enhanceKnowledgeResultDisplay();
+
+    // Auto-register cleanup with DI so parent components do not forget.
+    if (DependencySystem?.modules?.registerCleanup) {
+      DependencySystem.modules.registerCleanup(MODULE_CONTEXT, _cleanup);
+    }
   }
 
   /** Clipboard features */
@@ -230,16 +241,6 @@ export function createKbResultHandlers({
   // Factory returns API
   return {
     init,
-    cleanup() {
-      if (observer && typeof observer.disconnect === 'function') {
-        try {
-          observer.disconnect();
-        } catch (err) {
-          logger?.warn?.(`[${MODULE_CONTEXT}] Failed to disconnect observer`, err, { context: MODULE_CONTEXT });
-        }
-        observer = null;
-      }
-      eventHandlers.cleanupListeners({ context: MODULE_CONTEXT });
-    }
+    cleanup: _cleanup
   };
 }

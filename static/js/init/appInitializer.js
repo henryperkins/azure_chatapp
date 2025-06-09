@@ -19,8 +19,21 @@ import { createKnowledgeBaseManager } from "../knowledgeBaseManager.js";
 import { createKnowledgeBaseSearchHandler } from "../knowledgeBaseSearchHandler.js";
 // Chat UI Enhancements factory (registered for DI so ChatManager can resolve it)
 import { createChatUIEnhancements } from "../chatUIEnhancements.js";
+// Phase-2 scaffolded factories
+import { createChatUIController } from "../chatUIController.js";
+import { createConversationManager } from "../conversationManager.js";
+import { createMessageHandler } from "../messageHandler.js";
+import { createTokenStatsManagerProxy } from "../tokenStatsManagerProxy.js";
 // Week-3 Observability – PollingService factory
 import { createPollingService } from "../pollingService.js";
+// Optional Chat UI extensions (Phase-2)
+import { createChatExtensions } from "../chatExtensions.js";
+// Unified Event Service (Phase-3) – replaces scattered AppBus/AuthBus/etc.
+import { createEventService } from "../../services/eventService.js";
+
+// Phase-1 remediation: central auth state façade
+import { createAuthenticationService } from "../../services/authenticationService.js";
+import { createProjectContextService } from "../../services/projectContextService.js";
 import {
     setBrowserService as registerSessionBrowserService,
     getSessionId as coreGetSessionId
@@ -149,10 +162,28 @@ export function createAppInitializer(opts = {}) {
 
         // 11. UI and global utilities
         // ------------------------------------------------------------------
-        // GLOBAL APP BUS (single source of truth for cross-module events)
-        // Provide this **before** any module that might dispatch to it.
+        // ------------------------------------------------------------------
+        // Unified Event Bus / Service
+        // ------------------------------------------------------------------
+        // Create a single EventTarget (AppBus) and wrap it with eventService.
         const AppBus = new EventTarget();
+
+        // Expose bare EventTarget for ultra-lightweight dispatchers that only
+        // need `dispatchEvent` / `addEventListener` (back-compat path).
         DependencySystem.register('AppBus', AppBus);
+
+        // Create fully-featured eventService wrapper and register.
+        const eventService = createEventService({ logger, existingBus: AppBus });
+        DependencySystem.register('eventService', eventService);
+
+        // Aliases for incremental migration – point to the same bus so legacy
+        // modules can keep functioning while Phase-3 refactor is in flight.
+        if (!DependencySystem.modules.get('eventBus')) {
+            DependencySystem.register('eventBus', AppBus);
+        }
+        if (!DependencySystem.modules.get('AuthBus')) {
+            DependencySystem.register('AuthBus', AppBus);
+        }
 
         const uiUtils = {
             formatBytes: opts.globalFormatBytes,
@@ -166,6 +197,15 @@ export function createAppInitializer(opts = {}) {
             isAbsoluteUrl: opts.isAbsoluteUrl,
             isValidProjectId: opts.isValidProjectId
         };
+
+        // ------------------------------------------------------------------
+        // Gap #3 – Register buffering proxy for tokenStatsManager BEFORE
+        // ChatManager initialise so that early calls are not lost.
+        // ------------------------------------------------------------------
+        const tokenStatsProxy = createTokenStatsManagerProxy({ DependencySystem, logger });
+        DependencySystem.register('tokenStatsManagerProxy', tokenStatsProxy);
+        // Also expose under canonical name so ChatManager resolves it transparently
+        DependencySystem.register('tokenStatsManager', tokenStatsProxy);
 
         // Provide everything we just created
         return {
@@ -294,6 +334,10 @@ export function createAppInitializer(opts = {}) {
         createProjectListComponent,
         createProjectModal,
         createSidebar,
+        // Phase-2 new factories (scaffolded)
+        createChatUIController,
+        createConversationManager,
+        createMessageHandler,
         createFileUploadComponent,
         createApiClient,
         createAccessibilityEnhancements,
@@ -539,6 +583,33 @@ if (handlers?.dispatch) {
     // Alias for "app", used by some legacy code
     if (!DependencySystem.modules.has('app')) {
         DependencySystem.register('app', appModule);
+    }
+
+    // ------------------------------------------------------------------
+    // Phase-1 remediation: register the lightweight authenticationService
+    // after appModule is available so it can read canonical state.
+    // ------------------------------------------------------------------
+    if (!DependencySystem.modules.get('authenticationService')) {
+        const authenticationService = createAuthenticationService({
+            DependencySystem,
+            logger,
+            appModule
+        });
+        DependencySystem.register('authenticationService', authenticationService);
+    }
+
+    // Phase-1 remediation: register the projectContextService
+    // after appModule is available so it can manage project state.
+    // ------------------------------------------------------------------
+    if (!DependencySystem.modules.get('projectContextService')) {
+        const projectContextService = createProjectContextService({
+            DependencySystem,
+            logger,
+            appModule,
+            browserService,
+            navigationService: null // Will be resolved later via DI fallback
+        });
+        DependencySystem.register('projectContextService', projectContextService);
     }
 
 
@@ -792,7 +863,8 @@ if (handlers?.dispatch) {
                     logger,
                     domReadinessService,
                     DependencySystem,
-                    safeHandler: DependencySystem.modules.get('safeHandler')
+                    safeHandler: DependencySystem.modules.get('safeHandler'),
+                    htmlTemplateLoader: DependencySystem.modules.get('htmlTemplateLoader')
                 });
                 safeRegister('accessibilityUtils', accessibilityUtilsInstance);
                 logger.debug('[serviceInit] Accessibility Enhancements created.', {
@@ -1121,7 +1193,9 @@ if (handlers?.dispatch) {
                 modalManager,
                 apiEndpoints: DependencySystem.modules.get('apiEndpoints'),
                 logger,
-                domReadinessService
+                domReadinessService,
+                safeHandler,
+                browserService
             });
             DependencySystem.register('auth', authModule);
 
@@ -1156,12 +1230,101 @@ if (handlers?.dispatch) {
                 modelConfig: modelConfigInstance,
                 knowledgeBaseComponent: null,
                 apiClient: DependencySystem.modules.get('apiRequest'),
-                domReadinessService
+                domReadinessService,
+                authenticationService: DependencySystem.modules.get('authenticationService'),
+                // Phase-1.3: Additional DI compliance - inject commonly needed services
+                uiRenderer: DependencySystem.modules.get('uiRenderer'),
+                authModule: DependencySystem.modules.get('auth'),
+                tokenStatsManager: DependencySystem.modules.get('tokenStatsManager'),
+                chatUIEnhancements: DependencySystem.modules.get('chatUIEnhancements')
+                , uiUtils
             });
             DependencySystem.register('projectDetailsComponent', projectDetailsComp);
 
             // Phase 3.5: KnowledgeBaseComponent & ChatManager
             let knowledgeBaseComponentInstance = null;
+
+            // Create chatUIEnhancements instance before ChatManager to satisfy DI requirements
+            const chatUIEnhancementsFactory = DependencySystem.modules.get('chatUIEnhancementsFactory');
+            if (chatUIEnhancementsFactory && !DependencySystem.modules.get('chatUIEnhancements')) {
+                const chatUIEnhancementsInstance = chatUIEnhancementsFactory({
+                    domAPI,
+                    eventHandlers,
+                    browserService,
+                    domReadinessService,
+                    logger,
+                    sanitizer,
+                    modalManager,
+                    DependencySystem
+                });
+                DependencySystem.register('chatUIEnhancements', chatUIEnhancementsInstance);
+                logger.debug('[coreInit] chatUIEnhancements instance created and registered', {
+                    context: 'coreInit'
+                });
+            }
+
+            // Phase-2: Instantiate ConversationManager & MessageHandler early so ChatManager can delegate.
+            if (!DependencySystem.modules.get('conversationManager')) {
+                const conversationMgrFactory = DependencySystem.modules.get('createConversationManager');
+                if (typeof conversationMgrFactory === 'function') {
+                    const conversationMgr = conversationMgrFactory({
+                        apiRequest: DependencySystem.modules.get('apiRequest'),
+                        projectContextService: DependencySystem.modules.get('projectContextService'),
+                        authenticationService: DependencySystem.modules.get('authenticationService'),
+                        logger,
+                        apiEndpoints: DependencySystem.modules.get('apiEndpoints'),
+                        browserService,
+                        tokenStatsManager: DependencySystem.modules.get('tokenStatsManager'),
+                        modelConfig: DependencySystem.modules.get('modelConfig'),
+                        eventBus: DependencySystem.modules.get('appBus') || DependencySystem.modules.get('eventBus'),
+                        DependencySystem,
+                        CHAT_CONFIG: APP_CONFIG?.CHAT || { DEFAULT_MODEL: 'gpt-4' }
+                    });
+                    DependencySystem.register('conversationManager', conversationMgr);
+                    logger.debug('[coreInit] conversationManager instance created and registered', { context: 'coreInit' });
+                }
+            }
+
+            if (!DependencySystem.modules.get('messageHandler')) {
+                const msgHandlerFactory = DependencySystem.modules.get('createMessageHandler');
+                if (typeof msgHandlerFactory === 'function') {
+                    const msgHandler = msgHandlerFactory({
+                        apiRequest: DependencySystem.modules.get('apiRequest'),
+                        chatUIEnhancements: DependencySystem.modules.get('chatUIEnhancements'),
+                        tokenStatsManager: DependencySystem.modules.get('tokenStatsManager'),
+                        logger
+                    });
+                    DependencySystem.register('messageHandler', msgHandler);
+                    logger.debug('[coreInit] messageHandler instance created and registered', { context: 'coreInit' });
+                }
+            }
+
+            if (!DependencySystem.modules.get('chatUIController')) {
+                const controllerFactory = DependencySystem.modules.get('createChatUIController');
+                if (typeof controllerFactory === 'function') {
+                    // Ensure chatUIBus exists before creating controller
+                    let chatUIBus = DependencySystem.modules.get('chatUIBus');
+                    if (!chatUIBus) {
+                        chatUIBus = new EventTarget();
+                        DependencySystem.register('chatUIBus', chatUIBus);
+                        logger.debug('[coreInit] chatUIBus created and registered', { context: 'coreInit' });
+                    }
+
+                    const controller = controllerFactory({
+                        domAPI,
+                        eventHandlers,
+                        logger,
+                        sanitizer: DependencySystem.modules.get('sanitizer'),
+                        DependencySystem,
+                        chatUIBus,
+                        browserService,
+                        messageHandler: DependencySystem.modules.get('messageHandler'),
+                        tokenStatsManager: DependencySystem.modules.get('tokenStatsManager')
+                    });
+                    DependencySystem.register('chatUIController', controller);
+                    logger.debug('[coreInit] chatUIController instance created and registered', { context: 'coreInit' });
+                }
+            }
 
             const navigationService = DependencySystem.modules.get('navigationService');
             const chatManagerInstance = (() => {
@@ -1189,6 +1352,16 @@ if (handlers?.dispatch) {
                     isAuthenticated: () => !!authModule.isAuthenticated?.(),
                     DOMPurify: sanitizer,
                     apiEndpoints: DependencySystem.modules.get('apiEndpoints'),
+                    authenticationService: DependencySystem.modules.get('authenticationService'),
+                    projectContextService: DependencySystem.modules.get('projectContextService'),
+                    chatUIEnhancements: DependencySystem.modules.get('chatUIEnhancements'),
+                    kbReadinessService: DependencySystem.modules.get('kbReadinessService'),
+                    tokenStatsManager: DependencySystem.modules.get('tokenStatsManager'),
+
+                    // Phase-2 extracted modules
+                    conversationManager: DependencySystem.modules.get('conversationManager'),
+                    messageHandler: DependencySystem.modules.get('messageHandler'),
+                    chatUIController: DependencySystem.modules.get('chatUIController'),
                     APP_CONFIG
                 });
                 DependencySystem.register('chatManager', instance);
@@ -1214,6 +1387,37 @@ if (handlers?.dispatch) {
                 }
             }
 
+            // --------------------------------------------------------------
+            // Optional ChatExtensions wiring (feature-flag EXT_CHAT)
+            // --------------------------------------------------------------
+            try {
+                const featureFlagEnabled = APP_CONFIG?.FEATURE_FLAGS?.EXT_CHAT === true;
+                if (featureFlagEnabled) {
+                    const chatExtensionsInstance = createChatExtensions({
+                        DependencySystem,
+                        eventHandlers,
+                        chatManager: DependencySystem.modules.get('chatManager'),
+                        app: appModule,
+                        domAPI,
+                        domReadinessService,
+                        logger,
+                        extChatEnabled: featureFlagEnabled,
+                    });
+
+                    // Optional: initialise immediately after DOM ready
+                    domReadinessService.documentReady().then(() => {
+                        chatExtensionsInstance.init().catch((err) => {
+                            logger.error('[coreInit] chatExtensions init failed', err, { context: 'coreInit' });
+                        });
+                    });
+
+                    DependencySystem.register('chatExtensions', chatExtensionsInstance);
+                    logger.debug('[coreInit] chatExtensions instance created and registered', { context: 'coreInit' });
+                }
+            } catch (extErr) {
+                logger.error('[coreInit] Failed to setup chatExtensions', extErr, { context: 'coreInit' });
+            }
+
             // Phase 3.6: ProjectManager
             const pmFactory = await makeProjectManager({
                 DependencySystem,
@@ -1223,12 +1427,16 @@ if (handlers?.dispatch) {
                 apiRequest: DependencySystem.modules.get('apiRequest'),
                 apiEndpoints: DependencySystem.modules.get('apiEndpoints'),
                 storage: browserService,
+                browserService: browserService,  // Phase-1.3: DI compliance - inject instead of runtime lookup
+                domAPI: domAPI,                   // Phase-1.3: DI compliance - inject instead of runtime lookup  
+                eventHandlers: eventHandlers,     // Phase-1.3: DI compliance - inject instead of runtime lookup
+                authModule: DependencySystem.modules.get('auth'),                    // Phase-1.3: DI compliance
+                appBus: DependencySystem.modules.get('AppBus'),                      // Phase-1.3: DI compliance
                 listenerTracker: {
                     add: (el, type, handler, desc) =>
                         eventHandlers.trackListener(el, type, handler, { description: desc, context: 'projectManager' }),
                     remove: () => eventHandlers.cleanupListeners({ context: 'projectManager' })
                 },
-                domAPI,
                 domReadinessService,
                 logger
             });
@@ -1321,8 +1529,15 @@ if (handlers?.dispatch) {
 
             // Phase 6: UI-oriented core components
             const projectDashboard = makeProjectDashboard({
-                DependencySystem, domAPI, browserService, eventHandlers,
-                logger, sanitizer, APP_CONFIG, domReadinessService
+                DependencySystem,
+                domAPI,
+                browserService,
+                eventHandlers,
+                logger,
+                sanitizer,
+                APP_CONFIG,
+                domReadinessService,
+                moduleResolver: (key) => DependencySystem.modules.get(key)
             });
             DependencySystem.register('projectDashboard', projectDashboard);
 
@@ -1348,14 +1563,26 @@ if (handlers?.dispatch) {
             await projectModal.initialize();
 
             const sidebar = makeSidebar({
-                eventHandlers, DependencySystem, domAPI,
+                eventHandlers,
+                DependencySystem,
+                domAPI,
                 uiRenderer: DependencySystem.modules.get('uiRenderer'),
                 storageAPI: browserService,
-                projectManager, modelConfig: modelConfigInstance,
-                app: appModule, projectDashboard,
+                projectManager,
+                modelConfig: modelConfigInstance,
+                app: appModule,
+                projectDashboard,
                 viewportAPI: browserService,
                 accessibilityUtils: DependencySystem.modules.get('accessibilityUtils'),
-                sanitizer, domReadinessService, logger, safeHandler, APP_CONFIG
+                sanitizer,
+                domReadinessService,
+                logger,
+                safeHandler,
+                APP_CONFIG,
+
+                // New Phase-1 DI props
+                authenticationService: DependencySystem.modules.get('authenticationService'),
+                authBus: DependencySystem.modules.get('auth')?.eventBus
             });
             DependencySystem.register('sidebar', sidebar);
 
@@ -1818,11 +2045,18 @@ if (handlers?.dispatch) {
                     domAPI, eventHandlers, browserService,
                     modalManager: DependencySystem.modules.get('modalManager'),
                     sanitizer, logger,
+                    safeHandler: DependencySystem.modules.get('safeHandler'),
                     projectManager: DependencySystem.modules.get('projectManager'),
                     app: appModule, chatManager: DependencySystem.modules.get('chatManager'),
                     domReadinessService, DependencySystem
                 });
                 DependencySystem.register('tokenStatsManager', inst);
+
+                // Gap #3 – flush buffered calls from proxy
+                const proxy = DependencySystem.modules.get('tokenStatsManagerProxy');
+                if (proxy && proxy.__isProxy && typeof proxy.setRealManager === 'function') {
+                    proxy.setRealManager(inst);
+                }
                 if (typeof inst.initialize === 'function') {
                     await inst.initialize().catch(err =>
                         logger.error('[UIInit] TokenStatsManager init failed', err, {

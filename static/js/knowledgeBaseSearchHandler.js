@@ -349,10 +349,12 @@ export function createKnowledgeBaseSearchHandler(ctx) {
     handleResultModalKeydown,
     initialize,
     cleanup() {
-      const EH = ctx.DependencySystem.modules.get('eventHandlers');
-      if (EH && EH.cleanupListeners) EH.cleanupListeners({ context: 'KnowledgeBaseSearchHandler' });
+      // Use the already-injected eventHandlers reference on ctx; no DI lookup.
+      if (ctx.eventHandlers?.cleanupListeners) {
+        ctx.eventHandlers.cleanupListeners({ context: 'KnowledgeBaseSearchHandler' });
+      }
       // Clear local search cache to avoid memory leaks when component unmounts
-      if (ctx.state?.searchCache?.clear) ctx.state.searchCache.clear();
+      ctx.state?.searchCache?.clear?.();
     }
   };
 }

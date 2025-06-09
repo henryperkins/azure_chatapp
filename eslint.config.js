@@ -25,4 +25,22 @@ export default defineConfig([
     }
   },
   { files: ["**/*.{js,mjs,cjs}"], languageOptions: { globals: globals.browser } },
+  {
+    files: ["**/*.test.js", "tests/**/*.js", "static/js/__tests__/**/*.js"],
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+        ...globals.jest,
+        describe: "readonly",
+        test: "readonly",
+        it: "readonly",
+        expect: "readonly",
+        beforeEach: "readonly",
+        afterEach: "readonly",
+        beforeAll: "readonly",
+        afterAll: "readonly",
+        jest: "readonly"
+      }
+    }
+  }
 ]);

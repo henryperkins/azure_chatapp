@@ -39,16 +39,21 @@ function escapeHtml(str) {
 }
 
 export { formatText };
-export function createFormattingUtils({ domAPI, sanitizer, DependencySystem } = {}) {
+export function createFormattingUtils({ domAPI, sanitizer, eventHandlers: injectedEventHandlers = null, safeHandler: injectedSafeHandler = null, DependencySystem } = {}) {
   if (!domAPI || !sanitizer || !DependencySystem)
     throw new Error('[formatting] Missing required deps');
 
   //--- move existing code here ---
 
+  const safeHandler = injectedSafeHandler || DependencySystem?.modules?.get('safeHandler');
+  if (typeof safeHandler !== 'function') {
+    throw new Error('[formatting] safeHandler dependency missing – must be injected');
+  }
+
   return {
     // expose any helpers you actually keep
     cleanup() {
-      const EH = DependencySystem.modules.get('eventHandlers');
+      const EH = injectedEventHandlers || null;
       if (EH && EH.cleanupListeners) EH.cleanupListeners({ context: 'FormattingUtils' });
     }
   };

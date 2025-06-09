@@ -29,6 +29,8 @@ export function createAuth(deps) {   // canonical factory required by guardrails
   if (!deps.domAPI) throw new Error("[AuthModule] DI param 'domAPI' is required.");
   if (!deps.sanitizer) throw new Error("[AuthModule] DI param 'sanitizer' is required.");
   if (!deps.apiEndpoints) throw new Error("[AuthModule] DI param 'apiEndpoints' is required.");
+  if (!deps.safeHandler) throw new Error("[AuthModule] DI param 'safeHandler' is required.");
+  if (!deps.browserService) throw new Error("[AuthModule] DI param 'browserService' is required.");
 
   // Validate that apiEndpoints contains all required auth endpoint keys
   const requiredEndpoints = ['AUTH_CSRF', 'AUTH_LOGIN', 'AUTH_LOGOUT', 'AUTH_REGISTER', 'AUTH_VERIFY', 'AUTH_REFRESH'];
@@ -48,11 +50,11 @@ export function createAuth(deps) {   // canonical factory required by guardrails
     apiEndpoints,
     DependencySystem,
     logger,
-    domReadinessService
+    domReadinessService,
+    safeHandler,
+    browserService
   } = deps;
 
-  // Use canonical safeHandler from DI
-  const safeHandler = DependencySystem.modules.get('safeHandler');
 
   // --- bearer token storage ---------------------------------
   let accessToken = null;           // stores latest JWT / bearer
@@ -71,7 +73,15 @@ export function createAuth(deps) {   // canonical factory required by guardrails
   // === 3) DOM/COOKIE & STATE MANAGEMENT ===
   // CONSOLIDATED: No local authState - appModule.state is the single source of truth per .clinerules
 
-  const AuthBus = new EventTarget();
+  // ------------------------------------------------------------------
+  // Unified Event Bus – use central eventService/AppBus if available to
+  // eliminate fragmentation. Fallback to local EventTarget only when
+  // bootstrap order prevents resolution (unlikely after Phase-3).
+  // ------------------------------------------------------------------
+  const AuthBus =
+    DependencySystem?.modules?.get('eventService')?.getAuthBus?.() ||
+    DependencySystem?.modules?.get('AppBus') ||
+    new EventTarget();
 
   // Helper to get the canonical app state
   function getAppState() {
@@ -789,7 +799,7 @@ function readCookie(name) {
     eventHandlers,
     domAPI,
     domReadinessService,
-    browserService: DependencySystem.modules.get('browserService'),
+    browserService,
     safeHandler,
     logger,
     DependencySystem
@@ -805,7 +815,6 @@ function readCookie(name) {
       const submitBtn = domAPI.querySelector(submitButtonSelector, formElement);
       setButtonLoading(submitBtn, true, loadingText);
 
-      const browserService = DependencySystem.modules.get('browserService');
       if (!browserService || !browserService.FormData) {
         throw new Error('[AuthModule] browserService.FormData is required for guardrail compliance. No global FormData fallback allowed.');
       }
@@ -973,7 +982,6 @@ function readCookie(name) {
       }
 
       // Setup periodic verification
-      const browserService = DependencySystem.modules.get('browserService');
       if (!browserService || typeof browserService.setInterval !== 'function') {
         logger.error('[AuthModule][init] browserService.setInterval is NOT available. Periodic auth verification will NOT run.', { context: 'init:setIntervalMissing' });
         throw new Error('[AuthModule] browserService.setInterval is required for periodic auth verification.');
@@ -1058,7 +1066,6 @@ function readCookie(name) {
   function cleanup() {
     authFormListenerFactory.cleanup();
     if (verifyInterval) {
-      const browserService = DependencySystem.modules.get('browserService');
       if (!browserService || typeof browserService.clearInterval !== 'function') {
         throw new Error('[AuthModule] browserService.clearInterval is required for guardrail compliance. No global clearInterval fallback allowed.');
       }
@@ -1077,7 +1084,7 @@ function readCookie(name) {
       });
       if (!resp) {
         const location = domAPI.getWindow()?.location;
-        const browserService = DependencySystem?.modules?.get('browserService');
+        // browserService is already injected via DI at factory creation
         const windowObj = browserService?.getWindow?.();
         if (!windowObj || typeof windowObj.URLSearchParams !== 'function') {
           logger.error('[AuthModule] window.URLSearchParams (via browserService.getWindow()) is required for guardrail compliance (fetchCurrentUser).', { context: 'fetchCurrentUser' });

@@ -79,18 +79,25 @@ domReadinessService.documentReady().then(() => appInit.initializeApp());
   ```
 * **Never attach or clean up event listeners manually.**
 
+* **Unified Event Bus** – All cross-module communication must flow through the DI-injected `eventService` facade.  The legacy `AuthBus`, `AppBus`, `chatUIBus`, etc. are deprecated and must be migrated to `eventService.emit()` / `eventService.on()` / `eventService.off()` helpers.  No component may create its own `EventTarget` or ad-hoc event bus.
+
 ---
 
 ### 🔐 **State & Authentication**
 
 * **All global state (auth, user, project):** Only from canonical `appModule` (DI via DependencySystem).
 * **Never use local state variables or direct instantiation for state.**
-* **Only subscribe/mutate auth/project state via the injected AuthBus/EventBus/appModule.**
+* **State interactions must go through canonical services** (`authenticationService`, `projectContextService`, `uiStateService`). Components **MUST NOT** read/write `appModule.state` directly.
+* **Event subscriptions/publications related to state changes** must use the unified `eventService` (`eventService.on()`, `eventService.emit()`). Legacy `AuthBus` / `AppBus` usage is prohibited.
   - Canonical:
     ```javascript
-    const appModule = DependencySystem.modules.get('appModule');
-    const { isAuthenticated } = appModule.state;
-    auth.AuthBus.addEventListener('authStateChanged', ({ detail }) => { ... });
+    export function createSidebar({ authenticationService, projectContextService, eventService }) {
+      const isAuthed = authenticationService.isAuthenticated();
+
+      eventService.on('projectContextChanged', ({ detail }) => {
+        // react to project change...
+      });
+    }
     ```
 
 ---
@@ -123,6 +130,10 @@ domReadinessService.documentReady().then(() => appInit.initializeApp());
 | DOM API             | `static/js/utils/domAPI.js`          | Injected via DI                     |
 | API Endpoints       | `static/js/utils/apiEndpoints.js`    | Injected via DI                     |
 | UI Components       | `static/js/`,                        | Registered via DI                   |
+| Authentication      | `services/authenticationService.js`  | Injected via DI (read-only façade over `appModule.state`) |
+| Project Context     | `services/projectContextService.js`  | Injected via DI (single project source of truth) |
+| Event Bus           | `services/eventService.js`           | Injected via DI (unified app-wide event emitter) |
+| UI State            | `static/js/uiStateService.js`        | Injected via DI (component UI flags) |
 | Bootstrap Factories | `static/js/init/appInitializer.js`   | Canonical dependency registration   |
 
 **No direct service or side-effect imports, except in `app.js`. No top-level instance side effects outside app.js/appInitializer.js.**
@@ -139,6 +150,7 @@ domReadinessService.documentReady().then(() => appInit.initializeApp());
 * Any React/Vue/Angular-style context hack or global store pattern outside this DI system.
 * _No_ direct invocation of DependencySystem.modules.get outside factory instantiation.
 * Using `console.*` anywhere after bootstrap (replace with `logger.*` and metadata object).
+* Direct access to `appModule.state.isAuthenticated` or `appModule.state.currentProject` **outside** the canonical services (`authenticationService`, `projectContextService`).
 
 ---
 

@@ -26,6 +26,13 @@ export function createProjectDetailsComponent({
   apiClient = null,
   app = null,
   DependencySystem,
+  authenticationService = null,
+  // Phase-1.3: Additional DI compliance parameters
+  uiRenderer = null,
+  uiUtils = null,
+  authModule = null,
+  tokenStatsManager = null,
+  chatUIEnhancements = null
 } = {}) {
   const missing = [];
   if (!domAPI) missing.push("domAPI");
@@ -35,16 +42,18 @@ export function createProjectDetailsComponent({
   if (!navigationService) missing.push("navigationService");
   if (!sanitizer) missing.push("sanitizer");
   if (!logger) missing.push("logger");
+  if (!uiUtils) missing.push("uiUtils");
   if (missing.length) {
     if (logger && logger.error) {
       logger.error(`[${MODULE_CONTEXT}] Missing required dependencies: ${missing.join(", ")}`, { context: MODULE_CONTEXT });
     }
     throw new Error(`[${MODULE_CONTEXT}] Missing required dependencies: ${missing.join(", ")}`);
   }
-  // Use canonical uiUtils helpers for formatting (preferred over globalUtils)
-  const uiUtils = DependencySystem.modules.get('uiUtils') || {};
   const formatDate = uiUtils.formatDate || (() => '');
   const formatBytes = uiUtils.formatBytes || (() => '');
+
+  // Resolve authentication service
+  const _authService = authenticationService;
 
   const instance = new ProjectDetailsComponent({
     domAPI,
@@ -65,7 +74,13 @@ export function createProjectDetailsComponent({
     app,
     DependencySystem,
     formatDate,    // pass to class instance for internal use
-    formatBytes
+    formatBytes,
+    authenticationService: _authService,
+    // Phase-1.3: Additional DI compliance dependencies
+    uiRenderer,
+    authModule,
+    tokenStatsManager,
+    chatUIEnhancements
   });
 
   // Expose only the canonical public API for compliance (no dynamic shape)
@@ -117,7 +132,8 @@ class ProjectDetailsComponent {
     this.modalManager = deps.modalManager;
     this.FileUploadComponentClass = deps.FileUploadComponentClass;
     this.knowledgeBaseComponent = deps.knowledgeBaseComponent;
-    this.app = deps.app || this.eventHandlers.DependencySystem?.modules?.get('appModule');
+    // Phase-1.3: Use injected dependencies instead of runtime lookups
+    this.app = deps.app;
     this.modelConfig = deps.modelConfig;
 
     // Store DI container for later safe look-ups
@@ -125,8 +141,8 @@ class ProjectDetailsComponent {
     this.chatManager = deps.chatManager;
     this.apiClient = deps.apiClient;
 
-    // UiRenderer provides heavy DOM list rendering helpers used by event handlers
-    this.uiRenderer = deps.DependencySystem?.modules?.get('uiRenderer');
+    // Phase-1.3: Use injected uiRenderer instead of runtime lookup
+    this.uiRenderer = deps.uiRenderer;
 
     // Bridge legacy instance methods expected by earlier template listeners to
     // the canonical uiRenderer implementation, preserving single-source logic
@@ -148,8 +164,8 @@ class ProjectDetailsComponent {
     this.bus = new EventTarget();
     this.fileUploadComponent = null;
     this.elements = {};
-    // Keep auth module ref for AuthBus only; auth state comes from appModule.state
-    this.auth = this.eventHandlers.DependencySystem?.modules?.get("auth");
+    // Phase-1.3: Store injected authModule instead of runtime lookup
+    this.auth = deps.authModule;
     // Utilities injected via factory (globalUtils) for consistent formatting
     this.formatDate = typeof deps.formatDate === 'function' ? deps.formatDate.bind(this) : undefined;
     this.formatBytes = typeof deps.formatBytes === 'function' ? deps.formatBytes.bind(this) : undefined;
@@ -158,7 +174,21 @@ class ProjectDetailsComponent {
     // Track single KBC bootstrap log/noise
     this._kbcFirstWarned = false;
 
-    this._isAuthenticated = () => Boolean(this.DependencySystem?.modules?.get('appModule')?.state?.isAuthenticated);
+    // Store centralized authentication service
+    this.authenticationService = deps.authenticationService;
+
+    // Phase-1.3: Store additional injected dependencies
+    this.tokenStatsManager = deps.tokenStatsManager;
+    this.chatUIEnhancements = deps.chatUIEnhancements;
+
+    // Use centralized authentication service or fallback to direct appModule access
+    this._isAuthenticated = () => {
+      if (this.authenticationService?.isAuthenticated) {
+        return this.authenticationService.isAuthenticated();
+      }
+      // Phase-1.3: Use injected app dependency instead of runtime lookup
+      return Boolean(this.app?.state?.isAuthenticated);
+    };
   }
 
   setProjectManager(pm) {
@@ -377,7 +407,8 @@ class ProjectDetailsComponent {
         eventHandlers: this.eventHandlers,
         domAPI: this.domAPI,
         projectManager: this.projectManager,
-        app: this.eventHandlers.DependencySystem.modules.get("appModule"),
+        // Phase-1.3: Use injected app dependency instead of runtime lookup
+        app: this.app,
         domReadinessService: this.domReadinessService,
         logger: this.logger,
         projectId: this.projectId, // Pass current project ID
@@ -441,8 +472,9 @@ class ProjectDetailsComponent {
     }
 
     /* ───────── Project action buttons (edit / archive / delete) ───────── */
-    const currentPM = this.projectManager || this.DependencySystem?.modules?.get('projectManager');
-    const mm = this.modalManager || this.DependencySystem?.modules?.get('modalManager');
+    // Phase-1.3: Use injected dependencies (these should be set during initialization)
+    const currentPM = this.projectManager;
+    const mm = this.modalManager;
 
     // Edit
     const editBtn = this.elements.container.querySelector('#editProjectBtn');

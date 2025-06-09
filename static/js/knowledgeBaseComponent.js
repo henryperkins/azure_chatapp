@@ -20,7 +20,8 @@ const MODULE = "KnowledgeBaseComponent";
 export function createKnowledgeBaseComponent(options = {}) {
   const DS = options.DependencySystem;
   if (!DS) throw new Error("DependencySystem is required for KnowledgeBaseComponent");
-  const getDep = (name) => name in options ? options[name] : DS.modules.get(name);
+  const dsModules = DS.modules;
+  const getDep = (name) => (name in options ? options[name] : dsModules.get(name));
 
   const sanitizer = getDep("sanitizer");
   const app = getDep("appModule") || getDep("app");
@@ -31,6 +32,17 @@ export function createKnowledgeBaseComponent(options = {}) {
   const domAPI = getDep("domAPI");
   const domReadinessService = getDep("domReadinessService");
   const logger = getDep("logger"); // Ensure logger is fetched for constructor scope if needed early
+
+  // ---------------------------------------------------------------------------
+  // Resolve buses and auth module ONCE at factory-time so that no runtime
+  // All required dependencies are resolved at factory-time via getDep – no additional
+  // container look-ups occur after instantiation (guard-rails compliant).
+  // the 2025 guard-rail: *zero* runtime DI queries after instantiation.
+  // ---------------------------------------------------------------------------
+  const appBus = getDep("AppBus");
+  const authModule = getDep("auth");
+  // AuthBus is optional – fall back to null so downstream code branches cleanly.
+  const authBus = getDep("AuthBus") || authModule?.AuthBus || null;
 
   // Resolve KB sub-factories via DI (registered in appInitializer)
   const createKnowledgeBaseManager = getDep("KBManagerFactory");
@@ -149,6 +161,11 @@ export function createKnowledgeBaseComponent(options = {}) {
       this.DependencySystem = DS;
       this.domReadinessService = domReadinessService;
       this.logger = logger; // Store logger instance
+
+      // Buses / modules captured at factory-time to avoid runtime look-ups
+      this.appBus = appBus;
+      this.authModule = authModule;
+      this.authBus = authBus;
 
       this.elementSelectors = elementSelectors;
       this.elements = {};
@@ -313,7 +330,8 @@ export function createKnowledgeBaseComponent(options = {}) {
         return;
       }
 
-      const auth = this.DependencySystem.modules.get('auth');
+      // Use injected authBus / authModule captured during factory construction
+      const auth = this.authModule;
       const authIsReady =
         typeof auth?.isReady === 'function'
           ? auth.isReady()
@@ -479,7 +497,7 @@ export function createKnowledgeBaseComponent(options = {}) {
       addListener("kbDetachRepoBtn", "click", () => this.manager.handleDetachGitHubRepo());
 
       // Listen to AppBus for currentProjectChanged
-      const appBus = this.DependencySystem.modules.get('AppBus');
+      const appBus = this.appBus;
       if (appBus) {
         EH.trackListener(appBus, 'currentProjectChanged', this._handleAppCurrentProjectChanged.bind(this),
           { context: MODULE, description: 'KBComponent_AppBus_CurrentProjectChanged' });
@@ -527,9 +545,8 @@ export function createKnowledgeBaseComponent(options = {}) {
       }
 
       // Listen to AuthBus for authStateChanged (more direct than document)
-      const auth = this.DependencySystem.modules.get('auth');
-      if (auth?.AuthBus) {
-        EH.trackListener(auth.AuthBus, "authStateChanged", (e) => {
+      if (this.authBus) {
+        EH.trackListener(this.authBus, "authStateChanged", (e) => {
           this.logger.debug(`[${MODULE}] AuthBus authStateChanged event received.`, { detail: e.detail, context: MODULE_CONTEXT });
           this._handleAuthStateChange(e.detail?.authenticated);
         }, { description: "KB AuthBus authStateChanged Listener", context: MODULE_CONTEXT });
@@ -589,15 +606,9 @@ export function createKnowledgeBaseComponent(options = {}) {
         return cur.id;
       }
       // Fallback: use global appModule state if available (Week-1 guard-rail compliant)
-      try {
-        const appModule = this.DependencySystem?.modules?.get?.('appModule');
-        if (appModule?.state?.currentProjectId && this.validateUUID(appModule.state.currentProjectId)) {
-          return appModule.state.currentProjectId;
-        }
-      } catch (_err) {
-        // Swallow any errors – if the DependencySystem or appModule is not available
-        // we will simply fall through and return null below. Intentionally suppressing
-        // to keep this helper resilient during early-boot scenarios.
+      const appModuleRef = this.app;
+      if (appModuleRef?.state?.currentProjectId && this.validateUUID(appModuleRef.state.currentProjectId)) {
+        return appModuleRef.state.currentProjectId;
       }
       // notification/logging removed
       return null;
@@ -854,9 +865,7 @@ export function createKnowledgeBaseComponent(options = {}) {
      : () => {};
 
  instance.cleanup = function (...args) {
-   (instance.getDep('DependencySystem')?.modules.get('eventHandlers')
-     || instance.eventHandlers)
-     ?.cleanupListeners({ context: 'KnowledgeBaseComponent' });
+   instance.eventHandlers?.cleanupListeners?.({ context: 'KnowledgeBaseComponent' });
    _origCleanup(...args);
  };
 

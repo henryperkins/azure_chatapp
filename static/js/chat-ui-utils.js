@@ -25,10 +25,9 @@ export function createChatUIUtils(deps) {
   if (!deps.domReadinessService) throw new Error(`[${MODULE}] Missing domReadinessService`);
   if (!deps.DependencySystem) throw new Error(`[${MODULE}] Missing DependencySystem`);
 
-  const { logger, domAPI, DOMPurify, eventHandlers, domReadinessService, DependencySystem } = deps;
+  if (!deps.safeHandler) throw new Error(`[${MODULE}] Missing safeHandler`);
 
-  // Use canonical safeHandler from DI
-  const safeHandler = DependencySystem.modules.get('safeHandler');
+  const { logger, domAPI, DOMPurify, eventHandlers, domReadinessService, safeHandler } = deps;
 
   function attachChatUI(chatMgr) {
     async function _setupUIElements() {

@@ -13,6 +13,7 @@ export function createAccessibilityEnhancements({
   createDebugTools,
   errorReporter,
   safeHandler // ← NEW: allow explicit injection to avoid timing issues
+  , htmlTemplateLoader = null
 }) {
   // Factory-level dependency validation (must be at the very top)
   if (!logger) throw new Error('Missing required dependency: logger');
@@ -594,8 +595,8 @@ export function createAccessibilityEnhancements({
     getFocusable: instance._getFocusable ? instance._getFocusable.bind(instance) : undefined,
     trapFocus: instance._trapFocus ? instance._trapFocus.bind(instance) : undefined,
     cleanup,
-    preloadTemplates: async () => {
-      const loader = DependencySystem.modules.get('htmlTemplateLoader');
+    preloadTemplates: async (loader = null) => {
+      loader = loader || htmlTemplateLoader;
       if (!loader?.loadTemplate) return;
       await Promise.allSettled([
         loader.loadTemplate({

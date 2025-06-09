@@ -15,7 +15,9 @@ export function createProjectDetailsEnhancements({
   domReadinessService,
   logger,
   sanitizer,
-  DependencySystem
+  DependencySystem,
+  projectManager = null,
+  chatUIEnhancements = null
 } = {}) {
   // Validate required dependencies
   if (!domAPI) throw new Error('[createProjectDetailsEnhancements] Missing dependency: domAPI');
@@ -25,6 +27,16 @@ export function createProjectDetailsEnhancements({
   if (!logger) throw new Error('[createProjectDetailsEnhancements] Missing dependency: logger');
   if (!sanitizer) throw new Error('[createProjectDetailsEnhancements] Missing dependency: sanitizer');
   if (!DependencySystem) throw new Error('Missing DependencySystem');
+
+  // ---------------------------------------------------------------------------
+  // Resolve optional dependencies ONCE at factory time to avoid later look-ups
+  // ---------------------------------------------------------------------------
+  if (!projectManager) {
+    projectManager = DependencySystem?.modules?.get?.('projectManager') || null;
+  }
+  if (!chatUIEnhancements) {
+    chatUIEnhancements = DependencySystem?.modules?.get?.('chatUIEnhancements') || null;
+  }
   // Use canonical safeHandler from DI, normalize for both direct function or object with .safeHandler (early bootstrap)
   const safeHandler = getSafeHandler(DependencySystem);
   if (!safeHandler) throw new Error('safeHandler missing from DependencySystem');
@@ -583,8 +595,7 @@ export function createProjectDetailsEnhancements({
           createPullToRefresh({
             element        : domAPI.getElementById('conversationsList'),
             onRefresh      : () => {
-              const pm = DependencySystem.modules.get('projectManager');
-              return pm?.loadProjectConversations?.(state.currentProjectId);
+              return projectManager?.loadProjectConversations?.(state.currentProjectId);
             },
             eventHandlers, domAPI, browserService,
             ctx            : 'project-details:pull-to-refresh'
@@ -636,15 +647,12 @@ export function createProjectDetailsEnhancements({
       if (!chatUIContainer) return;
 
       // Check if we have a chatUIEnhancements module available
-      if (!DependencySystem?.modules?.get('chatUIEnhancements')) {
+      if (!chatUIEnhancements) {
         logger.warn('[setupProjectChatUI] chatUIEnhancements module not available', {
           context: CONTEXT
         });
         return;
       }
-
-      // Get the chatUIEnhancements module
-      const chatUIEnhancements = DependencySystem.modules.get('chatUIEnhancements');
 
       // Set the message container for the chat UI
       if (typeof chatUIEnhancements.setMessageContainer === 'function') {

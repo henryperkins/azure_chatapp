@@ -58,7 +58,11 @@ export const APP_CONFIG = {
     // File endpoints
     FILE_DETAIL: '/api/projects/{id}/files/{file_id}/',
     FILE_DOWNLOAD: '/api/projects/{id}/files/{file_id}/download/',
-    ARTIFACT_DOWNLOAD: '/api/projects/{id}/artifacts/{artifact_id}/download/'
+    ARTIFACT_DOWNLOAD: '/api/projects/{id}/artifacts/{artifact_id}/download/',
+
+    // Chat / Token estimation – new dynamic helper (Gap #4 remediation)
+    ESTIMATE_TOKENS: (projectId, conversationId) =>
+      `/api/projects/${projectId}/conversations/${conversationId}/estimate-tokens`
   },
   LOGGING: {
     BACKEND_ENABLED: true,
@@ -67,6 +71,13 @@ export const APP_CONFIG = {
     MIN_LEVEL: 'debug'  // Set to 'debug' for maximum visibility
   },
   DEBUG_UI: false,          // enables unresolved-selector report
+
+  // --------------------------------------------------------------
+  // Feature flags (toggle remediation plan rollout — see docs)
+  // --------------------------------------------------------------
+  FEATURE_FLAGS: {
+    CHAT_ENH_FIXES: true
+  }
 };
 
 /* Guard-rail factory export */

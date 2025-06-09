@@ -1,4 +1,5 @@
-"""tokens.py
+"""
+tokens.py
 Unified token-counting helpers.
 
 Two public helpers are provided so callers can work with raw text *or* the full
@@ -18,7 +19,7 @@ from __future__ import annotations
 import logging
 from typing import Any, List, Optional
 
-import importlib
+import importlib.util
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +46,7 @@ if _tiktoken_spec is not None:  # pragma: no cover – environment-dependent
 
 else:  # pragma: no cover
 
-    def _encode(text: str) -> int:  # type: ignore
+    def _encode(_text: str) -> int:  # type: ignore
         return -1  # force fallback
 
 

@@ -82,11 +82,8 @@ export function createEventHandlers({
       SH = safeHandler;
       return SH;
     }
-    SH = DependencySystem.modules.get('safeHandler');
-    if (typeof SH !== 'function') {
-      throw new Error('[eventHandler] Missing safeHandler dependency');
-    }
-    return SH;
+    // Phase-1 compliance: do NOT attempt runtime DI lookup
+    throw new Error('[eventHandler] safeHandler dependency missing – must be injected via factory');
   }
 
   logger.debug('[EventHandler] Factory initialized', {
@@ -462,8 +459,9 @@ export function createEventHandlers({
     if (!formEl || domAPI.getDataAttribute(formEl, 'ehBound')) {
       return; // Already bound or element missing
     }
-    const pm = _projectManager || DependencySystem.modules.get('projectManager');
+    const pm = _projectManager;
     if (!pm) {
+      logger.warn('[EventHandler] projectManager not injected – skipping project modal form setup.', { context: MODULE });
       return;
     }
     async function handleProjectFormSubmit(formData, form) {
@@ -764,7 +762,7 @@ export function createEventHandlers({
     PRIORITY,
     untrackListener,
     createCustomEvent,
-    dispatchEvent,
+    dispatchEvent: dispatch,
     setProjectManager : (pm) => { _projectManager = pm; },
     setDomReadinessService,
     setLogger,
@@ -851,7 +849,7 @@ export function createEventHandlers({
         logger.info('[EventHandler] Auth button clicked', { context: 'eventHandler.authButton' });
 
         try {
-          const mm = modalManager || DependencySystem.modules.get('modalManager');
+          const mm = modalManager;
           if (!mm?.show) {
             logger.warn('[EventHandler] ModalManager not ready – cannot show login modal yet', {
               context: 'eventHandler.authButton'
@@ -879,8 +877,7 @@ export function createEventHandlers({
 
     // global requestLogin listener
     function handleRequestLogin() {
-      const currentModalManager = modalManager || DependencySystem.modules.get('modalManager');
-      currentModalManager?.show?.('login');
+      modalManager?.show?.('login');
     }
     trackListener(
       domAPI.getDocument(),

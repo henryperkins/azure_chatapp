@@ -2,6 +2,17 @@ I get t# Azure OpenAI Chat Application
 
 A full-stack, project-based chat and knowledge management application leveraging Azure OpenAI, Anthropic Claude, JWT authentication, and a modular ES6 frontend with Tailwind CSS and DaisyUI.
 
+## 2025 Remediation Roadmap – Status Snapshot
+
+| Phase | Status | Highlights |
+|-------|--------|------------|
+| 1 – Foundation Stabilization | ✅ **Completed** (2025-06-09) | DI compliance, centralized auth & project services, tests & linting green |
+| 2 – Component Decomposition | ⚙️ **In Progress** (kicked-off 2025-06-09) | Chat scaffolding (`chatUIController`, `conversationManager`, `messageHandler`) registered via DI, migration slices underway |
+| 3 – Event System Consolidation | ⏸️ Pending | unify legacy buses into `eventService` |
+| 4 – State Management Cleanup | ⏸️ Pending | introduce `uiStateService`, remove local component state |
+| 5 – Testing & Validation | ⏸️ Pending | E2E, memory & perf benchmarks |
+
+
 ## Features
 
 - Project-based organization: each user can manage multiple projects

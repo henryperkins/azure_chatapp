@@ -20,13 +20,15 @@ describe("Auth Token Storage Persistence", () => {
       domAPI: { getDocument: () => ({ cookie: "" }), getElementById: jest.fn(), preventDefault: jest.fn(), querySelector: jest.fn() },
       sanitizer: { sanitize: (x) => x },
       apiEndpoints: { AUTH_CSRF: "/csrf", AUTH_LOGIN: "/login", AUTH_LOGOUT: "/logout", AUTH_REGISTER: "/register", AUTH_VERIFY: "/verify", AUTH_REFRESH: "/refresh" },
+      safeHandler: jest.fn((fn) => fn),
+      browserService: { FormData: function() {}, setInterval: jest.fn(), clearInterval: jest.fn(), getWindow: () => ({}) },
       DependencySystem: {
         modules: {
           get: (mod) => {
             if (mod === "storageService") return fakeStorage;
             if (mod === "appModule") return { state: { isAuthenticated: false }, setAuthState: jest.fn(), setAppLifecycleState: jest.fn() };
             if (mod === "browserService") return { FormData: function() {}, setInterval: jest.fn(), clearInterval: jest.fn(), getWindow: () => ({}) };
-            if (mod === "safeHandler") return {};
+            if (mod === "safeHandler") return jest.fn((fn) => fn);
             if (mod === "domReadinessService") return { documentReady: () => Promise.resolve(), emitReplayable: jest.fn() };
             return undefined;
           }

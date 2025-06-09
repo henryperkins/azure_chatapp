@@ -8,7 +8,7 @@
  *
  * Usage:
  *   import { MODAL_MAPPINGS } from './modalConstants.js';
- *   // or via DependencySystem: DependencySystem.modules.get('modalMapping')
+*   // or via DI container registration name `modalMapping` (retrieved during bootstrap only).
  */
 
 export function createModalConstants() {

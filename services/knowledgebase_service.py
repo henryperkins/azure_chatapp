@@ -167,7 +167,6 @@ async def ensure_project_has_knowledge_base(
 
     # Quick path: look up KB directly without touching relationship loader
     from sqlalchemy import select
-    from sqlalchemy import select
     result = await db.execute(
         select(KnowledgeBase)
         .where(KnowledgeBase.project_id == project_id)
@@ -393,18 +392,44 @@ async def attach_github_repository(
     user = await get_by_id(db, User, user_id) if user_id else None
     github_service = GitHubService(token=user.github_token if user else None)
 
-    repo_path = github_service.clone_repository(repo_url=repo_url, branch=branch)
-    file_paths = file_paths or []
-    fetched_files = github_service.fetch_files(repo_path, file_paths)
+    # ------------------------------------------------------------------
+    # Clone & fetch files in thread-pool to avoid blocking the event loop
+    # ------------------------------------------------------------------
+    import asyncio
 
-    for file_path in fetched_files:
-        with open(file_path, "rb") as fp:
+    loop = asyncio.get_running_loop()
+
+    repo_path = await loop.run_in_executor(
+        None, github_service.clone_repository, repo_url, branch
+    )
+
+    file_paths = file_paths or []
+
+    fetched_files = await loop.run_in_executor(
+        None, github_service.fetch_files, repo_path, file_paths
+    )
+
+    # Reading and uploading each file sequentially – still avoid blocking
+    async def _upload_single(path: str):
+        # Run blocking open() in thread to avoid blocking loop on large files
+        import builtins
+
+        def _open_file(path_: str):
+            return builtins.open(path_, "rb")
+
+        fp = await loop.run_in_executor(None, _open_file, path)
+        try:
             await upload_file_to_project(
                 project_id=project_id,
-                file=UploadFile(filename=os.path.basename(file_path), file=fp),
+                file=UploadFile(filename=os.path.basename(path), file=fp),
                 db=db,
                 user_id=user_id,
             )
+        finally:
+            fp.close()
+
+    for file_path in fetched_files:
+        await _upload_single(file_path)
 
     kb.repo_url = repo_url
     kb.branch = branch
@@ -431,9 +456,16 @@ async def detach_github_repository(
     project, kb = await _validate_project_and_kb(project_id, user_id, db)
     github_service = GitHubService(token=project.user.github_token)
 
-    repo_path = github_service.clone_repository(repo_url=repo_url)
-    file_paths = github_service.fetch_files(repo_path, [])
-    github_service.remove_files(repo_path, file_paths)
+    import asyncio
+    loop = asyncio.get_running_loop()
+
+    repo_path = await loop.run_in_executor(
+        None, github_service.clone_repository, repo_url, "main"
+    )
+
+    # Fetch all files (empty list -> all) and then remove – both blocking
+    file_paths = await loop.run_in_executor(None, github_service.fetch_files, repo_path, [])
+    await loop.run_in_executor(None, github_service.remove_files, repo_path, file_paths)
 
     kb.repo_url = None
     kb.branch = None
