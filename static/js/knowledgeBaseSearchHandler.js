@@ -79,6 +79,13 @@ export function createKnowledgeBaseSearchHandler(ctx) {
         ? resp.data.results
         : [];
       if (results.length) {
+        // Basic LRU eviction – cap cache to 100 entries.
+        const MAX_CACHE_ENTRIES = 100;
+        if (ctx.state.searchCache.size >= MAX_CACHE_ENTRIES) {
+          // Delete the first (oldest) entry – Map preserves insertion order
+          const firstKey = ctx.state.searchCache.keys().next().value;
+          ctx.state.searchCache.delete(firstKey);
+        }
         ctx.state.searchCache.set(cacheKey, results);
         _renderSearchResults(results);
       } else {
@@ -344,6 +351,8 @@ export function createKnowledgeBaseSearchHandler(ctx) {
     cleanup() {
       const EH = ctx.DependencySystem.modules.get('eventHandlers');
       if (EH && EH.cleanupListeners) EH.cleanupListeners({ context: 'KnowledgeBaseSearchHandler' });
+      // Clear local search cache to avoid memory leaks when component unmounts
+      if (ctx.state?.searchCache?.clear) ctx.state.searchCache.clear();
     }
   };
 }

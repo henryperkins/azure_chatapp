@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, Literal
 
 class MessageCreate(BaseModel):
     """Pydantic model for creating a new message."""
@@ -10,7 +10,7 @@ class MessageCreate(BaseModel):
         max_length=10000,
         description="The text content of the user message"
     )
-    role: str = Field(
+    role: Literal["user", "assistant", "system"] = Field(
         default="user",
         description="The role: user, assistant, or system."
     )

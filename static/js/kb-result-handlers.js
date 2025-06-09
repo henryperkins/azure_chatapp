@@ -47,6 +47,9 @@ export function createKbResultHandlers({
   const safeHandler = DependencySystem.modules.get('safeHandler');
   if (!safeHandler) throw new Error('safeHandler missing from DependencySystem');
 
+  // Keep reference to MutationObserver for cleanup
+  let observer = null;
+
   // -- Init function, call once when DOM is ready and deps are injected
   function init() {
     initializeKnowledgeCopyFeatures();
@@ -146,7 +149,7 @@ export function createKbResultHandlers({
     if (!kbModal) return;
 
     // Enhance style on open attribute change
-    const observer = new MutationObserver(
+    observer = new MutationObserver(
       safeHandler((mutations) => {
         mutations.forEach((mutation) => {
           if (
@@ -228,6 +231,14 @@ export function createKbResultHandlers({
   return {
     init,
     cleanup() {
+      if (observer && typeof observer.disconnect === 'function') {
+        try {
+          observer.disconnect();
+        } catch (err) {
+          logger?.warn?.(`[${MODULE_CONTEXT}] Failed to disconnect observer`, err, { context: MODULE_CONTEXT });
+        }
+        observer = null;
+      }
       eventHandlers.cleanupListeners({ context: MODULE_CONTEXT });
     }
   };

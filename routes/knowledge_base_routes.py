@@ -435,18 +435,12 @@ async def reindex_knowledge_base(
         if not project.knowledge_base:
             raise HTTPException(status_code=400, detail="Project has no knowledge base")
 
-        if force:
-            kb = await get_knowledge_base(
-                knowledge_base_id=project.knowledge_base.id, db=db
-            )
-            if kb:
-                vector_db = await initialize_project_vector_db(
-                    project_id=project_id,
-                    embedding_model=kb.get("embedding_model", "all-MiniLM-L6-v2"),
-                )
-                await vector_db.delete_by_filter({"project_id": str(project_id)})
+        from services.knowledgebase_service import reindex_project_kb
 
-        result = await process_files_for_project(project_id=project_id)
+        result = await reindex_project_kb(
+            project_id=project_id, force=force, db=db
+        )
+
         return await create_standard_response(result, "Reindexing complete")
 
     except HTTPException:

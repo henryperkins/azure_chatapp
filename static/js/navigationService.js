@@ -155,23 +155,6 @@ export function createNavigationService({
     return true;
   }
 
-  // Automatically deactivate when a new view gets activated
-  const _origActivateView = activateView;
-  activateView = async function wrappedActivateView (viewId, params = {}) {
-    if (state.currentView && state.currentView !== viewId) {
-      deactivateView(state.currentView);
-    }
-    const res = await _origActivateView(viewId, params);
-    if (res) state.currentView = viewId;
-    return res;
-  };
-
-  // Update navAPI now that wrappers exist
-  navAPI.activateView = activateView;
-  navAPI.deactivateView = deactivateView;
-
-  // expose via public API
-  navAPI.deactivateView = deactivateView;
 
   // === View Management ===
   function registerView(viewId, handlers = {}) {
@@ -197,6 +180,10 @@ export function createNavigationService({
   }
 
   async function activateView(viewId, params = {}) {
+    // Auto-deactivate current view before switching
+    if (state.currentView && state.currentView !== viewId) {
+      deactivateView(state.currentView);
+    }
     if (!state.registeredViews.has(viewId)) {
       return false;
     }

@@ -46,9 +46,13 @@ export function createKnowledgeBaseManager(ctx) {
             `[${MODULE}] apiRequest dependency not ready – called before registration.`
           );
         };
-        console.warn(
-          `[${MODULE}] apiRequest dependency missing during initialization – using lazy placeholder.`
-        );
+        // Forward through injected logger to respect global logging guard-rails
+        if (ctx.logger && typeof ctx.logger.warn === 'function') {
+          ctx.logger.warn(
+            `[${MODULE}] apiRequest dependency missing during initialization – using lazy placeholder.`,
+            { context: MODULE }
+          );
+        }
         continue; // treat as satisfied for now
       }
 
@@ -57,7 +61,7 @@ export function createKnowledgeBaseManager(ctx) {
     }
   }
 
-  const DependencySystem = ctx.getDep ? ctx.getDep("DependencySystem") : null;
+  const _DependencySystem = ctx.getDep ? ctx.getDep("DependencySystem") : null;
   const logger = ctx.logger || ctx.getDep("logger"); // Ensure logger is available
   if (!logger) {
     throw new Error(`[${MODULE}] Logger dependency is missing from context.`);
@@ -872,7 +876,8 @@ export function createKnowledgeBaseManager(ctx) {
     }
     try {
       new URL(repoUrl);
-    } catch (_) {
+    } catch (_err) {
+      // Invalid URL – the built-in URL constructor threw.
       logger.warn(`[${MODULE}][handleAttachGitHubRepo] Invalid repository URL: ${repoUrl}. Aborting.`, { context: MODULE });
       // TODO: Show user validation error
       return;
@@ -1070,7 +1075,10 @@ export function createKnowledgeBaseManager(ctx) {
     // Close any open KB modals to avoid leaks
     try {
       ctx.modalManager?.closeModal?.('*');
-    } catch {}
+    } catch (err) {
+      // Silently ignore any errors while cleaning up modals – at this
+      // point we are shutting down and cannot recover meaningfully.
+    }
 
   }
 

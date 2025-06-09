@@ -167,8 +167,11 @@ async def ensure_project_has_knowledge_base(
 
     # Quick path: look up KB directly without touching relationship loader
     from sqlalchemy import select
+    from sqlalchemy import select
     result = await db.execute(
-        select(KnowledgeBase).where(KnowledgeBase.project_id == project_id)
+        select(KnowledgeBase)
+        .where(KnowledgeBase.project_id == project_id)
+        .with_for_update(read=True)
     )
     kb = result.scalars().first()
 
@@ -188,7 +191,9 @@ async def ensure_project_has_knowledge_base(
 
     # Double-check after refresh
     result = await db.execute(
-        select(KnowledgeBase).where(KnowledgeBase.project_id == project_id)
+        select(KnowledgeBase)
+        .where(KnowledgeBase.project_id == project_id)
+        .with_for_update(read=True)
     )
     kb_existing = result.scalars().first()
     if kb_existing:
@@ -617,6 +622,48 @@ async def toggle_project_kb(
     project.knowledge_base.is_active = enable
     await save_model(db, project.knowledge_base)
     return {"knowledge_base_id": str(project.knowledge_base.id), "is_active": enable}
+
+
+# ---------------------------------------------------------------------
+# Re-index helper (extracted from routes layer)
+# ---------------------------------------------------------------------
+
+@handle_service_errors("Failed to reindex knowledge base")
+async def reindex_project_kb(
+    project_id: UUID,
+    *,
+    force: bool = False,
+    db: AsyncSession,
+) -> dict[str, Any]:
+    """Re-index all files of a project's KB.
+
+    This logic was previously implemented in the FastAPI route handler which
+    violated the *service-first* architecture rule.  Moving it into the
+    service layer keeps DB/IO heavy work out of the HTTP layer and makes the
+    operation unit-testable.
+    """
+
+    # Validate access and ensure KB exists & active
+    project = await validate_project_access(project_id, None, db)
+    if not project.knowledge_base:
+        raise HTTPException(status_code=400, detail="Project has no knowledge base")
+
+    if force:
+        kb = await get_knowledge_base(knowledge_base_id=project.knowledge_base.id, db=db)
+        # Delayed import to avoid circular dependency
+        from services.vector_db import initialize_project_vector_db
+
+        vector_db = await initialize_project_vector_db(
+            project_id=project_id,
+            embedding_model=kb.get("embedding_model", "all-MiniLM-L6-v2"),
+        )
+        await vector_db.delete_by_filter({"project_id": str(project_id)})
+
+    # Delegate heavy lifting to existing batch helper – delayed import avoids heavy startup cost
+    from services.vector_db import process_files_for_project
+
+    result = await process_files_for_project(project_id=project_id)
+    return result
 
 
 async def get_knowledge_base_health(

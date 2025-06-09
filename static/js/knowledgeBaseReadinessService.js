@@ -25,19 +25,7 @@ export function createKnowledgeBaseReadinessService({
   // ────────────────────────────────────────────────────────────
   if (!DependencySystem) throw new Error('[KBReadinessService] Missing DependencySystem');
   if (typeof apiClient !== 'function') throw new Error('[KBReadinessService] Missing apiClient function');
-  if (!logger) {
-    // Fallback to console to avoid total failure – but make sure callers are aware.
-    // It is still better than throwing because consumers may rely on the service
-    // for *graceful* degradation.
-    // eslint-disable-next-line no-console
-    console.warn('[KBReadinessService] Logger missing – falling back to console');
-    logger = {
-      debug: (...a) => console.debug('[KBReadinessService]', ...a),
-      info: (...a) => console.info('[KBReadinessService]', ...a),
-      warn: (...a) => console.warn('[KBReadinessService]', ...a),
-      error: (...a) => console.error('[KBReadinessService]', ...a)
-    };
-  }
+  if (!logger) throw new Error('[KBReadinessService] Missing logger dependency');
 
   const MODULE = 'kbReadinessService';
 

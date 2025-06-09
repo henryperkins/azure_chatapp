@@ -11,14 +11,14 @@ import logging
 import random
 import time
 from uuid import UUID
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple
 from enum import Enum
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
 from fastapi.responses import JSONResponse  # NEW
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import func, select, true
+from sqlalchemy import func, select, true, delete as sqlalchemy_delete
 from sqlalchemy.orm import (
     selectinload,
     attributes as orm_attributes,
@@ -46,7 +46,9 @@ from services.project_service import (
     coerce_project_id,
     _lookup_project,
     validate_project_access,  # <-- ensure strict access/exists check
+    create_project as svc_create_project,
 )
+from services.conversation_service import ConversationService
 from utils.db_utils import get_all_by_condition, save_model
 from utils.response_utils import create_standard_response
 from utils.serializers import serialize_project
@@ -130,8 +132,6 @@ async def create_project(
             start_time = time.time()
 
             # Create project (with auto-KB) via service
-            from services.project_service import create_project as svc_create_project
-
             project = await svc_create_project(
                 user_id=current_user.id,
                 name=project_data.name,
@@ -141,8 +141,6 @@ async def create_project(
                 max_tokens=project_data.max_tokens,
                 default_model="claude-3-sonnet-20240229",
             )
-
-            from services.conversation_service import ConversationService
 
             conv_service = ConversationService(db)
             await conv_service.create_conversation(
@@ -254,7 +252,7 @@ async def create_project(
 
 @router.get("/", response_class=JSONResponse)
 async def list_projects(
-    request: Request,
+    _request: Request,
     filter_type: ProjectFilter = Query(
         ProjectFilter.all, alias="filter", description="Filter type"
     ),
@@ -369,7 +367,13 @@ async def get_project(
         current_user, _token = current_user_tuple
 
         try:
-            proj_id: Union[str, int, UUID] = coerce_project_id(project_id)
+            proj_id = coerce_project_id(project_id)
+            # Help type checkers: enforce type at runtime and notify if not int/UUID
+            if not isinstance(proj_id, (int, UUID)):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid project ID type: {type(proj_id)}",
+                )
         except Exception as coercion_err:
             logger.exception("Project ID coercion failed for %s", project_id)
             metrics.incr("project.view.failure", tags={"reason": "id_coercion"})
@@ -445,7 +449,7 @@ async def update_project(
 ):
     """Update project with change tracking"""
     current_user, _token = current_user_tuple
-    proj_id: Union[str, int, UUID] = coerce_project_id(project_id)
+    proj_id = coerce_project_id(project_id)
     transaction = start_transaction(
         op="project",
         sampled=random.random() < PROJECT_SAMPLE_RATE,
@@ -529,7 +533,7 @@ async def delete_project(
 ):
     """Delete project with resource cleanup tracking"""
     current_user, _token = current_user_tuple
-    proj_id: Union[str, int, UUID] = coerce_project_id(project_id)
+    proj_id = coerce_project_id(project_id)
     transaction = start_transaction(
         op="project",
         sampled=random.random() < PROJECT_SAMPLE_RATE,
@@ -580,8 +584,6 @@ async def delete_project(
                     "total_size": total_size,
                 },
             )
-
-            from sqlalchemy import delete as sqlalchemy_delete
 
             convo_del = await db.execute(
                 sqlalchemy_delete(Conversation).where(
@@ -674,7 +676,7 @@ async def toggle_archive_project(
 ):
     """Toggle archive status with state tracking"""
     current_user, _token = current_user_tuple
-    proj_id: Union[str, int, UUID] = coerce_project_id(project_id)
+    proj_id = coerce_project_id(project_id)
     with sentry_span_context(
         op="project",
         description=f"Toggle archive for project {proj_id}",
@@ -734,7 +736,7 @@ async def toggle_pin_project(
 ):
     """Toggle pin status of a project with validation"""
     current_user, _token = current_user_tuple
-    proj_id: Union[str, int, UUID] = coerce_project_id(project_id)
+    proj_id = coerce_project_id(project_id)
     with sentry_span_context(
         op="project",
         description=f"Toggle pin for project {proj_id}",
@@ -796,7 +798,7 @@ async def get_project_stats(
 
     try:
         current_user, _token = current_user_tuple
-        proj_id: Union[str, int, UUID] = coerce_project_id(project_id)
+        proj_id = coerce_project_id(project_id)
 
         with sentry_span_context(
             op="project", description=f"Get stats for project {proj_id}"
@@ -829,6 +831,7 @@ async def get_project_stats(
             # Files
             # ------------------------------------------------------------------
             files_result = await db.execute(
+                # pylint: disable=not-callable
                 select(func.count(ProjectFile.id), func.sum(ProjectFile.file_size))
                 .select_from(ProjectFile)
                 .where(ProjectFile.project_id == project_id)
@@ -853,6 +856,7 @@ async def get_project_stats(
                 kb = kb_query.scalars().first()
                 if kb:
                     processed_result = await db.execute(
+                        # pylint: disable=not-callable
                         select(func.count(ProjectFile.id)).where(
                             ProjectFile.project_id == project_id,
                             ProjectFile.config.isnot(None),
@@ -934,3 +938,4 @@ router.add_api_route(
     methods=["DELETE"],
     response_class=JSONResponse,
 )
+

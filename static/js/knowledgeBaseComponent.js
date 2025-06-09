@@ -594,7 +594,11 @@ export function createKnowledgeBaseComponent(options = {}) {
         if (appModule?.state?.currentProjectId && this.validateUUID(appModule.state.currentProjectId)) {
           return appModule.state.currentProjectId;
         }
-      } catch {} // silent – last-chance heuristic only
+      } catch (_err) {
+        // Swallow any errors – if the DependencySystem or appModule is not available
+        // we will simply fall through and return null below. Intentionally suppressing
+        // to keep this helper resilient during early-boot scenarios.
+      }
       // notification/logging removed
       return null;
     }

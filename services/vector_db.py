@@ -210,7 +210,10 @@ class VectorDB:
             raise VectorDBError("Embedding model not properly initialized")
 
         try:
-            embeddings = self.embedding_model.encode(texts)
+            import asyncio
+            loop = asyncio.get_running_loop()
+            # Run blocking encode in a thread pool to avoid blocking event loop
+            embeddings = await loop.run_in_executor(None, self.embedding_model.encode, texts)
             return embeddings.tolist()
         except Exception as e:
             logger.error(f"Error generating local embeddings: {str(e)}")
