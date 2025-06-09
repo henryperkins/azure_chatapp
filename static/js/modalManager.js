@@ -461,7 +461,11 @@ export default class ModalManager {
     
     // Auto-initialize
     this.initialize().catch(err => {
-      console.error('[ModalManager] Auto-initialization failed:', err);
+      if (opts?.logger) {
+        opts.logger.error('[ModalManager] Auto-initialization failed:', err, { context: 'ModalManager' });
+      } else {
+        console.error('[ModalManager] Auto-initialization failed:', err);
+      }
     });
   }
 }

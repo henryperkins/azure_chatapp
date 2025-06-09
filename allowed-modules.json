@@ -66,5 +66,6 @@
   "static/js/authStateManager.js",
   "static/js/modalRenderer.js",
   "static/js/modalStateManager.js",
-  "static/js/modalFormHandler.js"
+  "static/js/modalFormHandler.js",
+  "static/js/projectEventHandlers.js"
 ]

@@ -355,7 +355,7 @@ L1:   /**
 
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │                                                                              │
-│                   🛡️ Violations in: chatExtensions.js (3)                   │
+│                   🛡️ Violations in: chatExtensions.js (2)                   │
 │                                                                              │
 └──────────────────────────────────────────────────────────────────────────────┘
 
@@ -363,7 +363,7 @@ L1:   /**
 │Pattern Rule                                                            │Count│
 ├────────────────────────────────────────────────────────────────────────┼─────┤
 │🔒 1.  Factory Function Export                                          │1    │
-│🔒 12. Logger / Observability                                           │2    │
+│🔒 12. Logger / Observability                                           │1    │
 └────────────────────────────────────────────────────────────────────────┴─────┘
 
 Detailed Violations:
@@ -379,14 +379,6 @@ L1:   /**
 • Rule 12: Logger / Observability
   No `console.*`; all logs via DI logger with context. Use canonical safeHandler for event error handling.
 
-L94:  } catch (err) {
-  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
-  💡 Hint:
-     Example:
-     } catch (err) {
-       logger.error("Operation failed", err, { context: "chatExtensions:myError" });
-     }
-
 L170: } catch {/* noop */}
   ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
   💡 Hint:
@@ -397,14 +389,14 @@ L170: } catch {/* noop */}
 
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │                                                                              │
-│                  🛡️ Violations in: chatUIController.js (2)                  │
+│                  🛡️ Violations in: chatUIController.js (1)                  │
 │                                                                              │
 └──────────────────────────────────────────────────────────────────────────────┘
 
 ┌────────────────────────────────────────────────────────────────────────┬─────┐
 │Pattern Rule                                                            │Count│
 ├────────────────────────────────────────────────────────────────────────┼─────┤
-│🔒 12. Logger / Observability                                           │2    │
+│🔒 12. Logger / Observability                                           │1    │
 └────────────────────────────────────────────────────────────────────────┴─────┘
 
 Detailed Violations:
@@ -413,14 +405,6 @@ Detailed Violations:
   No `console.*`; all logs via DI logger with context. Use canonical safeHandler for event error handling.
 
 L368: } catch (err) {
-  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
-  💡 Hint:
-     Example:
-     } catch (err) {
-       logger.error("Operation failed", err, { context: "ChatUIController:myError" });
-     }
-
-L458: } catch (err) {
   ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
   💡 Hint:
      Example:
@@ -673,39 +657,6 @@ L1:   // Thin re-export wrapper to ensure legacy import paths under
 
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │                                                                              │
-│                🛡️ Violations in: FileUploadComponent.js (2)                 │
-│                                                                              │
-└──────────────────────────────────────────────────────────────────────────────┘
-
-┌────────────────────────────────────────────────────────────────────────┬─────┐
-│Pattern Rule                                                            │Count│
-├────────────────────────────────────────────────────────────────────────┼─────┤
-│🔒 12. Logger / Observability                                           │2    │
-└────────────────────────────────────────────────────────────────────────┴─────┘
-
-Detailed Violations:
-
-• Rule 12: Logger / Observability
-  No `console.*`; all logs via DI logger with context. Use canonical safeHandler for event error handling.
-
-L387: } catch (err) {
-  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
-  💡 Hint:
-     Example:
-     } catch (err) {
-       logger.error("Operation failed", err, { context: "FileUploadComponentContext:myError" });
-     }
-
-L409: } catch (pollErr) {
-  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
-  💡 Hint:
-     Example:
-     } catch (pollErr) {
-       logger.error("Operation failed", pollErr, { context: "FileUploadComponentContext:myError" });
-     }
-
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                                                                              │
 │                     🛡️ Violations in: formatting.js (2)                     │
 │                                                                              │
 └──────────────────────────────────────────────────────────────────────────────┘
@@ -744,24 +695,24 @@ L72:  div.innerHTML = html;
 ┌────────────────────────────────────────────────────────────────────────┬─────┐
 │Pattern Rule                                                            │Count│
 ├────────────────────────────────────────────────────────────────────────┼─────┤
-│🔒 1.  Factory Function Export                                          │1    │
+│🔒 15. Canonical Implementations                                        │1    │
 │🔒 19. Unauthorised Module Path                                         │1    │
 └────────────────────────────────────────────────────────────────────────┴─────┘
 
 Detailed Violations:
 
-• Rule 1: Factory Function Export
-  Export `createXyz` factory, validate deps, expose cleanup, no top-level code.
+• Rule 15: Canonical Implementations
+  Use canonical implementations only (safeHandler, form handlers, URL parsing, etc.)
 
-L1:   export function getSafeHandler(DependencySystem){
-  ⚠  Violation: Missing factory export.
+L7:   function safeHandler(fn, ctx = 'safeHandler') {
+  ⚠  Violation: Duplicate 'safeHandler' function declaration is forbidden.
   💡 Hint:
-     A module must export a function like 'createMyFeature(deps)'.
+     Use the canonical safeHandler, typically provided via DI (e.g., from DependencySystem or a utility module).
 
 • Rule 19: Unauthorised Module Path
   Files added outside the approved module manifest are forbidden.
 
-L1:   export function getSafeHandler(DependencySystem){
+L1:   export function createSafeHandler({ DependencySystem, logger } = {}) {
   ⚠  Violation: File not present in allowed-modules manifest.
   💡 Hint:
      Add this path to allowed-modules.json as part of an approved refactor, or move logic into an existing module.
@@ -775,45 +726,33 @@ L1:   export function getSafeHandler(DependencySystem){
 ┌────────────────────────────────────────────────────────────────────────┬─────┐
 │Pattern Rule                                                            │Count│
 ├────────────────────────────────────────────────────────────────────────┼─────┤
-│🔒 12. Logger / Observability                                           │4    │
+│🔒 2.  Strict Dependency Injection                                      │4    │
 └────────────────────────────────────────────────────────────────────────┴─────┘
 
 Detailed Violations:
 
-• Rule 12: Logger / Observability
-  No `console.*`; all logs via DI logger with context. Use canonical safeHandler for event error handling.
+• Rule 2: Strict Dependency Injection
+  No direct globals or service imports (except bootstrap); inject via DI. `DependencySystem.modules.get()` only inside functions, not at module scope.
 
-L111: } catch (err) {
-  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+L113: logger.error('[globalUtils] safeParseJSON failed', err,
+  ⚠  Violation: Service 'logger' is used but does not appear to be injected via factory DI parameters.
   💡 Hint:
-     Example:
-     } catch (err) {
-       logger.error("Operation failed", err, { context: "global-utils:myError" });
-     }
+     Ensure 'logger' is part of the factory's 'deps' and properly destructured, or obtained via DependencySystem.modules.get() within a function.
 
-L165: } catch (err) {
-  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+L165: logger.error('[globalUtils] createElement failed', err,
+  ⚠  Violation: Service 'logger' is used but does not appear to be injected via factory DI parameters.
   💡 Hint:
-     Example:
-     } catch (err) {
-       logger.error("Operation failed", err, { context: "global-utils:myError" });
-     }
+     Ensure 'logger' is part of the factory's 'deps' and properly destructured, or obtained via DependencySystem.modules.get() within a function.
 
-L182: } catch (err) {
-  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+L180: logger.error('[globalUtils] toggleElement failed', err,
+  ⚠  Violation: Service 'logger' is used but does not appear to be injected via factory DI parameters.
   💡 Hint:
-     Example:
-     } catch (err) {
-       logger.error("Operation failed", err, { context: "global-utils:myError" });
-     }
+     Ensure 'logger' is part of the factory's 'deps' and properly destructured, or obtained via DependencySystem.modules.get() within a function.
 
-L200: } catch (err) {
-  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+L196: logger.error('[globalUtils] formatDate failed', err,
+  ⚠  Violation: Service 'logger' is used but does not appear to be injected via factory DI parameters.
   💡 Hint:
-     Example:
-     } catch (err) {
-       logger.error("Operation failed", err, { context: "global-utils:myError" });
-     }
+     Ensure 'logger' is part of the factory's 'deps' and properly destructured, or obtained via DependencySystem.modules.get() within a function.
 
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │                                                                              │
@@ -1561,7 +1500,7 @@ L363: } catch (err) {
 
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │                                                                              │
-│                   🛡️ Violations in: pollingService.js (5)                   │
+│                   🛡️ Violations in: pollingService.js (4)                   │
 │                                                                              │
 └──────────────────────────────────────────────────────────────────────────────┘
 
@@ -1569,7 +1508,7 @@ L363: } catch (err) {
 │Pattern Rule                                                            │Count│
 ├────────────────────────────────────────────────────────────────────────┼─────┤
 │🔒 9.  Unified Event Service                                            │2    │
-│🔒 12. Logger / Observability                                           │2    │
+│🔒 12. Logger / Observability                                           │1    │
 │🔒 19. Unauthorised Module Path                                         │1    │
 └────────────────────────────────────────────────────────────────────────┴─────┘
 
@@ -1590,14 +1529,6 @@ L74:  _domAPI.getDocument().dispatchEvent(new CustomEvent('polling:jobUpdate', {
 
 • Rule 12: Logger / Observability
   No `console.*`; all logs via DI logger with context. Use canonical safeHandler for event error handling.
-
-L58:  } catch (err) {
-  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
-  💡 Hint:
-     Example:
-     } catch (err) {
-       logger.error("Operation failed", err, { context: "polling-service:myError" });
-     }
 
 L135: eventHandlers.trackListener(doc, 'navigation:deactivateView', cleanup, {
   ⚠  Violation: Event handler for 'eventHandlers.trackListener' should be wrapped by 'safeHandler' (or be a directly passed param, or simple inline function).
@@ -1896,64 +1827,6 @@ L6:   let _browserService = null;
 
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │                                                                              │
-│                      🛡️ Violations in: sidebar.js (1)                       │
-│                                                                              │
-└──────────────────────────────────────────────────────────────────────────────┘
-
-┌────────────────────────────────────────────────────────────────────────┬─────┐
-│Pattern Rule                                                            │Count│
-├────────────────────────────────────────────────────────────────────────┼─────┤
-│🔒 12. Logger / Observability                                           │1    │
-└────────────────────────────────────────────────────────────────────────┴─────┘
-
-Detailed Violations:
-
-• Rule 12: Logger / Observability
-  No `console.*`; all logs via DI logger with context. Use canonical safeHandler for event error handling.
-
-L772: } catch (dockErr) {
-  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
-  💡 Hint:
-     Example:
-     } catch (dockErr) {
-       logger.error("Operation failed", dockErr, { context: "sidebar:myError" });
-     }
-
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                                                                              │
-│                    🛡️ Violations in: sidebarAuth.js (2)                     │
-│                                                                              │
-└──────────────────────────────────────────────────────────────────────────────┘
-
-┌────────────────────────────────────────────────────────────────────────┬─────┐
-│Pattern Rule                                                            │Count│
-├────────────────────────────────────────────────────────────────────────┼─────┤
-│🔒 12. Logger / Observability                                           │2    │
-└────────────────────────────────────────────────────────────────────────┴─────┘
-
-Detailed Violations:
-
-• Rule 12: Logger / Observability
-  No `console.*`; all logs via DI logger with context. Use canonical safeHandler for event error handling.
-
-L98:  } catch (hideErr) {
-  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
-  💡 Hint:
-     Example:
-     } catch (hideErr) {
-       logger.error("Operation failed", hideErr, { context: "sidebar-auth:myError" });
-     }
-
-L110: } catch (hideErr) {
-  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
-  💡 Hint:
-     Example:
-     } catch (hideErr) {
-       logger.error("Operation failed", hideErr, { context: "sidebar-auth:myError" });
-     }
-
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                                                                              │
 │                 🛡️ Violations in: tokenStatsManager.js (1)                  │
 │                                                                              │
 └──────────────────────────────────────────────────────────────────────────────┘
@@ -2024,7 +1897,7 @@ L1:   /**
 --------------------------------------------------------------------------------
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │                                                                              │
-│            🚨 Found 171 violation(s) in 46 of 73 file(s) scanned.            │
+│            🚨 Found 163 violation(s) in 43 of 73 file(s) scanned.            │
 │                                                                              │
 └──────────────────────────────────────────────────────────────────────────────┘
 

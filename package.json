@@ -58,6 +58,7 @@
     "figures": "^6.1.0",
     "glob": "^11.0.2",
     "globals": "^16.0.0",
+    "jest": "^29.7.0",
     "jscodeshift": "^0.15.2",
     "postcss": "^8.5.4",
     "postcss-cli": "^11.0.1",

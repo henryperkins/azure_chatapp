@@ -1,6 +1,6 @@
 🛡️ Frontend Pattern Checker - Scanning...
 
-Scanning: uiStateService.jsScanning: uiRenderer.jsScanning: tokenStatsManagerProxy.jsScanning: tokenStatsManager.jsScanning: theme-toggle.jsScanning: sidebarMobileDock.jsScanning: sidebarAuth.jsScanning: sidebar.jsScanning: sidebar-enhancements.jsScanning: safeHandler.jsScanning: projectManager.jsScanning: projectListComponent.jsScanning: projectEventHandlers.jsScanning: projectDetailsRenderer.jsScanning: projectDetailsComponent.jsScanning: projectDataCoordinator.jsScanning: projectDashboardUtils.jsScanning: projectDashboard.jsScanning: project-details-enhancements.jsScanning: pollingService.jsScanning: navigationService.jsScanning: modelConfig.jsScanning: modalStateManager.jsScanning: modalRenderer.jsScanning: modalManager.jsScanning: modalFormHandler.jsScanning: modalConstants.jsScanning: messageHandler.jsScanning: logger.jsScanning: logDeliveryService.jsScanning: knowledgeBaseSearchHandler.jsScanning: knowledgeBaseReadinessService.jsScanning: knowledgeBaseManager.jsScanning: knowledgeBaseComponent.jsScanning: kb-result-handlers.jsScanning: formatting.jsScanning: eventHandler.jsScanning: errorReporter.jsScanning: conversationManager.jsScanning: chatUIEnhancements.jsScanning: chatUIController.jsScanning: chatExtensions.jsScanning: chat.jsScanning: chat-ui-utils.jsScanning: authStateManager.jsScanning: authFormListenerFactory.jsScanning: authFormHandler.jsScanning: authApiService.jsScanning: auth.jsScanning: appConfig.jsScanning: app.jsScanning: accessibility-utils.jsScanning: FileUploadComponent.jsScanning: dompurify.es.jsScanning: dompurify-global.jsScanning: storageService.jsScanning: session.jsScanning: selectorConstants.jsScanning: pullToRefresh.jsScanning: polyfillCustomEvent.jsScanning: initHelpers.jsScanning: htmlTemplateLoader.jsScanning: globalUtils.jsScanning: getSafeHandler.jsScanning: errorReporterStub.jsScanning: domReadinessService.jsScanning: domAPI.jsScanning: browserService.jsScanning: apiEndpoints.jsScanning: apiClient.jsScanning: eventService.jsScanning: appInitializer.jsScanning: auth-storage.test.js                                                                      ┌──────────────────────────────────────────────────────────────────────────────┐
+Scanning: uiStateService.jsScanning: uiRenderer.jsScanning: tokenStatsManagerProxy.jsScanning: tokenStatsManager.jsScanning: theme-toggle.jsScanning: sidebarMobileDock.jsScanning: sidebarAuth.jsScanning: sidebar.jsScanning: sidebar-enhancements.jsScanning: safeHandler.jsScanning: projectManager.jsScanning: projectListComponent.jsScanning: projectDetailsRenderer.jsScanning: projectDetailsComponent.jsScanning: projectDataCoordinator.jsScanning: projectDashboardUtils.jsScanning: projectDashboard.jsScanning: project-details-enhancements.jsScanning: pollingService.jsScanning: navigationService.jsScanning: modelConfig.jsScanning: modalStateManager.jsScanning: modalRenderer.jsScanning: modalManager.jsScanning: modalFormHandler.jsScanning: modalConstants.jsScanning: messageHandler.jsScanning: logger.jsScanning: logDeliveryService.jsScanning: knowledgeBaseSearchHandler.jsScanning: knowledgeBaseReadinessService.jsScanning: knowledgeBaseManager.jsScanning: knowledgeBaseComponent.jsScanning: kb-result-handlers.jsScanning: formatting.jsScanning: eventHandler.jsScanning: errorReporter.jsScanning: conversationManager.jsScanning: chatUIEnhancements.jsScanning: chatUIController.jsScanning: chatExtensions.jsScanning: chat.jsScanning: chat-ui-utils.jsScanning: auth_original.jsScanning: authStateManager.jsScanning: authFormListenerFactory.jsScanning: authFormHandler.jsScanning: authApiService.jsScanning: auth.jsScanning: appConfig.jsScanning: app.jsScanning: accessibility-utils.jsScanning: FileUploadComponent.jsScanning: dompurify.es.jsScanning: dompurify-global.jsScanning: storageService.jsScanning: session.jsScanning: selectorConstants.jsScanning: pullToRefresh.jsScanning: polyfillCustomEvent.jsScanning: initHelpers.jsScanning: htmlTemplateLoader.jsScanning: globalUtils.jsScanning: getSafeHandler.jsScanning: errorReporterStub.jsScanning: domReadinessService.jsScanning: domAPI.jsScanning: browserService.jsScanning: apiEndpoints.jsScanning: apiClient.jsScanning: eventService.jsScanning: appInitializer.jsScanning: auth-storage.test.js                                                                      ┌──────────────────────────────────────────────────────────────────────────────┐
 │                                                                              │
 │                     🛡️ Violations in: apiClient.js (1)                      │
 │                                                                              │
@@ -27,7 +27,27 @@ L117: } catch (err) {
 
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │                                                                              │
-│                        🛡️ Violations in: auth.js (1)                        │
+│                   🛡️ Violations in: appInitializer.js (1)                   │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────────┬─────┐
+│Pattern Rule                                                            │Count│
+├────────────────────────────────────────────────────────────────────────┼─────┤
+│🔒 0.  Other Issues                                                     │1    │
+└────────────────────────────────────────────────────────────────────────┴─────┘
+
+Detailed Violations:
+
+• Rule 0: Other Issues
+  No description for this rule.
+
+L584: } catch (error) {
+  ⚠  Violation: Parse error: Unexpected token (584:18)
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│                   🛡️ Violations in: auth_original.js (8)                    │
 │                                                                              │
 └──────────────────────────────────────────────────────────────────────────────┘
 
@@ -35,6 +55,86 @@ L117: } catch (err) {
 │Pattern Rule                                                            │Count│
 ├────────────────────────────────────────────────────────────────────────┼─────┤
 │🔒 1.  Factory Function Export                                          │1    │
+│🔒 9.  Unified Event Service                                            │2    │
+│🔒 12. Logger / Observability                                           │3    │
+│🔒 14. Module Size Limit                                                │1    │
+│🔒 19. Unauthorised Module Path                                         │1    │
+└────────────────────────────────────────────────────────────────────────┴─────┘
+
+Detailed Violations:
+
+• Rule 1: Factory Function Export
+  Export `createXyz` factory, validate deps, expose cleanup, no top-level code.
+
+L1:   import createAuthFormListenerFactory from './authFormListenerFactory.js';
+  ⚠  Violation: Missing factory export.
+  💡 Hint:
+     A module must export a function like 'createMyFeature(deps)'.
+
+• Rule 9: Unified Event Service
+  All cross-module events must flow through DI-injected `eventService.emit/on/off`.  No direct `dispatchEvent()` or ad-hoc EventTarget buses.
+
+L391: AuthBus.dispatchEvent(evt);
+  ⚠  Violation: Direct 'dispatchEvent()' usage is forbidden – use DI-provided 'eventService.emit()'.
+  💡 Hint:
+     Inject 'eventService' and call eventService.emit('evtName', detail). Legacy AppBus/AuthBus patterns are deprecated. If this is a DOM element, name it with an 'El' suffix to suppress this warning.
+
+L1029:AuthBus.dispatchEvent(eventHandlers.createCustomEvent('authReady', { detail: readyEventDetail }));
+  ⚠  Violation: Direct 'dispatchEvent()' usage is forbidden – use DI-provided 'eventService.emit()'.
+  💡 Hint:
+     Inject 'eventService' and call eventService.emit('evtName', detail). Legacy AppBus/AuthBus patterns are deprecated. If this is a DOM element, name it with an 'El' suffix to suppress this warning.
+
+• Rule 12: Logger / Observability
+  No `console.*`; all logs via DI logger with context. Use canonical safeHandler for event error handling.
+
+L581: } catch (refreshErr) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (refreshErr) {
+       logger.error("Operation failed", refreshErr, { context: "auth_original:myError" });
+     }
+
+L698: logger.warn('[AuthModule][loginUser] Login response missing user_id – backend might be outdated');
+  ⚠  Violation: Direct 'logger.warn' call missing a final metadata object with a 'context' property.
+  💡 Hint:
+     Ensure logger calls like 'warn' end with, e.g., { context: "Module:description" }. Found type for last arg: Literal
+
+L970: } catch (verifyErr) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (verifyErr) {
+       logger.error("Operation failed", verifyErr, { context: "auth_original:myError" });
+     }
+
+• Rule 14: Module Size Limit
+  Modules must not exceed 1000 lines (configurable, with vendor exemptions).
+
+L1:   import createAuthFormListenerFactory from './authFormListenerFactory.js';
+  ⚠  Violation: Module exceeds 1000 line limit (1233 lines).
+  💡 Hint:
+     Split this module into smaller, focused modules. Vendored libraries can be exempted with a '// VENDOR-EXEMPT-SIZE: library name and reason' comment at the top.
+
+• Rule 19: Unauthorised Module Path
+  Files added outside the approved module manifest are forbidden.
+
+L1:   import createAuthFormListenerFactory from './authFormListenerFactory.js';
+  ⚠  Violation: File not present in allowed-modules manifest.
+  💡 Hint:
+     Add this path to allowed-modules.json as part of an approved refactor, or move logic into an existing module.
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│                        🛡️ Violations in: auth.js (8)                        │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────────┬─────┐
+│Pattern Rule                                                            │Count│
+├────────────────────────────────────────────────────────────────────────┼─────┤
+│🔒 1.  Factory Function Export                                          │1    │
+│🔒 12. Logger / Observability                                           │7    │
 └────────────────────────────────────────────────────────────────────────┴─────┘
 
 Detailed Violations:
@@ -46,6 +146,53 @@ L1:   /**
   ⚠  Violation: Missing factory export.
   💡 Hint:
      A module must export a function like 'createMyFeature(deps)'.
+
+• Rule 12: Logger / Observability
+  No `console.*`; all logs via DI logger with context. Use canonical safeHandler for event error handling.
+
+L280: } catch {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "AuthModule:myError" });
+     }
+
+L292: logger.warn('[AuthModule] bindLoginForm called with null form element');
+  ⚠  Violation: Direct 'logger.warn' call missing a final metadata object with a 'context' property.
+  💡 Hint:
+     Ensure logger calls like 'warn' end with, e.g., { context: "Module:description" }. Found type for last arg: Literal
+
+L313: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "AuthModule:myError" });
+     }
+
+L339: logger.warn('[AuthModule] bindRegisterForm called with null form element');
+  ⚠  Violation: Direct 'logger.warn' call missing a final metadata object with a 'context' property.
+  💡 Hint:
+     Ensure logger calls like 'warn' end with, e.g., { context: "Module:description" }. Found type for last arg: Literal
+
+L358: } catch (err) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "AuthModule:myError" });
+     }
+
+L397: logger.debug('[AuthModule] Found stored user data, will verify session', {
+  ⚠  Violation: Direct 'logger.debug' call missing a final metadata object with a 'context' property.
+  💡 Hint:
+     Ensure logger calls like 'debug' end with, e.g., { context: "Module:description" }. Found type for last arg: ObjectExpression
+
+L414: logger.warn('[AuthModule] Periodic session verification failed', err);
+  ⚠  Violation: Direct 'logger.warn' call missing a final metadata object with a 'context' property.
+  💡 Hint:
+     Ensure logger calls like 'warn' end with, e.g., { context: "Module:description" }. Found type for last arg: Identifier
 
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │                                                                              │
@@ -187,7 +334,7 @@ L154: } catch (err) {
 
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │                                                                              │
-│              🛡️ Violations in: authFormListenerFactory.js (2)               │
+│              🛡️ Violations in: authFormListenerFactory.js (13)              │
 │                                                                              │
 └──────────────────────────────────────────────────────────────────────────────┘
 
@@ -195,7 +342,7 @@ L154: } catch (err) {
 │Pattern Rule                                                            │Count│
 ├────────────────────────────────────────────────────────────────────────┼─────┤
 │🔒 1.  Factory Function Export                                          │1    │
-│🔒 12. Logger / Observability                                           │1    │
+│🔒 2.  Strict Dependency Injection                                      │12   │
 └────────────────────────────────────────────────────────────────────────┴─────┘
 
 Detailed Violations:
@@ -208,13 +355,68 @@ L1:   /**
   💡 Hint:
      A module must export a function like 'createMyFeature(deps)'.
 
-• Rule 12: Logger / Observability
-  No `console.*`; all logs via DI logger with context. Use canonical safeHandler for event error handling.
+• Rule 2: Strict Dependency Injection
+  No direct globals or service imports (except bootstrap); inject via DI. `DependencySystem.modules.get()` only inside functions, not at module scope.
 
-L124: modalsLoadedHandlerRef,
-  ⚠  Violation: Event handler for 'eventHandlers.trackListener' should be wrapped by 'safeHandler' (or be a directly passed param, or simple inline function).
+L72:  logger.debug("[AuthFormListenerFactory] Setup called but listeners are already attached.", { context...
+  ⚠  Violation: Service 'logger' is used but does not appear to be injected via factory DI parameters.
   💡 Hint:
-     Complex handlers or those prone to errors should be: eventHandlers.trackListener(el, 'click', safeHandler(myHandler, 'auth-form-listener-factory:desc'), ...);
+     Ensure 'logger' is part of the factory's 'deps' and properly destructured, or obtained via DependencySystem.modules.get() within a function.
+
+L79:  loginHandlerRef = safeHandler(formHandlers.loginHandler, "AuthFormListenerFactory", logger);
+  ⚠  Violation: Service 'logger' is used but does not appear to be injected via factory DI parameters.
+  💡 Hint:
+     Ensure 'logger' is part of the factory's 'deps' and properly destructured, or obtained via DependencySystem.modules.get() within a function.
+
+L80:  registerHandlerRef = safeHandler(formHandlers.registerHandler, "AuthFormListenerFactory", logger);
+  ⚠  Violation: Service 'logger' is used but does not appear to be injected via factory DI parameters.
+  💡 Hint:
+     Ensure 'logger' is part of the factory's 'deps' and properly destructured, or obtained via DependencySystem.modules.get() within a function.
+
+L83:  modalsLoadedHandlerRef = safeHandler(handleModalsLoadedEvent, "AuthFormListenerFactory", logger);
+  ⚠  Violation: Service 'logger' is used but does not appear to be injected via factory DI parameters.
+  💡 Hint:
+     Ensure 'logger' is part of the factory's 'deps' and properly destructured, or obtained via DependencySystem.modules.get() within a function.
+
+L91:  eventHandlers.trackListener(
+  ⚠  Violation: Service 'eventHandlers' is used but does not appear to be injected via factory DI parameters.
+  💡 Hint:
+     Ensure 'eventHandlers' is part of the factory's 'deps' and properly destructured, or obtained via DependencySystem.modules.get() within a function.
+
+L107: eventHandlers.trackListener(
+  ⚠  Violation: Service 'eventHandlers' is used but does not appear to be injected via factory DI parameters.
+  💡 Hint:
+     Ensure 'eventHandlers' is part of the factory's 'deps' and properly destructured, or obtained via DependencySystem.modules.get() within a function.
+
+L120: if (doc && typeof eventHandlers.trackListener === "function") {
+  ⚠  Violation: Service 'eventHandlers' is used but does not appear to be injected via factory DI parameters.
+  💡 Hint:
+     Ensure 'eventHandlers' is part of the factory's 'deps' and properly destructured, or obtained via DependencySystem.modules.get() within a function.
+
+L121: eventHandlers.trackListener(
+  ⚠  Violation: Service 'eventHandlers' is used but does not appear to be injected via factory DI parameters.
+  💡 Hint:
+     Ensure 'eventHandlers' is part of the factory's 'deps' and properly destructured, or obtained via DependencySystem.modules.get() within a function.
+
+L132: logger.info("[AuthFormListenerFactory] Listener setup completed", { context: "AuthFormListenerFactor...
+  ⚠  Violation: Service 'logger' is used but does not appear to be injected via factory DI parameters.
+  💡 Hint:
+     Ensure 'logger' is part of the factory's 'deps' and properly destructured, or obtained via DependencySystem.modules.get() within a function.
+
+L136: if (eventHandlers && typeof eventHandlers.cleanupListeners === "function") {
+  ⚠  Violation: Service 'eventHandlers' is used but does not appear to be injected via factory DI parameters.
+  💡 Hint:
+     Ensure 'eventHandlers' is part of the factory's 'deps' and properly destructured, or obtained via DependencySystem.modules.get() within a function.
+
+L136: if (eventHandlers && typeof eventHandlers.cleanupListeners === "function") {
+  ⚠  Violation: Service 'eventHandlers' is used but does not appear to be injected via factory DI parameters.
+  💡 Hint:
+     Ensure 'eventHandlers' is part of the factory's 'deps' and properly destructured, or obtained via DependencySystem.modules.get() within a function.
+
+L137: eventHandlers.cleanupListeners({ context: "AuthFormListenerFactory" });
+  ⚠  Violation: Service 'eventHandlers' is used but does not appear to be injected via factory DI parameters.
+  💡 Hint:
+     Ensure 'eventHandlers' is part of the factory's 'deps' and properly destructured, or obtained via DependencySystem.modules.get() within a function.
 
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │                                                                              │
@@ -355,7 +557,41 @@ L1:   /**
 
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │                                                                              │
-│                   🛡️ Violations in: chatExtensions.js (3)                   │
+│                        🛡️ Violations in: chat.js (2)                        │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────────┬─────┐
+│Pattern Rule                                                            │Count│
+├────────────────────────────────────────────────────────────────────────┼─────┤
+│🔒 9.  Unified Event Service                                            │1    │
+│🔒 12. Logger / Observability                                           │1    │
+└────────────────────────────────────────────────────────────────────────┴─────┘
+
+Detailed Violations:
+
+• Rule 9: Unified Event Service
+  All cross-module events must flow through DI-injected `eventService.emit/on/off`.  No direct `dispatchEvent()` or ad-hoc EventTarget buses.
+
+L143: chatBus.dispatchEvent(new CustomEvent('chat:messageSent', {
+  ⚠  Violation: Direct 'dispatchEvent()' usage is forbidden – use DI-provided 'eventService.emit()'.
+  💡 Hint:
+     Inject 'eventService' and call eventService.emit('evtName', detail). Legacy AppBus/AuthBus patterns are deprecated. If this is a DOM element, name it with an 'El' suffix to suppress this warning.
+
+• Rule 12: Logger / Observability
+  No `console.*`; all logs via DI logger with context. Use canonical safeHandler for event error handling.
+
+L168: try { mod.cleanup(); } catch {/* ignore */}
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (err) {
+       logger.error("Operation failed", err, { context: "ChatManager:myError" });
+     }
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│                   🛡️ Violations in: chatExtensions.js (4)                   │
 │                                                                              │
 └──────────────────────────────────────────────────────────────────────────────┘
 
@@ -363,6 +599,7 @@ L1:   /**
 │Pattern Rule                                                            │Count│
 ├────────────────────────────────────────────────────────────────────────┼─────┤
 │🔒 1.  Factory Function Export                                          │1    │
+│🔒 9.  Unified Event Service                                            │1    │
 │🔒 12. Logger / Observability                                           │2    │
 └────────────────────────────────────────────────────────────────────────┴─────┘
 
@@ -376,10 +613,18 @@ L1:   /**
   💡 Hint:
      A module must export a function like 'createMyFeature(deps)'.
 
+• Rule 9: Unified Event Service
+  All cross-module events must flow through DI-injected `eventService.emit/on/off`.  No direct `dispatchEvent()` or ad-hoc EventTarget buses.
+
+L123: AppBus.dispatchEvent(new CustomEvent('conversation:titleEdited', {
+  ⚠  Violation: Direct 'dispatchEvent()' usage is forbidden – use DI-provided 'eventService.emit()'.
+  💡 Hint:
+     Inject 'eventService' and call eventService.emit('evtName', detail). Legacy AppBus/AuthBus patterns are deprecated. If this is a DOM element, name it with an 'El' suffix to suppress this warning.
+
 • Rule 12: Logger / Observability
   No `console.*`; all logs via DI logger with context. Use canonical safeHandler for event error handling.
 
-L94:  } catch (err) {
+L92:  } catch (err) {
   ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
   💡 Hint:
      Example:
@@ -397,22 +642,36 @@ L170: } catch {/* noop */}
 
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │                                                                              │
-│                  🛡️ Violations in: chatUIController.js (2)                  │
+│                  🛡️ Violations in: chatUIController.js (4)                  │
 │                                                                              │
 └──────────────────────────────────────────────────────────────────────────────┘
 
 ┌────────────────────────────────────────────────────────────────────────┬─────┐
 │Pattern Rule                                                            │Count│
 ├────────────────────────────────────────────────────────────────────────┼─────┤
+│🔒 9.  Unified Event Service                                            │2    │
 │🔒 12. Logger / Observability                                           │2    │
 └────────────────────────────────────────────────────────────────────────┴─────┘
 
 Detailed Violations:
 
+• Rule 9: Unified Event Service
+  All cross-module events must flow through DI-injected `eventService.emit/on/off`.  No direct `dispatchEvent()` or ad-hoc EventTarget buses.
+
+L150: chatUIBus.dispatchEvent(event);
+  ⚠  Violation: Direct 'dispatchEvent()' usage is forbidden – use DI-provided 'eventService.emit()'.
+  💡 Hint:
+     Inject 'eventService' and call eventService.emit('evtName', detail). Legacy AppBus/AuthBus patterns are deprecated. If this is a DOM element, name it with an 'El' suffix to suppress this warning.
+
+L244: chatUIBus.dispatchEvent(event);
+  ⚠  Violation: Direct 'dispatchEvent()' usage is forbidden – use DI-provided 'eventService.emit()'.
+  💡 Hint:
+     Inject 'eventService' and call eventService.emit('evtName', detail). Legacy AppBus/AuthBus patterns are deprecated. If this is a DOM element, name it with an 'El' suffix to suppress this warning.
+
 • Rule 12: Logger / Observability
   No `console.*`; all logs via DI logger with context. Use canonical safeHandler for event error handling.
 
-L368: } catch (err) {
+L372: } catch (err) {
   ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
   💡 Hint:
      Example:
@@ -420,7 +679,7 @@ L368: } catch (err) {
        logger.error("Operation failed", err, { context: "ChatUIController:myError" });
      }
 
-L458: } catch (err) {
+L462: } catch (err) {
   ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
   💡 Hint:
      Example:
@@ -449,6 +708,48 @@ L1:   /**
   ⚠  Violation: Missing factory export.
   💡 Hint:
      A module must export a function like 'createMyFeature(deps)'.
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│                🛡️ Violations in: conversationManager.js (5)                 │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────────────┬─────┐
+│Pattern Rule                                                            │Count│
+├────────────────────────────────────────────────────────────────────────┼─────┤
+│🔒 9.  Unified Event Service                                            │5    │
+└────────────────────────────────────────────────────────────────────────┴─────┘
+
+Detailed Violations:
+
+• Rule 9: Unified Event Service
+  All cross-module events must flow through DI-injected `eventService.emit/on/off`.  No direct `dispatchEvent()` or ad-hoc EventTarget buses.
+
+L160: eventBus.dispatchEvent(event);
+  ⚠  Violation: Direct 'dispatchEvent()' usage is forbidden – use DI-provided 'eventService.emit()'.
+  💡 Hint:
+     Inject 'eventService' and call eventService.emit('evtName', detail). Legacy AppBus/AuthBus patterns are deprecated. If this is a DOM element, name it with an 'El' suffix to suppress this warning.
+
+L309: eventBus.dispatchEvent(event);
+  ⚠  Violation: Direct 'dispatchEvent()' usage is forbidden – use DI-provided 'eventService.emit()'.
+  💡 Hint:
+     Inject 'eventService' and call eventService.emit('evtName', detail). Legacy AppBus/AuthBus patterns are deprecated. If this is a DOM element, name it with an 'El' suffix to suppress this warning.
+
+L356: eventBus.dispatchEvent(event);
+  ⚠  Violation: Direct 'dispatchEvent()' usage is forbidden – use DI-provided 'eventService.emit()'.
+  💡 Hint:
+     Inject 'eventService' and call eventService.emit('evtName', detail). Legacy AppBus/AuthBus patterns are deprecated. If this is a DOM element, name it with an 'El' suffix to suppress this warning.
+
+L462: eventBus.dispatchEvent(event);
+  ⚠  Violation: Direct 'dispatchEvent()' usage is forbidden – use DI-provided 'eventService.emit()'.
+  💡 Hint:
+     Inject 'eventService' and call eventService.emit('evtName', detail). Legacy AppBus/AuthBus patterns are deprecated. If this is a DOM element, name it with an 'El' suffix to suppress this warning.
+
+L497: eventBus.dispatchEvent(event);
+  ⚠  Violation: Direct 'dispatchEvent()' usage is forbidden – use DI-provided 'eventService.emit()'.
+  💡 Hint:
+     Inject 'eventService' and call eventService.emit('evtName', detail). Legacy AppBus/AuthBus patterns are deprecated. If this is a DOM element, name it with an 'El' suffix to suppress this warning.
 
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │                                                                              │
@@ -485,17 +786,40 @@ L89:  } catch (err) {
 
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │                                                                              │
-│                  🛡️ Violations in: dompurify-global.js (1)                  │
+│                  🛡️ Violations in: dompurify-global.js (4)                  │
 │                                                                              │
 └──────────────────────────────────────────────────────────────────────────────┘
 
 ┌────────────────────────────────────────────────────────────────────────┬─────┐
 │Pattern Rule                                                            │Count│
 ├────────────────────────────────────────────────────────────────────────┼─────┤
+│🔒 2.  Strict Dependency Injection                                      │2    │
+│🔒 3.  Pure Imports                                                     │1    │
 │🔒 19. Unauthorised Module Path                                         │1    │
 └────────────────────────────────────────────────────────────────────────┴─────┘
 
 Detailed Violations:
+
+• Rule 2: Strict Dependency Injection
+  No direct globals or service imports (except bootstrap); inject via DI. `DependencySystem.modules.get()` only inside functions, not at module scope.
+
+L4:   if (typeof window !== 'undefined') {
+  ⚠  Violation: Direct use of global 'window' is forbidden. Use DI abstractions.
+  💡 Hint:
+     If access to 'window' is needed, expose it via a DI-provided service (e.g., browserService).
+
+L5:   window.DOMPurify = DOMPurify;
+  ⚠  Violation: Direct use of global 'window' is forbidden. Use DI abstractions.
+  💡 Hint:
+     If access to 'window' is needed, expose it via a DI-provided service (e.g., browserService).
+
+• Rule 3: Pure Imports
+  No side-effects at import time; all logic inside the factory.
+
+L4:   if (typeof window !== 'undefined') {
+  ⚠  Violation: Top-level 'IfStatement' detected.
+  💡 Hint:
+     Avoid side-effects like top-level awaits, dynamic imports, loops, or conditional logic at import time. Encapsulate in functions.
 
 • Rule 19: Unauthorised Module Path
   Files added outside the approved module manifest are forbidden.
@@ -507,22 +831,334 @@ L1:   import DOMPurify from './dompurify.es.js';
 
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │                                                                              │
-│                    🛡️ Violations in: dompurify.es.js (1)                    │
+│                   🛡️ Violations in: dompurify.es.js (56)                    │
 │                                                                              │
 └──────────────────────────────────────────────────────────────────────────────┘
 
 ┌────────────────────────────────────────────────────────────────────────┬─────┐
 │Pattern Rule                                                            │Count│
 ├────────────────────────────────────────────────────────────────────────┼─────┤
+│🔒 1.  Factory Function Export                                          │1    │
+│🔒 2.  Strict Dependency Injection                                      │8    │
+│🔒 3.  Pure Imports                                                     │37   │
+│🔒 6.  Sanitize All User HTML                                           │1    │
+│🔒 8.  Centralised State Access                                         │2    │
+│🔒 12. Logger / Observability                                           │5    │
+│🔒 14. Module Size Limit                                                │1    │
 │🔒 19. Unauthorised Module Path                                         │1    │
 └────────────────────────────────────────────────────────────────────────┴─────┘
 
 Detailed Violations:
 
+• Rule 1: Factory Function Export
+  Export `createXyz` factory, validate deps, expose cleanup, no top-level code.
+
+L1:   /*! @license DOMPurify 3.0.5 | (c) Cure53 and other contributors | Released under the Apache license...
+  ⚠  Violation: Missing factory export.
+  💡 Hint:
+     A module must export a function like 'createMyFeature(deps)'.
+
+• Rule 2: Strict Dependency Injection
+  No direct globals or service imports (except bootstrap); inject via DI. `DependencySystem.modules.get()` only inside functions, not at module scope.
+
+L198: const getGlobal = () => typeof window === 'undefined' ? null : window;
+  ⚠  Violation: Direct use of global 'window' is forbidden. Use DI abstractions.
+  💡 Hint:
+     If access to 'window' is needed, expose it via a DI-provided service (e.g., browserService).
+
+L198: const getGlobal = () => typeof window === 'undefined' ? null : window;
+  ⚠  Violation: Direct use of global 'window' is forbidden. Use DI abstractions.
+  💡 Hint:
+     If access to 'window' is needed, expose it via a DI-provided service (e.g., browserService).
+
+L299: const template = document.createElement('template');
+  ⚠  Violation: Direct use of global 'document' is forbidden. Use DI abstractions.
+  💡 Hint:
+     If access to 'document' is needed, expose it via a DI-provided service (e.g., browserService).
+
+L302: document = template.content.ownerDocument;
+  ⚠  Violation: Direct use of global 'document' is forbidden. Use DI abstractions.
+  💡 Hint:
+     If access to 'document' is needed, expose it via a DI-provided service (e.g., browserService).
+
+L313: } = document;
+  ⚠  Violation: Direct use of global 'document' is forbidden. Use DI abstractions.
+  💡 Hint:
+     If access to 'document' is needed, expose it via a DI-provided service (e.g., browserService).
+
+L490: const formElement = document.createElement('form');
+  ⚠  Violation: Direct use of global 'document' is forbidden. Use DI abstractions.
+  💡 Hint:
+     If access to 'document' is needed, expose it via a DI-provided service (e.g., browserService).
+
+L921: body.insertBefore(document.createTextNode(leadingWhitespace), body.childNodes[0] || null);
+  ⚠  Violation: Direct use of global 'document' is forbidden. Use DI abstractions.
+  💡 Hint:
+     If access to 'document' is needed, expose it via a DI-provided service (e.g., browserService).
+
+L1110:if (SANITIZE_DOM && (lcName === 'id' || lcName === 'name') && (value in document || value in formEle...
+  ⚠  Violation: Direct use of global 'document' is forbidden. Use DI abstractions.
+  💡 Hint:
+     If access to 'document' is needed, expose it via a DI-provided service (e.g., browserService).
+
+• Rule 3: Pure Imports
+  No side-effects at import time; all logic inside the factory.
+
+L21:  if (!apply) {
+  ⚠  Violation: Top-level 'IfStatement' detected.
+  💡 Hint:
+     Avoid side-effects like top-level awaits, dynamic imports, loops, or conditional logic at import time. Encapsulate in functions.
+
+L27:  if (!freeze) {
+  ⚠  Violation: Top-level 'IfStatement' detected.
+  💡 Hint:
+     Avoid side-effects like top-level awaits, dynamic imports, loops, or conditional logic at import time. Encapsulate in functions.
+
+L33:  if (!seal) {
+  ⚠  Violation: Top-level 'IfStatement' detected.
+  💡 Hint:
+     Avoid side-effects like top-level awaits, dynamic imports, loops, or conditional logic at import time. Encapsulate in functions.
+
+L39:  if (!construct) {
+  ⚠  Violation: Top-level 'IfStatement' detected.
+  💡 Hint:
+     Avoid side-effects like top-level awaits, dynamic imports, loops, or conditional logic at import time. Encapsulate in functions.
+
+L45:  const arrayForEach = unapply(Array.prototype.forEach);
+  ⚠  Violation: Potential side-effect from function call at module top-level.
+  💡 Hint:
+     All executable logic should be inside the factory or DI-provided functions. Allowed: const foo = () => {}; const bar = Symbol();
+
+L46:  const arrayPop = unapply(Array.prototype.pop);
+  ⚠  Violation: Potential side-effect from function call at module top-level.
+  💡 Hint:
+     All executable logic should be inside the factory or DI-provided functions. Allowed: const foo = () => {}; const bar = Symbol();
+
+L47:  const arrayPush = unapply(Array.prototype.push);
+  ⚠  Violation: Potential side-effect from function call at module top-level.
+  💡 Hint:
+     All executable logic should be inside the factory or DI-provided functions. Allowed: const foo = () => {}; const bar = Symbol();
+
+L48:  const stringToLowerCase = unapply(String.prototype.toLowerCase);
+  ⚠  Violation: Potential side-effect from function call at module top-level.
+  💡 Hint:
+     All executable logic should be inside the factory or DI-provided functions. Allowed: const foo = () => {}; const bar = Symbol();
+
+L49:  const stringToString = unapply(String.prototype.toString);
+  ⚠  Violation: Potential side-effect from function call at module top-level.
+  💡 Hint:
+     All executable logic should be inside the factory or DI-provided functions. Allowed: const foo = () => {}; const bar = Symbol();
+
+L50:  const stringMatch = unapply(String.prototype.match);
+  ⚠  Violation: Potential side-effect from function call at module top-level.
+  💡 Hint:
+     All executable logic should be inside the factory or DI-provided functions. Allowed: const foo = () => {}; const bar = Symbol();
+
+L51:  const stringReplace = unapply(String.prototype.replace);
+  ⚠  Violation: Potential side-effect from function call at module top-level.
+  💡 Hint:
+     All executable logic should be inside the factory or DI-provided functions. Allowed: const foo = () => {}; const bar = Symbol();
+
+L52:  const stringIndexOf = unapply(String.prototype.indexOf);
+  ⚠  Violation: Potential side-effect from function call at module top-level.
+  💡 Hint:
+     All executable logic should be inside the factory or DI-provided functions. Allowed: const foo = () => {}; const bar = Symbol();
+
+L53:  const stringTrim = unapply(String.prototype.trim);
+  ⚠  Violation: Potential side-effect from function call at module top-level.
+  💡 Hint:
+     All executable logic should be inside the factory or DI-provided functions. Allowed: const foo = () => {}; const bar = Symbol();
+
+L54:  const regExpTest = unapply(RegExp.prototype.test);
+  ⚠  Violation: Potential side-effect from function call at module top-level.
+  💡 Hint:
+     All executable logic should be inside the factory or DI-provided functions. Allowed: const foo = () => {}; const bar = Symbol();
+
+L55:  const typeErrorCreate = unconstruct(TypeError);
+  ⚠  Violation: Potential side-effect from function call at module top-level.
+  💡 Hint:
+     All executable logic should be inside the factory or DI-provided functions. Allowed: const foo = () => {}; const bar = Symbol();
+
+L150: const html$1 = freeze(['a', 'abbr', 'acronym', 'address', 'area', 'article', 'aside', 'audio', 'b', ...
+  ⚠  Violation: Potential side-effect from function call at module top-level.
+  💡 Hint:
+     All executable logic should be inside the factory or DI-provided functions. Allowed: const foo = () => {}; const bar = Symbol();
+
+L152: const svg$1 = freeze(['svg', 'a', 'altglyph', 'altglyphdef', 'altglyphitem', 'animatecolor', 'animat...
+  ⚠  Violation: Potential side-effect from function call at module top-level.
+  💡 Hint:
+     All executable logic should be inside the factory or DI-provided functions. Allowed: const foo = () => {}; const bar = Symbol();
+
+L153: const svgFilters = freeze(['feBlend', 'feColorMatrix', 'feComponentTransfer', 'feComposite', 'feConv...
+  ⚠  Violation: Potential side-effect from function call at module top-level.
+  💡 Hint:
+     All executable logic should be inside the factory or DI-provided functions. Allowed: const foo = () => {}; const bar = Symbol();
+
+L158: const svgDisallowed = freeze(['animate', 'color-profile', 'cursor', 'discard', 'font-face', 'font-fa...
+  ⚠  Violation: Potential side-effect from function call at module top-level.
+  💡 Hint:
+     All executable logic should be inside the factory or DI-provided functions. Allowed: const foo = () => {}; const bar = Symbol();
+
+L159: const mathMl$1 = freeze(['math', 'menclose', 'merror', 'mfenced', 'mfrac', 'mglyph', 'mi', 'mlabeled...
+  ⚠  Violation: Potential side-effect from function call at module top-level.
+  💡 Hint:
+     All executable logic should be inside the factory or DI-provided functions. Allowed: const foo = () => {}; const bar = Symbol();
+
+L162: const mathMlDisallowed = freeze(['maction', 'maligngroup', 'malignmark', 'mlongdiv', 'mscarries', 'm...
+  ⚠  Violation: Potential side-effect from function call at module top-level.
+  💡 Hint:
+     All executable logic should be inside the factory or DI-provided functions. Allowed: const foo = () => {}; const bar = Symbol();
+
+L163: const text = freeze(['#text']);
+  ⚠  Violation: Potential side-effect from function call at module top-level.
+  💡 Hint:
+     All executable logic should be inside the factory or DI-provided functions. Allowed: const foo = () => {}; const bar = Symbol();
+
+L165: const html = freeze(['accept', 'action', 'align', 'alt', 'autocapitalize', 'autocomplete', 'autopict...
+  ⚠  Violation: Potential side-effect from function call at module top-level.
+  💡 Hint:
+     All executable logic should be inside the factory or DI-provided functions. Allowed: const foo = () => {}; const bar = Symbol();
+
+L166: const svg = freeze(['accent-height', 'accumulate', 'additive', 'alignment-baseline', 'ascent', 'attr...
+  ⚠  Violation: Potential side-effect from function call at module top-level.
+  💡 Hint:
+     All executable logic should be inside the factory or DI-provided functions. Allowed: const foo = () => {}; const bar = Symbol();
+
+L167: const mathMl = freeze(['accent', 'accentunder', 'align', 'bevelled', 'close', 'columnsalign', 'colum...
+  ⚠  Violation: Potential side-effect from function call at module top-level.
+  💡 Hint:
+     All executable logic should be inside the factory or DI-provided functions. Allowed: const foo = () => {}; const bar = Symbol();
+
+L168: const xml = freeze(['xlink:href', 'xml:id', 'xlink:title', 'xml:space', 'xmlns:xlink']);
+  ⚠  Violation: Potential side-effect from function call at module top-level.
+  💡 Hint:
+     All executable logic should be inside the factory or DI-provided functions. Allowed: const foo = () => {}; const bar = Symbol();
+
+L170: const MUSTACHE_EXPR = seal(/\{\{[\w\W]*|[\w\W]*\}\}/gm); // Specify template detection regex for SAF...
+  ⚠  Violation: Potential side-effect from function call at module top-level.
+  💡 Hint:
+     All executable logic should be inside the factory or DI-provided functions. Allowed: const foo = () => {}; const bar = Symbol();
+
+L172: const ERB_EXPR = seal(/<%[\w\W]*|[\w\W]*%>/gm);
+  ⚠  Violation: Potential side-effect from function call at module top-level.
+  💡 Hint:
+     All executable logic should be inside the factory or DI-provided functions. Allowed: const foo = () => {}; const bar = Symbol();
+
+L173: const TMPLIT_EXPR = seal(/\${[\w\W]*}/gm);
+  ⚠  Violation: Potential side-effect from function call at module top-level.
+  💡 Hint:
+     All executable logic should be inside the factory or DI-provided functions. Allowed: const foo = () => {}; const bar = Symbol();
+
+L174: const DATA_ATTR = seal(/^data-[\-\w.\u00B7-\uFFFF]/); // eslint-disable-line no-useless-escape
+  ⚠  Violation: Potential side-effect from function call at module top-level.
+  💡 Hint:
+     All executable logic should be inside the factory or DI-provided functions. Allowed: const foo = () => {}; const bar = Symbol();
+
+L176: const ARIA_ATTR = seal(/^aria-[\-\w]+$/); // eslint-disable-line no-useless-escape
+  ⚠  Violation: Potential side-effect from function call at module top-level.
+  💡 Hint:
+     All executable logic should be inside the factory or DI-provided functions. Allowed: const foo = () => {}; const bar = Symbol();
+
+L178: const IS_ALLOWED_URI = seal(/^(?:(?:(?:f|ht)tps?|mailto|tel|callto|sms|cid|xmpp):|[^a-z]|[a-z+.\-]+(...
+  ⚠  Violation: Potential side-effect from function call at module top-level.
+  💡 Hint:
+     All executable logic should be inside the factory or DI-provided functions. Allowed: const foo = () => {}; const bar = Symbol();
+
+L180: const IS_SCRIPT_OR_DATA = seal(/^(?:\w+script|data):/i);
+  ⚠  Violation: Potential side-effect from function call at module top-level.
+  💡 Hint:
+     All executable logic should be inside the factory or DI-provided functions. Allowed: const foo = () => {}; const bar = Symbol();
+
+L181: const ATTR_WHITESPACE = seal(/[\u0000-\u0020\u00A0\u1680\u180E\u2000-\u2029\u205F\u3000]/g // eslint...
+  ⚠  Violation: Potential side-effect from function call at module top-level.
+  💡 Hint:
+     All executable logic should be inside the factory or DI-provided functions. Allowed: const foo = () => {}; const bar = Symbol();
+
+L183: const DOCTYPE_NAME = seal(/^html$/i);
+  ⚠  Violation: Potential side-effect from function call at module top-level.
+  💡 Hint:
+     All executable logic should be inside the factory or DI-provided functions. Allowed: const foo = () => {}; const bar = Symbol();
+
+L185: var EXPRESSIONS = /*#__PURE__*/Object.freeze({
+  ⚠  Violation: Potential side-effect from function call at module top-level.
+  💡 Hint:
+     All executable logic should be inside the factory or DI-provided functions. Allowed: const foo = () => {}; const bar = Symbol();
+
+L1622:var purify = createDOMPurify();
+  ⚠  Violation: Potential side-effect from function call at module top-level.
+  💡 Hint:
+     All executable logic should be inside the factory or DI-provided functions. Allowed: const foo = () => {}; const bar = Symbol();
+
+• Rule 6: Sanitize All User HTML
+  Always call `sanitizer.sanitize()` before inserting user HTML.
+
+L913: doc.documentElement.innerHTML = IS_EMPTY_INPUT ? emptyHTML : dirtyPayload;
+  ⚠  Violation: Direct assignment to 'innerHTML' with potentially unsanitized HTML.
+  💡 Hint:
+     Use a safe DOM update method or ensure HTML is processed by 'sanitizer.sanitize()'. Consider domAPI.setInnerHTML().
+
+• Rule 8: Centralised State Access
+  Never mutate global state (e.g., `app.state`) or keep module-scope mutable variables; use canonical services (authenticationService, projectContextService, uiStateService).
+
+L185: var EXPRESSIONS = /*#__PURE__*/Object.freeze({
+  ⚠  Violation: Top-level mutable variable 'EXPRESSIONS' detected. Module-scope state violates single-source-of-truth and DI guard-rails.
+  💡 Hint:
+     Store view flags in 'uiStateService' or persistent data in a dedicated service. Do not declare 'EXPRESSIONS' at module scope.
+
+L1622:var purify = createDOMPurify();
+  ⚠  Violation: Top-level mutable variable 'purify' detected. Module-scope state violates single-source-of-truth and DI guard-rails.
+  💡 Hint:
+     Store view flags in 'uiStateService' or persistent data in a dedicated service. Do not declare 'purify' at module scope.
+
+• Rule 12: Logger / Observability
+  No `console.*`; all logs via DI logger with context. Use canonical safeHandler for event error handling.
+
+L143: console.warn('fallback value for', element);
+  ⚠  Violation: console.warn is forbidden – use DI logger.
+  💡 Hint:
+     Replace 'console.warn(...)' with 'logger.info("Message string", data, { context: "Module:operation" })'
+
+L237: } catch (_) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (_) {
+       logger.error("Operation failed", _, { context: "dompurify.es:myError" });
+     }
+
+L241: console.warn('TrustedTypes policy ' + policyName + ' could not be created.');
+  ⚠  Violation: console.warn is forbidden – use DI logger.
+  💡 Hint:
+     Replace 'console.warn(...)' with 'logger.info("Message string", data, { context: "Module:operation" })'
+
+L830: } catch (_) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (_) {
+       logger.error("Operation failed", _, { context: "dompurify.es:myError" });
+     }
+
+L848: } catch (_) {
+  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
+  💡 Hint:
+     Example:
+     } catch (_) {
+       logger.error("Operation failed", _, { context: "dompurify.es:myError" });
+     }
+
+• Rule 14: Module Size Limit
+  Modules must not exceed 1000 lines (configurable, with vendor exemptions).
+
+L1:   /*! @license DOMPurify 3.0.5 | (c) Cure53 and other contributors | Released under the Apache license...
+  ⚠  Violation: Module exceeds 1000 line limit (1626 lines).
+  💡 Hint:
+     Split this module into smaller, focused modules. Vendored libraries can be exempted with a '// VENDOR-EXEMPT-SIZE: library name and reason' comment at the top.
+
 • Rule 19: Unauthorised Module Path
   Files added outside the approved module manifest are forbidden.
 
-L1:   [Code not available]
+L1:   /*! @license DOMPurify 3.0.5 | (c) Cure53 and other contributors | Released under the Apache license...
   ⚠  Violation: File not present in allowed-modules manifest.
   💡 Hint:
      Add this path to allowed-modules.json as part of an approved refactor, or move logic into an existing module.
@@ -673,22 +1309,31 @@ L1:   // Thin re-export wrapper to ensure legacy import paths under
 
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │                                                                              │
-│                🛡️ Violations in: FileUploadComponent.js (2)                 │
+│                🛡️ Violations in: FileUploadComponent.js (3)                 │
 │                                                                              │
 └──────────────────────────────────────────────────────────────────────────────┘
 
 ┌────────────────────────────────────────────────────────────────────────┬─────┐
 │Pattern Rule                                                            │Count│
 ├────────────────────────────────────────────────────────────────────────┼─────┤
+│🔒 9.  Unified Event Service                                            │1    │
 │🔒 12. Logger / Observability                                           │2    │
 └────────────────────────────────────────────────────────────────────────┴─────┘
 
 Detailed Violations:
 
+• Rule 9: Unified Event Service
+  All cross-module events must flow through DI-injected `eventService.emit/on/off`.  No direct `dispatchEvent()` or ad-hoc EventTarget buses.
+
+L388: appBus.dispatchEvent(evt);
+  ⚠  Violation: Direct 'dispatchEvent()' usage is forbidden – use DI-provided 'eventService.emit()'.
+  💡 Hint:
+     Inject 'eventService' and call eventService.emit('evtName', detail). Legacy AppBus/AuthBus patterns are deprecated. If this is a DOM element, name it with an 'El' suffix to suppress this warning.
+
 • Rule 12: Logger / Observability
   No `console.*`; all logs via DI logger with context. Use canonical safeHandler for event error handling.
 
-L387: } catch (err) {
+L390: } catch (err) {
   ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
   💡 Hint:
      Example:
@@ -696,7 +1341,7 @@ L387: } catch (err) {
        logger.error("Operation failed", err, { context: "FileUploadComponentContext:myError" });
      }
 
-L409: } catch (pollErr) {
+L412: } catch (pollErr) {
   ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
   💡 Hint:
      Example:
@@ -1782,31 +2427,6 @@ L171: } catch (err) {
 
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │                                                                              │
-│                🛡️ Violations in: projectEventHandlers.js (1)                │
-│                                                                              │
-└──────────────────────────────────────────────────────────────────────────────┘
-
-┌────────────────────────────────────────────────────────────────────────┬─────┐
-│Pattern Rule                                                            │Count│
-├────────────────────────────────────────────────────────────────────────┼─────┤
-│🔒 12. Logger / Observability                                           │1    │
-└────────────────────────────────────────────────────────────────────────┴─────┘
-
-Detailed Violations:
-
-• Rule 12: Logger / Observability
-  No `console.*`; all logs via DI logger with context. Use canonical safeHandler for event error handling.
-
-L207: } catch (error) {
-  ⚠  Violation: Caught errors must be logged via 'logger.error(message, errorObject, { context: ... })' or equivalent.
-  💡 Hint:
-     Example:
-     } catch (error) {
-       logger.error("Operation failed", error, { context: "project-event-handlers:myError" });
-     }
-
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                                                                              │
 │                   🛡️ Violations in: pullToRefresh.js (2)                    │
 │                                                                              │
 └──────────────────────────────────────────────────────────────────────────────┘
@@ -2024,7 +2644,7 @@ L1:   /**
 --------------------------------------------------------------------------------
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │                                                                              │
-│            🚨 Found 171 violation(s) in 46 of 73 file(s) scanned.            │
+│            🚨 Found 266 violation(s) in 49 of 73 file(s) scanned.            │
 │                                                                              │
 └──────────────────────────────────────────────────────────────────────────────┘
 

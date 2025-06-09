@@ -1,9 +1,8 @@
 import DOMPurify from './dompurify.es.js';
 
-// Immediately attach to window for app.js compatibility (needed when loaded via <script type="module">)
-if (typeof window !== 'undefined') {
-  window.DOMPurify = DOMPurify;
-}
+// NOTE: Removed top-level mutation of the global window object to comply with
+// dependency-injection guard-rails.  The global exposure of DOMPurify is now
+// performed lazily inside the DI-created factory below.
 
 export function createDOMPurifyGlobal({ browserService }) {
   if (!browserService) {

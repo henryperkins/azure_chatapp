@@ -1,153 +1,142 @@
 /**
- * Factory for standardized auth modal form listener setup/cleanup.
- * All dependencies must be injected for guardrail compliance.
- * Handles both immediate and dynamic modal form listener attachment, with single-source cleanup.
+ * createAuthFormListenerFactory – canonical factory for wiring auth modal
+ * form listeners (login / register) in a DI-compliant way.
  *
- * Remediation per event-listener leak/duplication guardrails:
- * - No anonymous handlers (all named/const).
- * - Module-level setup guard (isSetup).
- * - All listeners use context: "AuthFormListenerFactory".
- * - No local attachedListeners array: rely solely on context-based cleanup.
+ * Guard-rails compliance
+ *   1. Named `create*` export (no default-only export).
+ *   2. Strict dependency validation – throws on missing deps.
+ *   3. No top-level side-effects; all listeners registered from `.setup()`.
+ *   4. Provides deterministic `cleanup()` that calls
+ *      `eventHandlers.cleanupListeners({ context })`.
  */
 
-export default function createAuthFormListenerFactory(deps) {
-  if (!deps || typeof deps !== "object") throw new Error("[AuthFormListenerFactory] DI object required.");
-  const requiredDeps = [
-    "eventHandlers", "domAPI", "domReadinessService", "browserService",
-    "safeHandler", "logger", "DependencySystem"
-  ];
-  for (const key of requiredDeps) {
-    if (!deps[key]) throw new Error(`[AuthFormListenerFactory] Missing DI: ${key}`);
+export function createAuthFormListenerFactory(deps = {}) {
+  /* ------------------------------------------------------------------ */
+  /* Dependency validation                                              */
+  /* ------------------------------------------------------------------ */
+  if (typeof deps !== 'object' || deps === null) {
+    throw new Error('[AuthFormListenerFactory] deps DI object is required');
   }
+
+  const REQUIRED = [
+    'eventHandlers',
+    'domAPI',
+    'domReadinessService',
+    'browserService',
+    'safeHandler',
+    'logger',
+  ];
+
+  for (const key of REQUIRED) {
+    if (!deps[key]) {
+      throw new Error(`[AuthFormListenerFactory] Missing DI: ${key}`);
+    }
+  }
+
   const {
     eventHandlers,
     domAPI,
-    domReadinessService: _domReadinessService,  // aliased → not used
-    browserService,                             // used later → keep
+    domReadinessService, // kept for future async readiness wiring
+    browserService,
     safeHandler,
     logger,
-    DependencySystem: _DependencySystem         // aliased → not used
   } = deps;
 
-  // Module-level guard to prevent duplicate registrations
+  const CONTEXT = 'AuthFormListenerFactory';
+
+  /* ------------------------------------------------------------------ */
+  /* Internal mutable references (module-internal only)                  */
+  /* ------------------------------------------------------------------ */
   let isSetup = false;
-
-  // ---- NAMED HANDLERS ----
-  let loginHandlerRef = null;
-  let registerHandlerRef = null;
-  let modalsLoadedHandlerRef = null;
-
-  function handleLoginFormSubmit(e) {
-    // formHandlers.loginHandler WILL be rebound below
-    if (loginHandlerRef) {
-      return loginHandlerRef(e);
-    }
-  }
-
-  function handleRegisterFormSubmit(e) {
-    if (registerHandlerRef) {
-      return registerHandlerRef(e);
-    }
-  }
-
-  function handleModalsLoadedEvent() {
-    cleanupListenersOnly();
-    isSetup = false;
-    setup(currentFormHandlers);
-    // Patch up late-initialized forms after modal dynamic load
-    if (browserService?.setTimeout) {
-      browserService.setTimeout(() => {
-        cleanupListenersOnly();
-        isSetup = false;
-        setup(currentFormHandlers);
-      }, 400);
-    }
-  }
-
-  // Reference to most recent handlers for re-setup
+  let loginHandlerRef;
+  let registerHandlerRef;
+  let modalsLoadedHandlerRef;
   let currentFormHandlers = null;
 
+  /* ------------------------------------------------------------------ */
+  /* Private helpers                                                     */
+  /* ------------------------------------------------------------------ */
+  function _cleanupListenersOnly() {
+    eventHandlers.cleanupListeners({ context: CONTEXT });
+    isSetup = false;
+    loginHandlerRef = registerHandlerRef = modalsLoadedHandlerRef = null;
+  }
+
+  function _handleModalsLoaded() {
+    _cleanupListenersOnly();
+    if (currentFormHandlers) setup(currentFormHandlers);
+    // Re-apply a second time after DOM settles (dynamic modal markup)
+    browserService.setTimeout?.(() => {
+      _cleanupListenersOnly();
+      if (currentFormHandlers) setup(currentFormHandlers);
+    }, 400);
+  }
+
+  function _bindForm(el, submitHandler, description) {
+    domAPI.setAttribute(el, 'novalidate', 'novalidate');
+    domAPI.removeAttribute(el, 'action');
+    domAPI.removeAttribute(el, 'method');
+
+    eventHandlers.trackListener(
+      el,
+      'submit',
+      safeHandler(submitHandler, `${CONTEXT}:${description}`),
+      { passive: false, context: CONTEXT, description }
+    );
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Public API                                                          */
+  /* ------------------------------------------------------------------ */
   function setup(formHandlers) {
     if (isSetup) {
-      logger.debug("[AuthFormListenerFactory] Setup called but listeners are already attached.", { context: "AuthFormListenerFactory" });
+      logger.debug('[AuthFormListenerFactory] setup() called twice – ignored', {
+        context: CONTEXT,
+      });
       return;
     }
+
     isSetup = true;
     currentFormHandlers = formHandlers;
 
-    // Rebind so they're always up to date for event handler invocation
-    loginHandlerRef = safeHandler(formHandlers.loginHandler, "AuthFormListenerFactory", logger);
-    registerHandlerRef = safeHandler(formHandlers.registerHandler, "AuthFormListenerFactory", logger);
+    // Wrap the latest implementation of handlers via safeHandler
+    loginHandlerRef = safeHandler(formHandlers.loginHandler, CONTEXT, logger);
+    registerHandlerRef = safeHandler(
+      formHandlers.registerHandler,
+      CONTEXT,
+      logger,
+    );
+    modalsLoadedHandlerRef = safeHandler(_handleModalsLoaded, CONTEXT, logger);
 
-    // Always use module-level handler identity for event removal correctness
-    modalsLoadedHandlerRef = safeHandler(handleModalsLoadedEvent, "AuthFormListenerFactory", logger);
+    // Attach to forms (if already present)
+    const loginForm = domAPI.getElementById('loginModalForm');
+    if (loginForm) _bindForm(loginForm, loginHandlerRef, 'loginSubmit');
 
-    // Attach listeners to login and register forms by ID
-    const loginForm = domAPI.getElementById("loginModalForm");
-    if (loginForm) {
-      domAPI.setAttribute(loginForm, 'novalidate', 'novalidate');
-      domAPI.removeAttribute(loginForm, 'action');
-      domAPI.removeAttribute(loginForm, 'method');
-      eventHandlers.trackListener(
-        loginForm,
-        "submit",
-        safeHandler(handleLoginFormSubmit, "AuthFormListenerFactory:loginSubmit"),
-        {
-          passive: false,
-          context: "AuthFormListenerFactory",
-          description: "Login Form Submit"
-        }
-      );
-    }
-    const registerForm = domAPI.getElementById("registerModalForm");
-    if (registerForm) {
-      domAPI.setAttribute(registerForm, 'novalidate', 'novalidate');
-      domAPI.removeAttribute(registerForm, 'action');
-      domAPI.removeAttribute(registerForm, 'method');
-      eventHandlers.trackListener(
-        registerForm,
-        "submit",
-        safeHandler(handleRegisterFormSubmit, "AuthFormListenerFactory:registerSubmit"),
-        {
-          passive: false,
-          context: "AuthFormListenerFactory",
-          description: "Register Form Submit"
-        }
-      );
-    }
-    // Attach modalsLoaded dynamic re-setup (for late-loaded modals)
+    const registerForm = domAPI.getElementById('registerModalForm');
+    if (registerForm) _bindForm(registerForm, registerHandlerRef, 'registerSubmit');
+
+    // Listen for dynamic modal injection
     const doc = domAPI.getDocument?.();
-    if (doc && typeof eventHandlers.trackListener === "function") {
+    if (doc) {
       eventHandlers.trackListener(
         doc,
-        "modalsLoaded",
-        safeHandler(modalsLoadedHandlerRef, "AuthFormListenerFactory:modalsLoaded"),
-        {
-          passive: false,
-          context: "AuthFormListenerFactory",
-          description: "modalsLoaded Listener"
-        }
+        'modalsLoaded',
+        modalsLoadedHandlerRef,
+        { context: CONTEXT, description: 'modalsLoaded Listener' },
       );
     }
-    logger.info("[AuthFormListenerFactory] Listener setup completed", { context: "AuthFormListenerFactory" });
-  }
 
-  function cleanupListenersOnly() {
-    if (eventHandlers && typeof eventHandlers.cleanupListeners === "function") {
-      eventHandlers.cleanupListeners({ context: "AuthFormListenerFactory" });
-    }
-    isSetup = false;
-    loginHandlerRef = null;
-    registerHandlerRef = null;
-    modalsLoadedHandlerRef = null;
+    logger.info('[AuthFormListenerFactory] listener wiring complete', {
+      context: CONTEXT,
+    });
   }
 
   function cleanup() {
-    cleanupListenersOnly();
+    _cleanupListenersOnly();
   }
 
-  return {
-    setup,
-    cleanup
-  };
+  return { setup, cleanup };
 }
+
+// Keep default export for backward compatibility during migration
+export default createAuthFormListenerFactory;

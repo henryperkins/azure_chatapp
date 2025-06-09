@@ -31,6 +31,7 @@ import { createChatExtensions } from "../chatExtensions.js";
 // Phase-2 – newly extracted ProjectDetails helpers
 import { createProjectDetailsRenderer } from "../projectDetailsRenderer.js";
 import { createProjectDataCoordinator } from "../projectDataCoordinator.js";
+import { createProjectEventHandlers } from "../projectEventHandlers.js";
 // Unified Event Service (Phase-3) – replaces scattered AppBus/AuthBus/etc.
 import { createEventService } from "../../services/eventService.js";
 // UI State Service (Phase-2.3)
@@ -1278,6 +1279,20 @@ export function createAppInitializer(opts = {}) {
             });
             DependencySystem.register('projectDataCoordinator', projectDataCoordinator);
 
+            const projectEventHandlers = createProjectEventHandlers({
+                domAPI,
+                eventHandlers,
+                logger,
+                modalManager,
+                projectManager: null, // will be set later
+                authenticationService: DependencySystem.modules.get('authenticationService'),
+                navigationService: DependencySystem.modules.get('navigationService'),
+                eventService: DependencySystem.modules.get('eventService'),
+                uiStateService: DependencySystem.modules.get('uiStateService'),
+                projectContextService: DependencySystem.modules.get('projectContextService')
+            });
+            DependencySystem.register('projectEventHandlers', projectEventHandlers);
+
             // Phase 3.4: ProjectDetailsComponent (partial)
             const projectDetailsComp = makeProjectDetailsComponent({
                 projectManager: null, // set later
@@ -1306,6 +1321,7 @@ export function createAppInitializer(opts = {}) {
                 // Phase-2: Inject extracted modules
                 projectDetailsRenderer,
                 projectDataCoordinator,
+                projectEventHandlers,
                 // Phase-2.3: State and event services
                 uiStateService: DependencySystem.modules.get('uiStateService'),
                 eventService: DependencySystem.modules.get('eventService'),
@@ -1377,21 +1393,13 @@ export function createAppInitializer(opts = {}) {
             if (!DependencySystem.modules.get('chatUIController')) {
                 const controllerFactory = DependencySystem.modules.get('createChatUIController');
                 if (typeof controllerFactory === 'function') {
-                    // Ensure chatUIBus exists before creating controller
-                    let chatUIBus = DependencySystem.modules.get('chatUIBus');
-                    if (!chatUIBus) {
-                        chatUIBus = new EventTarget();
-                        DependencySystem.register('chatUIBus', chatUIBus);
-                        logger.debug('[coreInit] chatUIBus created and registered', { context: 'coreInit' });
-                    }
-
                     const controller = controllerFactory({
                         domAPI,
                         eventHandlers,
                         logger,
                         sanitizer: DependencySystem.modules.get('sanitizer'),
                         DependencySystem,
-                        chatUIBus,
+                        eventService: DependencySystem.modules.get('eventService'),
                         browserService,
                         messageHandler: DependencySystem.modules.get('messageHandler'),
                         tokenStatsManager: DependencySystem.modules.get('tokenStatsManager')
@@ -1477,6 +1485,7 @@ export function createAppInitializer(opts = {}) {
                         domAPI,
                         domReadinessService,
                         logger,
+                        eventService: DependencySystem.modules.get('eventService'),
                         extChatEnabled: featureFlagEnabled,
                     });
 
@@ -1579,7 +1588,8 @@ export function createAppInitializer(opts = {}) {
                 globalUtils,
                 APP_CONFIG,
                 logger,
-                DependencySystem
+                DependencySystem,
+                eventService: DependencySystem.modules.get('eventService')
             });
             DependencySystem.register('projectListComponent', projectListComponent);
             logger.debug('[coreInit] ProjectListComponent registered.', { context: 'coreInit' });

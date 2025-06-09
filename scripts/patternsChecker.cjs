@@ -1225,7 +1225,7 @@ function vErrorLog(err, file, isBootstrapFile, moduleCtx, config) {
       p.traverse({
         CallExpression(q) {
           const cal = q.node.callee; let loggerCallType = null;
-          if (cal.type === "MemberExpression" && (cal.property.name === "error" || cal.property.name === "fatal")) {
+          if (cal.type === "MemberExpression" && (cal.property.name === "error" || cal.property.name === "fatal" || cal.property.name === "warn")) {
             const loggerObjectSource = getExpressionSourceNode(q.get("callee.object"));
             if (loggerObjectSource?.name === loggerName) loggerCallType = "direct";
             else if ( cal.object.type === "CallExpression" && cal.object.callee?.type === "MemberExpression" && cal.object.callee.property.name === "withContext" ) {

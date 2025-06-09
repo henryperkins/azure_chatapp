@@ -30,6 +30,7 @@ export function createChatExtensions(options = {}) {
   // --- STRICT DI VALIDATION (no silent fallbacks) ----------------------
   const REQUIRED_DEPS = [
     "eventHandlers",
+    "eventService",
     "chatManager",
     "app",
     "domAPI",
@@ -51,12 +52,13 @@ export function createChatExtensions(options = {}) {
     domAPI,
     domReadinessService,
     logger,
+    eventService,
   } = options;
 
   const MODULE_CONTEXT = "chatExtensions";
 
-  // Capture unified application EventBus once to avoid runtime look-ups.
-  const AppBus = DependencySystem?.modules?.get('AppBus') || DependencySystem?.modules?.get('eventBus');
+  // Use unified eventService if available. Otherwise fall back to AppBus (legacy).
+  const _eventService = eventService || DependencySystem?.modules?.get?.('eventService') || null;
 
   // Register the factory instance in the DI container so other modules can
   // lazily resolve it without violating guard-rails (no direct imports).
@@ -118,14 +120,12 @@ export function createChatExtensions(options = {}) {
 
         titleEl.textContent = newTitle.trim();
 
-        // Notify others via unified bus if available.
-        if (AppBus) {
-          AppBus.dispatchEvent(new CustomEvent('conversation:titleEdited', {
-            detail: {
-              conversationId: chatManager?.currentConversationId || null,
-              newTitle: newTitle.trim(),
-            }
-          }));
+        // Notify others via unified event service or legacy bus.
+        if (_eventService?.emit) {
+          _eventService.emit('conversation:titleEdited', {
+            conversationId: chatManager?.currentConversationId || null,
+            newTitle: newTitle.trim(),
+          });
         }
 
         logger.info('[chatExtensions] Conversation title updated', {

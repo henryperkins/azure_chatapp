@@ -20,7 +20,7 @@ export function createChatUIController({
   logger,
   sanitizer,
   DependencySystem,
-  chatUIBus,
+  eventService,
   browserService,
   messageHandler,
   tokenStatsManager
@@ -30,7 +30,7 @@ export function createChatUIController({
   if (!logger) throw new Error('[ChatUIController] logger dependency missing');
   if (!sanitizer) throw new Error('[ChatUIController] sanitizer dependency missing');
   if (!DependencySystem) throw new Error('[ChatUIController] DependencySystem dependency missing');
-  if (!chatUIBus) throw new Error('[ChatUIController] chatUIBus dependency missing');
+  if (!eventService) throw new Error('[ChatUIController] eventService dependency missing');
   if (!browserService) throw new Error('[ChatUIController] browserService dependency missing');
   if (!messageHandler) throw new Error('[ChatUIController] messageHandler dependency missing');
   if (!tokenStatsManager) throw new Error('[ChatUIController] tokenStatsManager dependency missing');
@@ -145,9 +145,8 @@ export function createChatUIController({
         'click',
         safeHandler((e) => {
           e.preventDefault();
-          // Dispatch citation click event on dedicated bus
-          const event = new CustomEvent('citationClick', { detail: { citeId } });
-          chatUIBus.dispatchEvent(event);
+          // Emit citation click via unified event service
+          eventService.emit('chat:citationClick', { citeId });
         }, 'citationClick'),
         { context: MODULE_CONTEXT }
       );
@@ -238,10 +237,7 @@ export function createChatUIController({
           'click',
           safeHandler(() => {
             // Emit copy request event instead of direct clipboard access
-            const event = new CustomEvent('messageCopyRequest', { 
-              detail: { message, messageId } 
-            });
-            chatUIBus.dispatchEvent(event);
+            eventService.emit('chat:messageCopyRequest', { message, messageId });
           }, 'copyMessage'),
           { context: MODULE_CONTEXT }
         );

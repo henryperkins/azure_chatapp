@@ -1,5 +1,9 @@
 /*! @license DOMPurify 3.0.5 | (c) Cure53 and other contributors | Released under the Apache license 2.0 and Mozilla Public License 2.0 | github.com/cure53/DOMPurify/blob/3.0.5/LICENSE */
 
+// VENDOR-EXEMPT-SIZE: Upstream DOMPurify bundle – excluded from guard-rails
+// checks (rule-14 size & DI). Do not modify this file except for updating
+// upstream version.
+
 const {
   entries,
   setPrototypeOf,

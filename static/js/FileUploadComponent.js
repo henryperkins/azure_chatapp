@@ -30,7 +30,8 @@ export function createFileUploadComponent({
   projectId,
   onUploadComplete,
   elements,
-  DependencySystem: explicitDS
+  DependencySystem: explicitDS,
+  eventService
 } = {}) {
   // Explicit DI requirement – no implicit auto-resolve allowed (Week-1 rule)
   if (!logger) {
@@ -42,6 +43,7 @@ export function createFileUploadComponent({
   if (!projectManager) throw new Error("[FileUploadComponent] Missing projectManager");
   if (!domAPI) throw new Error("[FileUploadComponent] Missing domAPI");
   if (!logger) throw new Error("[FileUploadComponent] Missing logger");
+  if (!eventService) throw new Error('[FileUploadComponent] Missing eventService');
   // domReadinessService and scheduler are optional
 
   // --- Configuration ---
@@ -94,6 +96,7 @@ export function createFileUploadComponent({
   }
 
   const DS = explicitDS || eventHandlers?.DependencySystem || null;
+  const _eventService = eventService || DS?.modules?.get?.('eventService') || null;
 
   function _setupAuthListeners () {
     const ds = DS;
@@ -378,17 +381,11 @@ const _scheduler = scheduler || {
       _onUploadComplete();
     }
 
-    // Emit global AppBus analytics event
+    // Emit analytics event via unified eventService
     try {
-      const appBus = (DS || eventHandlers?.DependencySystem)?.modules?.get('AppBus');
-      if (appBus && typeof appBus.dispatchEvent === 'function') {
-        const evt = eventHandlers.createCustomEvent
-          ? eventHandlers.createCustomEvent('knowledgebase:filesUploaded', { detail: { count: validFiles.length } })
-          : new CustomEvent('knowledgebase:filesUploaded', { detail: { count: validFiles.length } });
-        appBus.dispatchEvent(evt);
-      }
+      _eventService?.emit?.('knowledgebase:filesUploaded', { count: validFiles.length });
     } catch (err) {
-      logger.warn('[FileUploadComponent] Failed to dispatch knowledgebase:filesUploaded', err, { context: MODULE_CONTEXT });
+      logger.warn('[FileUploadComponent] Failed to emit knowledgebase:filesUploaded', err, { context: MODULE_CONTEXT });
     }
   }
 

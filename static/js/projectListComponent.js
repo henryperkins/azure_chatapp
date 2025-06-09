@@ -33,7 +33,8 @@ export function createProjectListComponent(deps) {
         APP_CONFIG,
         logger,
         DependencySystem,
-        uiStateService = null
+        uiStateService = null,
+        eventService
     } = deps;
 
     // Allow projectManager to be reassigned later via setProjectManager()
@@ -66,7 +67,7 @@ export function createProjectListComponent(deps) {
     let element = null;
     let gridElement = null;
     let isRendering = false;
-    const eventBus = new EventTarget();
+    const eventBus = eventService || new EventTarget();
 
     // Migrate state to UIStateService
     const STATE_COMPONENT = 'ProjectListComponent';
