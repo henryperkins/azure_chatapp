@@ -1,7 +1,6 @@
 import { getSafeHandler } from './utils/getSafeHandler.js';
 // Centralised selector constants
 import { SELECTORS } from './utils/selectorConstants.js';
-import { createChatUIEnhancements } from './chatUIEnhancements.js';
 
 /**
  * @typedef {Object} DomAPI
@@ -69,36 +68,45 @@ export function createChatManager(deps = {}) {
    * This avoids bootstrap-order issues where chatUIEnhancements was never
    * instantiated, causing undefined errors when ChatManager tried to access it.
    */
+  /**
+   * Lazily instantiate Chat UI Enhancements via DependencySystem to honour
+   * 2025 guard-rails (no direct imports outside bootstrap).
+   */
   function _ensureChatUIEnhancements(chatManagerInstance) {
-    if (!DependencySystem?.modules?.get('chatUIEnhancements')) {
-      try {
-        // Resolve ModalManager (may not be registered yet during early bootstrap)
-        const modalMgr =
-            DependencySystem?.modules?.get('modalManager') || {
-              /* minimal no-op stub so chatUIEnhancements can bootstrap */
-              showModal   () {},
-              closeModal  () {},
-              confirmDelete  : () => Promise.resolve(false),
-              confirmAction  : () => Promise.resolve(false),
-              show       () {},
-              isReadyPromise : () => Promise.resolve()
-            };
+    if (DependencySystem?.modules?.get('chatUIEnhancements')) return;
 
-        createChatUIEnhancements({
-          domAPI              : _domAPI,
-          eventHandlers       : _EH,
-          browserService      : deps.browserService,
-          domReadinessService : domReadinessService,
-          logger,
-          sanitizer           : DOMPurify,
-          chatManager         : chatManagerInstance,
-          modalManager        : modalMgr,        // ← use stub/final instance
-          DependencySystem
-        });
-        logger.info('[ChatManager] chatUIEnhancements module instantiated on-demand');
-      } catch (err) {
-        logger.error('[ChatManager] Failed to create chatUIEnhancements', err);
-      }
+    const factory = DependencySystem?.modules?.get('chatUIEnhancementsFactory');
+    if (typeof factory !== 'function') {
+      logger.error('[ChatManager] chatUIEnhancementsFactory not registered – UI enhancements disabled');
+      return;
+    }
+
+    try {
+      // Resolve ModalManager (may not be registered yet during early bootstrap)
+      const modalMgr =
+        DependencySystem?.modules?.get('modalManager') || {
+          showModal() {},
+          closeModal() {},
+          confirmDelete: () => Promise.resolve(false),
+          confirmAction: () => Promise.resolve(false),
+          show() {},
+          isReadyPromise: () => Promise.resolve()
+        };
+
+      factory({
+        domAPI: _domAPI,
+        eventHandlers: _EH,
+        browserService: deps.browserService,
+        domReadinessService,
+        logger,
+        sanitizer: DOMPurify,
+        chatManager: chatManagerInstance,
+        modalManager: modalMgr,
+        DependencySystem
+      });
+      logger.info('[ChatManager] chatUIEnhancements module instantiated on-demand');
+    } catch (err) {
+      logger.error('[ChatManager] Failed to instantiate chatUIEnhancements', err);
     }
   }
 
@@ -144,6 +152,16 @@ export function createChatManager(deps = {}) {
   // (patch instance after construction, see after ChatManager)
 
   // (Removed legacy _updateURLWithConversationId and _removeConversationIdFromURL helpers)
+
+  // ------------------------------------------------------------------
+  // Knowledge-Base helper – called when KB events indicate new data.
+  // Components / tests can spy on this method to assert event handling.
+  // ------------------------------------------------------------------
+  if (typeof ChatManager === 'undefined') {
+    /* placeholder comment to keep context; actual ChatManager class is inside
+       createChatManager closure */
+  }
+
 
 
   function createDefaultDomAPI() {
@@ -282,6 +300,22 @@ export function createChatManager(deps = {}) {
         this.eventHandlers.trackListener(appBus, 'currentProjectChanged',
           safeHandler(this._handleAppCurrentProjectChanged.bind(this), "_handleAppCurrentProjectChanged"),
           { context: 'chatManagerAppEvents', description: 'ChatManager_AppBus_CurrentProjectChanged' });
+        // New KB events
+        this.eventHandlers.trackListener(appBus, 'knowledgebase:filesUploaded',
+          safeHandler(() => {
+            if (typeof this.refreshKnowledgeContext === 'function') {
+              this.refreshKnowledgeContext();
+            }
+          }, 'KB_filesUploaded'),
+          { context: 'chatManagerAppEvents', description: 'ChatManager_KB_FilesUploaded' });
+
+        this.eventHandlers.trackListener(appBus, 'knowledgebase:ready',
+          safeHandler(() => {
+            if (typeof this.refreshKnowledgeContext === 'function') {
+              this.refreshKnowledgeContext();
+            }
+          }, 'KB_ready'),
+          { context: 'chatManagerAppEvents', description: 'ChatManager_KB_Ready' });
         logger.info(`[ChatManager] Subscribed to AppBus "currentProjectChanged".`, { context: "chatManager" });
       } else {
         logger.warn(`[ChatManager] AppBus not available. Cannot subscribe to "currentProjectChanged".`, { context: "chatManager" });
@@ -1390,6 +1424,13 @@ export function createChatManager(deps = {}) {
   }
 
   const instance = new ChatManager();
+
+  // Ensure method exists so KB event handlers can call it safely
+  if (typeof instance.refreshKnowledgeContext !== 'function') {
+    instance.refreshKnowledgeContext = function () {
+      logger.debug('[ChatManager] refreshKnowledgeContext() placeholder – implement as needed', { context: 'chatManager' });
+    };
+  }
 
   // --- Live Token Estimation Logic ---
   // Add debounced event listener to input field after UI setup

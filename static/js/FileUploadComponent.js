@@ -29,7 +29,8 @@ export function createFileUploadComponent({
   scheduler,
   projectId,
   onUploadComplete,
-  elements
+  elements,
+  DependencySystem: explicitDS
 } = {}) {
   // Explicit DI requirement – no implicit auto-resolve allowed (Week-1 rule)
   if (!logger) {
@@ -92,8 +93,10 @@ export function createFileUploadComponent({
     });
   }
 
+  const DS = explicitDS || eventHandlers?.DependencySystem || null;
+
   function _setupAuthListeners () {
-    const ds = eventHandlers?.DependencySystem;
+    const ds = DS;
     const auth = ds?.modules?.get('auth');
     if (auth?.AuthBus && typeof eventHandlers.trackListener === 'function') {
       eventHandlers.trackListener(
@@ -103,7 +106,7 @@ export function createFileUploadComponent({
         { context: MODULE_CONTEXT, description: 'FileUpload_AuthStateChanged' }
       );
       // Initialise state based on current auth flag if available
-      const currentAuth = ds.modules.get('appModule')?.state?.isAuthenticated;
+      const currentAuth = ds?.modules?.get('appModule')?.state?.isAuthenticated;
       if (typeof currentAuth === 'boolean') {
         _updateAuthState(currentAuth);
       }
@@ -373,6 +376,19 @@ const _scheduler = scheduler || {
 
     if (typeof _onUploadComplete === 'function') {
       _onUploadComplete();
+    }
+
+    // Emit global AppBus analytics event
+    try {
+      const appBus = (DS || eventHandlers?.DependencySystem)?.modules?.get('AppBus');
+      if (appBus && typeof appBus.dispatchEvent === 'function') {
+        const evt = eventHandlers.createCustomEvent
+          ? eventHandlers.createCustomEvent('knowledgebase:filesUploaded', { detail: { count: validFiles.length } })
+          : new CustomEvent('knowledgebase:filesUploaded', { detail: { count: validFiles.length } });
+        appBus.dispatchEvent(evt);
+      }
+    } catch (err) {
+      logger.warn('[FileUploadComponent] Failed to dispatch knowledgebase:filesUploaded', err, { context: MODULE_CONTEXT });
     }
   }
 

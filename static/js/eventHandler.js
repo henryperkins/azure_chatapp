@@ -771,7 +771,14 @@ export function createEventHandlers({
     setSafeHandler,
     setErrorReporter,      // ← NEW
     DependencySystem,
-    cleanup
+    cleanup,
+    /**
+     * Returns the current number of tracked active listeners. Useful for
+     * unit-tests that assert no leaks after `cleanupListeners()`.
+     */
+    getActiveListenerCount () {
+      return trackedListeners.size;
+    }
   };
 
   // ――― init becomes a method of the API object ―――

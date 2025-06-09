@@ -1,7 +1,7 @@
 <!-- Enhanced File Upload Component Template
      To integrate with FileUploadComponent.js -->
 
-<div id="dragDropZone" class="file-upload-container" tabindex="0"
+<div id="dragDropZone" class="file-upload-container" tabindex="0" role="region" aria-busy="false"
      aria-labelledby="file-upload-title" aria-describedby="file-upload-instructions">
 
   <!-- Upload area -->
@@ -19,6 +19,12 @@
     <div class="text-xs text-base-content/60 mt-1">
       Supports: TXT, MD, CSV, JSON, PDF, DOC, DOCX, PY, JS, HTML, CSS
     </div>
+
+    <!-- Week-2: Index in Knowledge Base toggle -->
+    <label for="indexKbCheckbox" class="mt-4 flex items-center justify-center gap-2 text-sm cursor-pointer select-none">
+      <input id="indexKbCheckbox" type="checkbox" class="checkbox checkbox-primary" checked />
+      <span>Index in Knowledge&nbsp;Base</span>
+    </label>
   </div>
 
   <!-- Hidden file input -->

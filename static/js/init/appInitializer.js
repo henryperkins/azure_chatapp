@@ -17,6 +17,8 @@ import { createKnowledgeBaseReadinessService } from "../knowledgeBaseReadinessSe
 // Front-end KB factories registered for DI (allowed direct import here per guard-rails)
 import { createKnowledgeBaseManager } from "../knowledgeBaseManager.js";
 import { createKnowledgeBaseSearchHandler } from "../knowledgeBaseSearchHandler.js";
+// Chat UI Enhancements factory (registered for DI so ChatManager can resolve it)
+import { createChatUIEnhancements } from "../chatUIEnhancements.js";
 import {
     setBrowserService as registerSessionBrowserService,
     getSessionId as coreGetSessionId
@@ -203,6 +205,11 @@ export function createAppInitializer(opts = {}) {
     }
     if (!ds.modules.get('KBSearchHandlerFactory')) {
         ds.register('KBSearchHandlerFactory', createKnowledgeBaseSearchHandler);
+    }
+
+    // Register Chat UI Enhancements factory for DI resolution
+    if (!ds.modules.get('chatUIEnhancementsFactory')) {
+        ds.register('chatUIEnhancementsFactory', createChatUIEnhancements);
     }
 
     // Destructure to match the original createAppInitializer signature

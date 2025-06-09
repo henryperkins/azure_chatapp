@@ -841,12 +841,27 @@ export function createProjectManager({
           formData.append('file', file);
           formData.append('projectId', projectId);
           formData.append('index_kb', index_kb ? 'true' : 'false');
-          await this._req(
+          const res = await this._req(
             `/api/projects/${projectId}/files/`,
             { method: 'POST', body: formData },
             'uploadFileWithRetry'
           );
-          return true;
+
+          // Emit AppBus knowledgebase:fileQueued when backend provides job_id
+          try {
+            const jobId = res?.job_id ?? res?.data?.job_id ?? null;
+            const appBus = this.DependencySystem?.modules?.get('AppBus');
+            if (appBus && jobId) {
+              const evt = new CustomEvent('knowledgebase:fileQueued', {
+                detail: { jobId, fileName: file?.name || '' }
+              });
+              appBus.dispatchEvent(evt);
+            }
+          } catch (err) {
+            this.logger?.warn?.('[ProjectManager] failed to dispatch knowledgebase:fileQueued', err, { context: MODULE });
+          }
+
+          return res;
         },
         maxRetries,
         this.timer

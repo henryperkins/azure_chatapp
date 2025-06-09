@@ -79,6 +79,7 @@ const ID_MAP = {
   fileProgressBar: 'fileProgressBar',
   uploadStatus: 'uploadStatus',
   filesList: 'filesList',
+  indexKbCheckbox: 'indexKbCheckbox',
 
   /* Knowledge Base */
   knowledgeStatus: 'knowledgeStatus',
@@ -169,7 +170,8 @@ export const ELEMENT_SELECTORS = deepFreeze({
     'filesUploadProgress',
     'fileProgressBar',
     'uploadStatus',
-    'filesList'
+    'filesList',
+    'indexKbCheckbox'
   ])
 });
 
