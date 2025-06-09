@@ -17,21 +17,23 @@ try:
     from sentry_sdk._types import LogLevelStr, Event  # type: ignore
 except Exception:  # pragma: no cover – runtime-only fallback
 
-    LogLevelStr = Literal[
-        "fatal",
-        "critical",
-        "error",
-        "warning",
-        "info",
-        "debug",
-    ]
+from typing import TypeAlias
+
+LogLevelStrType: TypeAlias = Literal[
+    "fatal",
+    "critical",
+    "error",
+    "warning",
+    "info",
+    "debug"
+]
 
     class _EventDict(TypedDict, total=False):
         message: str
         level: LogLevelStr
         extra: Dict[str, Any]
 
-    Event = _EventDict  # type: ignore
+EventType: TypeAlias = _EventDict
 from datetime import datetime, timedelta, timezone
 import aiofiles
 import sentry_sdk
@@ -157,7 +159,7 @@ class ClientLogService:
                     "name" in client_data or "stack" in client_data
                 ):
                     # Optionally: synthesize a "synthetic exception" if stack/message present
-                    event: Event = {
+                    event_data: EventType = {
                         "message": f"[CLIENT] {entry.message}",
                         "level": sentry_event_level,
                         "extra": {
@@ -217,7 +219,7 @@ class ClientLogService:
     # ---------------------------------------------------------------------
 
     @staticmethod
-    def _normalize_sentry_level(level: str) -> LogLevelStr:
+    def _normalize_sentry_level(level: str) -> LogLevelStrType:
         """Coerce arbitrary string into a valid Sentry ``LogLevelStr``.
 
         The official Sentry type stubs restrict the *level* field to the set
@@ -228,7 +230,7 @@ class ClientLogService:
         This helper maps unknown/unsupported values to ``"error"`` which is a
         sensible and safe default for client-side error forwarding.
         """
-        allowed: tuple[LogLevelStr, ...] = (
+        allowed: tuple[LogLevelStrType, ...] = (
             "fatal",
             "critical",
             "error",
@@ -238,7 +240,7 @@ class ClientLogService:
         )
 
         normalized = level.lower()
-        if normalized not in allowed:  # type: ignore[operator]
+        if normalized not in allowed:
             return cast(LogLevelStr, "error")
 
-        return cast(LogLevelStr, normalized)
+        return cast(LogLevelStrType, normalized)

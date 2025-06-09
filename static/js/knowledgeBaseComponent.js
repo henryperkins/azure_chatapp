@@ -484,6 +484,44 @@ export function createKnowledgeBaseComponent(options = {}) {
         EH.trackListener(appBus, 'currentProjectChanged', this._handleAppCurrentProjectChanged.bind(this),
           { context: MODULE, description: 'KBComponent_AppBus_CurrentProjectChanged' });
         this.logger.debug(`[${MODULE}] Subscribed to AppBus "currentProjectChanged".`, { context: MODULE });
+
+        // ────────────────────────────────────────────────────────────────
+        // Week-3: Observability – update status badge based on KB events
+        // ────────────────────────────────────────────────────────────────
+
+        // Helper inline so it captures `this` context cleanly
+        const _updateBadgeState = (state) => {
+          const badgeEl = this.elements.statusBadge;
+          if (!badgeEl) return;
+          switch (state) {
+            case 'processing':
+              badgeEl.className = 'badge badge-warning badge-sm';
+              badgeEl.textContent = 'Processing';
+              break;
+            case 'ready':
+              badgeEl.className = 'badge badge-success badge-sm';
+              badgeEl.textContent = 'Ready';
+              break;
+            case 'error':
+              badgeEl.className = 'badge badge-error badge-sm';
+              badgeEl.textContent = 'Error';
+              break;
+            default:
+              // fallback to inactive styling handled elsewhere
+              break;
+          }
+        };
+
+        EH.trackListener(appBus, 'knowledgebase:jobProgress', (ev) => {
+          const status = ev?.detail?.status;
+          if (status === 'processing' || status === 'pending') {
+            _updateBadgeState('processing');
+          }
+        }, { context: MODULE, description: 'KBComponent_KB_JobProgress' });
+
+        EH.trackListener(appBus, 'knowledgebase:ready', () => {
+          _updateBadgeState('ready');
+        }, { context: MODULE, description: 'KBComponent_KB_Ready' });
       } else {
         this.logger.error(`[${MODULE}] AppBus not available. Cannot subscribe to "currentProjectChanged". Critical for functionality.`, { context: MODULE });
       }
@@ -550,6 +588,13 @@ export function createKnowledgeBaseComponent(options = {}) {
       if (cur?.id && this.validateUUID(cur.id)) {
         return cur.id;
       }
+      // Fallback: use global appModule state if available (Week-1 guard-rail compliant)
+      try {
+        const appModule = this.DependencySystem?.modules?.get?.('appModule');
+        if (appModule?.state?.currentProjectId && this.validateUUID(appModule.state.currentProjectId)) {
+          return appModule.state.currentProjectId;
+        }
+      } catch {} // silent – last-chance heuristic only
       // notification/logging removed
       return null;
     }
@@ -753,6 +798,18 @@ export function createKnowledgeBaseComponent(options = {}) {
           el.removeAttribute("title"); // Or set to its functional title
         }
       });
+
+      // Hide status badge when logged out to prevent stale state
+      const badgeEl = this.elements?.statusBadge;
+      if (badgeEl) {
+        if (!authenticated) {
+          badgeEl.className = 'badge badge-outline badge-sm hidden';
+        } else {
+          // When user logs back in, reset to inactive until real status events arrive
+          badgeEl.className = 'badge badge-warning badge-sm';
+          badgeEl.textContent = 'Inactive';
+        }
+      }
 
       if (!authenticated) {
         this.logger.info(`[${MODULE}] User unauthenticated. Clearing KB data and showing inactive state.`, { context: MODULE });

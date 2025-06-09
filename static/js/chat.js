@@ -157,10 +157,6 @@ export function createChatManager(deps = {}) {
   // Knowledge-Base helper – called when KB events indicate new data.
   // Components / tests can spy on this method to assert event handling.
   // ------------------------------------------------------------------
-  if (typeof ChatManager === 'undefined') {
-    /* placeholder comment to keep context; actual ChatManager class is inside
-       createChatManager closure */
-  }
 
 
 

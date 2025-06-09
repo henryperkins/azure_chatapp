@@ -150,6 +150,34 @@ export const ELEMENT_SELECTORS = deepFreeze({
     base.activeSection = ID_MAP.knowledgeStatus;
     base.inactiveSection = ID_MAP.knowledgeBaseInactive;
     base.statusBadge = ID_MAP.kbStatusBadge;
+
+    // ------------------------------------------------------------------
+    // Back-compat aliases – existing KB component expects generic names
+    // `docCount` and `chunkCount` instead of the new kebab-prefixed keys.
+    // Add them here so downstream code (knowledgeBaseComponent.js prior to
+    // full refactor) continues to resolve selector IDs without blowing up
+    // when it attempts `.startsWith()` on `undefined`.
+    // ------------------------------------------------------------------
+    base.docCount = ID_MAP.kbDocCount;
+    base.chunkCount = ID_MAP.kbChunkCount;
+    base.fileSize = ID_MAP.knowledgeFileSize; // explicit alias for clarity
+
+    // More semantic/short aliases used by knowledgeBaseComponent ---------
+    base.toggle = ID_MAP.kbToggle;                     // kbToggle ➜ toggle
+    base.filesSection = ID_MAP.knowledgeBaseFilesSection; // long → short
+    base.filesListContainer = ID_MAP.knowledgeBaseFilesListContainer;
+    base.settingsModal = ID_MAP.knowledgeBaseSettingsModal;
+    base.settingsForm = ID_MAP.knowledgeBaseForm;
+    base.cancelSettingsBtn = ID_MAP.cancelKnowledgeBaseFormBtn;
+    base.deleteBtn = ID_MAP.deleteKnowledgeBaseBtn;
+    // Name/display aliases
+    base.baseName = ID_MAP.knowledgeBaseName;
+
+    // Display related aliases used by legacy KB UI code
+    base.modelDisplay = ID_MAP.kbModelDisplay;
+    base.versionDisplay = ID_MAP.kbVersionDisplay;
+    base.lastUsedDisplay = ID_MAP.kbLastUsedDisplay;
+
     return deepFreeze(base);
   })(),
 

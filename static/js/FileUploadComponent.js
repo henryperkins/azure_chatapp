@@ -400,7 +400,19 @@ const _scheduler = scheduler || {
       if (typeof projectManager.uploadFileWithRetry !== "function") {
         throw new Error('projectManager.uploadFileWithRetry function not available');
       }
-      await projectManager.uploadFileWithRetry(pid, { file, index_kb: indexKbChecked });
+      const uploadRes = await projectManager.uploadFileWithRetry(pid, { file, index_kb: indexKbChecked });
+
+      // If backend returns a background job_id, start polling via PollingService
+      try {
+        const jobId = uploadRes?.job_id ?? uploadRes?.data?.job_id ?? null;
+        const pollingService = (DS || eventHandlers?.DependencySystem)?.modules?.get('pollingService');
+        if (jobId && pollingService?.startJob) {
+          pollingService.startJob(jobId);
+        }
+      } catch (pollErr) {
+        logger.warn('[FileUploadComponent] Failed to start polling', pollErr, { context: MODULE_CONTEXT });
+      }
+
       _updateUploadProgress(1, 0);
     } catch (err) {
       logger.error("[FileUploadComponent] uploadFile",

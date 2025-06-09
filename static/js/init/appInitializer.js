@@ -19,6 +19,8 @@ import { createKnowledgeBaseManager } from "../knowledgeBaseManager.js";
 import { createKnowledgeBaseSearchHandler } from "../knowledgeBaseSearchHandler.js";
 // Chat UI Enhancements factory (registered for DI so ChatManager can resolve it)
 import { createChatUIEnhancements } from "../chatUIEnhancements.js";
+// Week-3 Observability – PollingService factory
+import { createPollingService } from "../pollingService.js";
 import {
     setBrowserService as registerSessionBrowserService,
     getSessionId as coreGetSessionId
@@ -205,6 +207,11 @@ export function createAppInitializer(opts = {}) {
     }
     if (!ds.modules.get('KBSearchHandlerFactory')) {
         ds.register('KBSearchHandlerFactory', createKnowledgeBaseSearchHandler);
+    }
+
+    // Register PollingService factory for DI resolution (Week-3)
+    if (!ds.modules.get('PollingServiceFactory')) {
+        ds.register('PollingServiceFactory', createPollingService);
     }
 
     // Register Chat UI Enhancements factory for DI resolution
@@ -722,6 +729,39 @@ if (handlers?.dispatch) {
                     }
                 } catch (err) {
                     logger.error('[serviceInit] Failed to create kbReadinessService', err, {
+                        context: 'serviceInit:registerAdvancedServices'
+                    });
+                }
+
+                // ----------------------------------------------------------
+                // Polling Service – monitors background KB jobs
+                // ----------------------------------------------------------
+                try {
+                    const apiRequestFn = DependencySystem.modules.get('apiRequest');
+                    if (typeof apiRequestFn === 'function') {
+                        const pollingService = createPollingService({
+                            DependencySystem,
+                            apiClient: apiRequestFn,
+                            eventHandlers,
+                            logger
+                        });
+
+                        // Register factory & instance for downstream retrieval
+                        safeRegister('pollingService', pollingService);
+                        // Ensure factory is registered as well for compliance
+                        if (!DependencySystem.modules.has('PollingServiceFactory')) {
+                            safeRegister('PollingServiceFactory', createPollingService);
+                        }
+                        logger.debug('[serviceInit] pollingService registered.', {
+                            context: 'serviceInit:registerAdvancedServices'
+                        });
+                    } else {
+                        logger.warn('[serviceInit] apiRequest not available – skipping pollingService.', {
+                            context: 'serviceInit:registerAdvancedServices'
+                        });
+                    }
+                } catch (err) {
+                    logger.error('[serviceInit] Failed to create pollingService', err, {
                         context: 'serviceInit:registerAdvancedServices'
                     });
                 }
