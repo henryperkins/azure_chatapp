@@ -1,4 +1,4 @@
-I get t# Azure OpenAI Chat Application
+# Azure OpenAI Chat Application
 
 A full-stack, project-based chat and knowledge management application leveraging Azure OpenAI, Anthropic Claude, JWT authentication, and a modular ES6 frontend with Tailwind CSS and DaisyUI.
 
