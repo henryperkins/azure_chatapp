@@ -128,8 +128,50 @@ export function createNavigationService({
     getHref: getCurrentHref,
     getPathname: getCurrentPathname,
     pushState,
-    replaceState
+    replaceState,
+    activateView: (...args) => activateView(...args),
+    deactivateView
   };
+
+  // ───────────────────────────────────────────────────────────
+  // View Deactivation Lifecycle (Week-1 requirement)
+  // ───────────────────────────────────────────────────────────
+
+  function deactivateView (viewId = state.currentView) {
+    if (!viewId || !state.registeredViews.has(viewId)) return false;
+
+    logger.debug('[NavigationService] Deactivating view', { viewId, context: MODULE_CONTEXT });
+
+    const handlers = state.registeredViews.get(viewId);
+
+    // Call optional hooks on the view handlers
+    safeHandler(handlers.hide ?? (() => {}))();
+    safeHandler(handlers.destroy ?? (() => {}))();
+
+    state.previousView = viewId;
+    if (state.currentView === viewId) state.currentView = null;
+
+    emitNavigationEvent('deactivateView', { viewId });
+    return true;
+  }
+
+  // Automatically deactivate when a new view gets activated
+  const _origActivateView = activateView;
+  activateView = async function wrappedActivateView (viewId, params = {}) {
+    if (state.currentView && state.currentView !== viewId) {
+      deactivateView(state.currentView);
+    }
+    const res = await _origActivateView(viewId, params);
+    if (res) state.currentView = viewId;
+    return res;
+  };
+
+  // Update navAPI now that wrappers exist
+  navAPI.activateView = activateView;
+  navAPI.deactivateView = deactivateView;
+
+  // expose via public API
+  navAPI.deactivateView = deactivateView;
 
   // === View Management ===
   function registerView(viewId, handlers = {}) {

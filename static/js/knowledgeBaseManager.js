@@ -65,6 +65,10 @@ export function createKnowledgeBaseManager(ctx) {
 
   const domReadinessService = ctx.domReadinessService
     || ctx.getDep?.('domReadinessService');
+  ctx.browserService = ctx.browserService || ctx.getDep?.('browserService');
+
+  // Track intervals for deterministic cleanup
+  const activeIntervals = [];
   // Eager appReadyPromise removed; replaced with lazy getter below.
   let _appReadyPromise = null;
   async function waitForAppReady() {
@@ -1056,6 +1060,17 @@ export function createKnowledgeBaseManager(ctx) {
       ctx.eventHandlers.cleanupListeners({ context: MODULE });
       ctx.eventHandlers.cleanupListeners({ context: "file-deletion" }); // legacy sub-context
     }
+
+    // Clear any active timers created via browserService (defensive – future-proof)
+    if (Array.isArray(activeIntervals)) {
+      activeIntervals.forEach(id => ctx.browserService?.clearInterval?.(id));
+      activeIntervals.length = 0;
+    }
+
+    // Close any open KB modals to avoid leaks
+    try {
+      ctx.modalManager?.closeModal?.('*');
+    } catch {}
 
   }
 

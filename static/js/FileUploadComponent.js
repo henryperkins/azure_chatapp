@@ -31,17 +31,9 @@ export function createFileUploadComponent({
   onUploadComplete,
   elements
 } = {}) {
-  // --- Attempt auto-resolution of `logger` when not injected ---
+  // Explicit DI requirement – no implicit auto-resolve allowed (Week-1 rule)
   if (!logger) {
-    try {
-      const ds = eventHandlers?.DependencySystem;
-      logger = ds?.modules?.get?.('logger');
-    } catch (err) {
-      logger.error('[FileUploadComponent] Auto-resolve logger failed',
-        err,
-        { context: `${MODULE_CONTEXT}:auto-resolve` }
-      );
-    }
+    throw new Error('[FileUploadComponent] Missing required dependency: logger');
   }
   // === Dependency validation block ===
   if (!app) throw new Error("[FileUploadComponent] Missing app");
@@ -77,6 +69,70 @@ export function createFileUploadComponent({
   let _onUploadComplete = typeof onUploadComplete === 'function' ? onUploadComplete : () => {};
   let uploadState = { total: 0, completed: 0, failed: 0 };
   let _handlersBound = false;
+
+  // ───────────────────────────────────────────────────────────
+  // Auth state handling & view lifecycle
+  // ───────────────────────────────────────────────────────────
+
+  function _updateAuthState (authenticated) {
+    const elsToDisable = [
+      _elements.fileInput,
+      _elements.uploadBtn,
+      _elements.dragZone
+    ].filter(Boolean);
+    elsToDisable.forEach(el => {
+      el.disabled = !authenticated;
+      if (!authenticated) {
+        domAPI.addClass?.(el, 'opacity-50');
+        domAPI.addClass?.(el, 'cursor-not-allowed');
+      } else {
+        domAPI.removeClass?.(el, 'opacity-50');
+        domAPI.removeClass?.(el, 'cursor-not-allowed');
+      }
+    });
+  }
+
+  function _setupAuthListeners () {
+    const ds = eventHandlers?.DependencySystem;
+    const auth = ds?.modules?.get('auth');
+    if (auth?.AuthBus && typeof eventHandlers.trackListener === 'function') {
+      eventHandlers.trackListener(
+        auth.AuthBus,
+        'authStateChanged',
+        (e) => _updateAuthState(e?.detail?.authenticated),
+        { context: MODULE_CONTEXT, description: 'FileUpload_AuthStateChanged' }
+      );
+      // Initialise state based on current auth flag if available
+      const currentAuth = ds.modules.get('appModule')?.state?.isAuthenticated;
+      if (typeof currentAuth === 'boolean') {
+        _updateAuthState(currentAuth);
+      }
+    } else {
+      logger.warn('[FileUploadComponent] AuthBus not available – cannot disable upload inputs on logout.', { context: MODULE_CONTEXT });
+    }
+
+    // View lifecycle hooks – destroy on deactivateView / project change
+    const appBus = ds?.modules?.get('AppBus');
+    if (appBus) {
+      eventHandlers.trackListener(
+        appBus,
+        'currentProjectChanged',
+        () => destroy(),
+        { context: MODULE_CONTEXT, description: 'FileUpload_AppBus_ProjectChanged' }
+      );
+    }
+
+    // Listen for navigation:deactivateView dispatched on document
+    const doc = domAPI.getDocument();
+    if (doc) {
+      eventHandlers.trackListener(
+        doc,
+        'navigation:deactivateView',
+        () => destroy(),
+        { context: MODULE_CONTEXT, description: 'FileUpload_Navigation_Deactivate' }
+      );
+    }
+  }
 
 /* Deterministic timers (DI-friendly) — bind to global window to avoid “Illegal invocation” */
 const win = domAPI?.getWindow?.();
@@ -128,6 +184,9 @@ const _scheduler = scheduler || {
       }
       _bindEvents();
       _handlersBound = true;
+
+      // After DOM + event bindings, wire auth / lifecycle listeners
+      _setupAuthListeners();
 
       // Standardized "fileuploadcomponent:initialized" event
       const doc = domAPI?.getDocument?.();

@@ -515,6 +515,13 @@ export function createKnowledgeBaseComponent(options = {}) {
         context: MODULE
       });
 
+      // Close any open KB-related modals to avoid memory leaks / stale UI
+      try {
+        this.modalManager?.closeModal?.('*');
+      } catch (err) {
+        this.logger.warn(`[${MODULE}] Failed to close KB modals on project change`, { err, context: MODULE });
+      }
+
       if (newProject?.id && newProject.id !== this.state.knowledgeBase?.project_id) {
         this.logger.info(`[${MODULE}] New project selected (${newProject.id}). Resetting KB view. Manager will load new KB.`, { context: MODULE });
         // Reset UI to prepare for new project's KB.
