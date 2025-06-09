@@ -1,3 +1,4 @@
+const MODULE_CONTEXT = 'globalUtils';
 /* ---------------------------------------------------------------------------
  *  globalUtils.js — Deprecated god-utility module, split into focused utilities.
  *  All prior factory methods have moved to their own modules in ./utils/.
@@ -109,10 +110,8 @@ export function safeParseJSON(str) {
   try {
     return JSON.parse(str);
   } catch (err) {
-    const logger = globalThis?.DependencySystem?.modules?.get?.('logger')
-                 || { error () {} };
     logger.error('[globalUtils] safeParseJSON failed', err,
-      { context: 'globalUtils:safeParseJSON' });
+      { context: MODULE_CONTEXT + ':safeParseJSON' });
     throw new Error('[globalUtils.safeParseJSON] JSON parse failed and fallback is forbidden: ' + (err?.message || err));
   }
 }
@@ -163,10 +162,8 @@ export function createElement(tag, opts = {}, trackListener, domAPI) {
       if (opts[p] !== undefined) el[p] = opts[p];
     });
   } catch (err) {
-    const logger = globalThis?.DependencySystem?.modules?.get?.('logger')
-                 || { error () {} };
     logger.error('[globalUtils] createElement failed', err,
-      { context: 'globalUtils:createElement' });
+      { context: MODULE_CONTEXT + ':createElement' });
     throw err;
   }
   return el;
@@ -180,10 +177,8 @@ export function toggleElement(selOrEl, show, domAPI) {
       selOrEl.classList.toggle("hidden", !show);
     }
   } catch (err) {
-    const logger = globalThis?.DependencySystem?.modules?.get?.('logger')
-                 || { error () {} };
     logger.error('[globalUtils] toggleElement failed', err,
-      { context: 'globalUtils:toggleElement' });
+      { context: MODULE_CONTEXT + ':toggleElement' });
   }
 }
 
@@ -198,10 +193,8 @@ export const formatDate = (d) => {
       day: '2-digit'
     });
   } catch (err) {
-    const logger = globalThis?.DependencySystem?.modules?.get?.('logger')
-                 || { error () {} };
     logger.error('[globalUtils] formatDate failed', err,
-      { context: 'globalUtils:formatDate' });
+      { context: MODULE_CONTEXT + ':formatDate' });
     return String(d);
   }
 };
