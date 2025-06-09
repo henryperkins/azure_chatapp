@@ -548,6 +548,7 @@ export function createAppInitializer(opts = {}) {
                                 { detail },
                                 appBus
                             );
+                        }
                         const eventSvc = DependencySystem.modules.get('eventService');
                         if (eventSvc?.emit) {
                             eventSvc.emit('currentProjectChanged', detail);
@@ -572,6 +573,7 @@ export function createAppInitializer(opts = {}) {
                                         },
                                         doc
                                     );
+                                }
                                 if (eventSvc?.emit) {
                                     eventSvc.emit('projectSelected', {
                                         projectId: state.currentProject.id,
