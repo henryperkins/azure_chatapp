@@ -27,6 +27,9 @@ export function createSidebar({
   safeHandler,
   APP_CONFIG,
 
+  // Phase-2.3 centralised UI flags
+  uiStateService = null,
+
   // Phase-1 remediation – new explicit dependencies
   authenticationService = null,
   authBus = null,
@@ -55,6 +58,7 @@ export function createSidebar({
   if (!domReadinessService) throw new Error('[Sidebar] domReadinessService is required.');
   if (typeof safeHandler !== 'function') throw new Error('[Sidebar] safeHandler is required.');
   if (!APP_CONFIG) throw new Error('[Sidebar] APP_CONFIG is required.');
+  if (!uiStateService) throw new Error('[Sidebar] uiStateService is required.');
 
   const MODULE = 'Sidebar';
   const SidebarBus = new EventTarget();
@@ -64,11 +68,11 @@ export function createSidebar({
   // never query DependencySystem at runtime anymore (Phase-1 compliance).
 
   if (!appModule) {
-    logger.warn('[Sidebar] appModule not provided – some features may be disabled', { context: 'Sidebar' });
+    logger.warn('[Sidebar] appModule not provided – some features may be disabled', { context: MODULE });
   }
 
   if (!authenticationService) {
-    logger.warn('[Sidebar] authenticationService not provided – auth-dependent UI will use anonymous mode', { context: 'Sidebar' });
+    logger.warn('[Sidebar] authenticationService not provided – auth-dependent UI will use anonymous mode', { context: MODULE });
   }
 
   // Sub-factories
@@ -102,8 +106,23 @@ export function createSidebar({
   let backdropClickRemover = null;
   let sidebarMobileDock = null;
 
-  let visible = false;
-  let pinned = false;
+  // ------------------------------------------------------------------
+  // Centralised UI flags – synced with uiStateService
+  // ------------------------------------------------------------------
+  const STATE_COMPONENT = 'Sidebar';
+
+  let visible = uiStateService.getState(STATE_COMPONENT, 'visible') || false;
+  let pinned = uiStateService.getState(STATE_COMPONENT, 'pinned') || false;
+
+  function setVisibleFlag(val) {
+    visible = Boolean(val);
+    uiStateService.setState(STATE_COMPONENT, 'visible', visible);
+  }
+
+  function setPinnedFlag(val) {
+    pinned = Boolean(val);
+    uiStateService.setState(STATE_COMPONENT, 'pinned', pinned);
+  }
 
   //   -- Settings Panel
   let settingsPanelEl = null;
@@ -239,7 +258,7 @@ export function createSidebar({
   // Pin Handling
   // ───────────────────────────────────────────────
   function togglePin(force) {
-    pinned = (typeof force === 'boolean') ? force : !pinned;
+    setPinnedFlag((typeof force === 'boolean') ? force : !pinned);
     storageAPI.setItem('sidebarPinned', pinned);
     el.classList.toggle('sidebar-pinned', pinned);
     updatePinButtonVisual();
@@ -387,7 +406,7 @@ export function createSidebar({
 
   function showSidebar() {
     if (visible) return;
-    visible = true;
+    setVisibleFlag(true);
     el.classList.add('open');
     el.classList.remove('-translate-x-full');
     el.inert = false;
@@ -406,7 +425,7 @@ export function createSidebar({
 
   function closeSidebar() {
     if (!visible || pinned) return;
-    visible = false;
+    setVisibleFlag(false);
     el.classList.remove('open');
     el.classList.add('-translate-x-full');
     el.inert = true;
@@ -652,13 +671,13 @@ export function createSidebar({
   // Persistent State
   // ───────────────────────────────────────────────
   function restorePersistentState() {
-    pinned = (storageAPI.getItem('sidebarPinned') === 'true');
+    setPinnedFlag(storageAPI.getItem('sidebarPinned') === 'true');
     const isDesktop = (viewportAPI.getInnerWidth() >= 768);
     if (pinned || isDesktop) {
       el.classList.add('sidebar-pinned');
       el.classList.remove('-translate-x-full');
       el.classList.add('open');
-      visible = true;
+      setVisibleFlag(true);
       el.inert = false;
       btnToggle?.setAttribute('aria-expanded', 'true');
     }
@@ -771,8 +790,8 @@ export function createSidebar({
     }
     eventHandlers.cleanupListeners({ context: MODULE });
     removeBackdrop();
-    pinned = false;
-    visible = false;
+    setPinnedFlag(false);
+    setVisibleFlag(false);
     sidebarAuth.cleanup();
     sidebarMobileDock?.cleanup();
   }

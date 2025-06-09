@@ -57,5 +57,6 @@
   "static/js/utils/polyfillCustomEvent.js",
   "static/js/utils/selectorConstants.js",
   "static/js/utils/session.js",
-  "static/js/utils/storageService.js"
+  "static/js/utils/storageService.js",
+  "static/js/uiStateService.js"
 ]

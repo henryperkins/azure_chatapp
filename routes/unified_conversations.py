@@ -59,8 +59,7 @@ class ConversationCreate(BaseModel):
     kb_enabled: Optional[bool] = False
     sentry_trace: Optional[str] = Field(None, description="Frontend trace ID")
 
-    # Rename this to avoid conflict with the field alias in Pydantic v2
-    pydantic_config = {
+    model_config = {
         "populate_by_name": True,
         "extra": "allow",
     }
@@ -75,7 +74,7 @@ class ConversationUpdate(BaseModel):
     kb_enabled: Optional[bool] = False
     sentry_trace: Optional[str] = Field(None, description="Frontend trace ID")
 
-    pydantic_config = {
+    model_config = {
         "populate_by_name": True,
         "extra": "allow",
     }

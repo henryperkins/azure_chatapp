@@ -26,21 +26,34 @@ logger = logging.getLogger(__name__)
 
 # Optional dependency --------------------------------------------------------
 
-_tiktoken_spec = importlib.util.find_spec("tiktoken")
+# Detect sandbox/network-disabled environments ---------------------------------
+import os
+
+_ENCODER = None  # will remain None if tiktoken path unavailable
+
+_SANDBOX_DISABLED = os.getenv("CODEX_SANDBOX_NETWORK_DISABLED") == "1"
+
+_tiktoken_spec = None if _SANDBOX_DISABLED else importlib.util.find_spec("tiktoken")
+
 if _tiktoken_spec is not None:  # pragma: no cover – environment-dependent
     import tiktoken  # type: ignore
 
-    # Cache the encoder so we don’t re-initialise it on every call
-    _ENCODER = tiktoken.get_encoding("cl100k_base")  # NEW
+    try:
+        # This may attempt a network download for the encoding file.  If that
+        # fails (e.g., network blocked), we catch the exception and fall back
+        # to heuristic mode.
+        _ENCODER = tiktoken.get_encoding("cl100k_base")
+    except Exception as exc:  # pragma: no cover – likely in sandbox
+        logger.debug("tiktoken initialisation failed; falling back (%s)", exc)
+        _ENCODER = None
 
     def _encode(text: str) -> int:  # UPDATED
-        """
-        Return the token count for *text* using tiktoken.
-        A cached encoder is reused for performance.
-        """
+        """Return token count for *text* using tiktoken when available."""
+        if _ENCODER is None:
+            return -1
         try:
             return len(_ENCODER.encode(text))
-        except Exception as exc:  # pragma: no cover – unlikely branch
+        except Exception as exc:  # pragma: no cover – catch any runtime issue
             logger.debug("tiktoken failure: %s", exc)
             return -1
 

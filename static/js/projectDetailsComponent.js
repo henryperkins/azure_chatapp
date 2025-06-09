@@ -32,7 +32,8 @@ export function createProjectDetailsComponent({
   uiUtils = null,
   authModule = null,
   tokenStatsManager = null,
-  chatUIEnhancements = null
+  chatUIEnhancements = null,
+  projectContextService = null
 } = {}) {
   const missing = [];
   if (!domAPI) missing.push("domAPI");
@@ -80,7 +81,8 @@ export function createProjectDetailsComponent({
     uiRenderer,
     authModule,
     tokenStatsManager,
-    chatUIEnhancements
+    chatUIEnhancements,
+    projectContextService
   });
 
   // Expose only the canonical public API for compliance (no dynamic shape)
@@ -141,6 +143,14 @@ class ProjectDetailsComponent {
     this.chatManager = deps.chatManager;
     this.apiClient = deps.apiClient;
 
+    // Phase-2.3: Centralised project context
+    this.projectContextService = deps.projectContextService ||
+      this.DependencySystem?.modules?.get?.('projectContextService');
+
+    if (!this.projectContextService?.getCurrentProjectId) {
+      throw new Error('[ProjectDetailsComponent] projectContextService dependency missing or invalid');
+    }
+
     // Phase-1.3: Use injected uiRenderer instead of runtime lookup
     this.uiRenderer = deps.uiRenderer;
 
@@ -152,13 +162,36 @@ class ProjectDetailsComponent {
     this.renderStats = (...a) => this.uiRenderer?.renderStats?.(...a);
     this.containerId = "projectDetailsView";
     this.templatePath = "/static/html/project_details.html";
+
+    // ------------------------------------------------------------------
+    // Centralised projectId binding – alias property to ProjectContextService
+    // ------------------------------------------------------------------
+    Object.defineProperty(this, 'projectId', {
+      get: () => this.projectContextService.getCurrentProjectId(),
+      set: (val) => {
+        try {
+          const curr = this.projectContextService.getCurrentProjectId();
+          if (val !== curr && this.projectContextService.isValidProjectId(val)) {
+            if (this.app?.setCurrentProjectId) {
+              this.app.setCurrentProjectId(val);
+            }
+          }
+        } catch (err) {
+          this.logger?.warn?.('[ProjectDetailsComponent] failed to set projectId via property setter', {
+            context: MODULE_CONTEXT,
+            err: err?.message
+          });
+        }
+      },
+      configurable: true
+    });
+
     this.state = {
       templateLoaded: false,
       loading: false,
       activeTab: "chat",
       projectDataLoaded: false
     };
-    this.projectId = null;
     this.projectData = null;
     this.listenersContext = MODULE_CONTEXT + "_listeners";
     this.bus = new EventTarget();

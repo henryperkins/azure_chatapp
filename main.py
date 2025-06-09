@@ -79,6 +79,7 @@ import models  # noqa: E402
 # Import your routers
 from auth import router as auth_router, create_default_user  # noqa: E402
 from routes.knowledge_base_routes import router as knowledge_base_router  # noqa: E402
+# Aggregate router for all /projects endpoints
 from routes.projects.projects import router as projects_router  # noqa: E402
 from routes.projects.files import router as project_files_router  # noqa: E402
 from routes.projects.artifacts import router as project_artifacts_router  # noqa: E402

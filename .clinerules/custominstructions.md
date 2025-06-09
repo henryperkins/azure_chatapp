@@ -236,3 +236,55 @@ The above definitions represent the *enforced* architectural pattern for the pro
 **If in doubt: neither modules nor routes should contain logic/state not registered via DI at app-root or injected as a constructor dependency. When building new features, always check the latest registered factories/services as the source of truth.**
 
 ---
+
+## 🗺️ **State Management Overview (Quick Reference)**
+
+The table below shows *exactly where* each category of state lives and which service you should use to
+access or mutate it. Anything not on this map is an anti-pattern.
+
+| State Category | Source of Truth | Access via | How to Update |
+| -------------- | --------------- | ---------- | ------------- |
+| **Authentication**<br>(`isAuthenticated`, `currentUser`) | `appModule.state` | `authenticationService` | Read-only façade. Auth flow mutates state internally and emits events; application code should *never* write. |
+| **Project context**<br>(`currentProject`, `currentProjectId`) | `appModule.state` | `projectContextService` | Call `setCurrentProject(project)` which updates state **and** emits `projectContextChanged`. |
+| **Conversation context**<br>(`currentConversationId`, etc.) | Internal memory held by `conversationManager` | `conversationManager` | Use `createNewConversation`, `loadConversation`, etc. Do **not** cache IDs in components. |
+| **UI flags & view state**<br>(sidebar visibility, modal open, tab index) | In-memory `Map` inside `uiStateService` | `uiStateService` | `setState(component, key, value)` / `getState(component, key)`. |
+| **User preferences**<br>(theme, pinned sidebar) | Browser storage (wrapped) | `storageService` or dedicated service | Persist through injected storage helper – **single** service should own a given key. |
+
+### Developer checklist
+
+1. Planning to add `let someState = …` at module scope? → **Stop.** Choose the correct service above.
+2. Touching `appModule.state` directly? → **Stop.** Use its façade.
+3. Need to announce a state change? → `eventService.emit('descriptiveEvent', detail)`.
+4. Need transient view flags? → `uiStateService`.
+
+Following this map guarantees a single authoritative copy of each piece of data, preventing UI
+desynchronization and making debugging easier.
+
+---
+
+## 🧹 Deprecations & Transitional Shims (2025-06-09)
+
+The following legacy patterns or stop-gap shims still exist in the codebase. **Do not introduce new
+usage**. When you touch affected areas, migrate to the modern equivalent and strike the item off this
+list (include commit SHA next to the bullet when removed).
+
+| Area | Deprecated pattern | Replacement | Status |
+|------|--------------------|-------------|--------|
+| Event Bus | Direct `AuthBus`, `AppBus`, `chatUIBus` references | Inject `eventService` and call `eventService.emit/on/off` | In-progress (Phase 3 target) |
+| DI | Runtime `DependencySystem.modules.get()` inside component logic | Pass the dependency as a constructor arg from `appInitializer.js` | Eliminated in critical modules; ~17 doc-only hits remain |
+| UI State | Module-scope `visible`, `pinned`, etc. | `uiStateService` | Sidebar migrated; starred set pending |
+| Auth | Logger `authModule` parameter | No param – logger auto-discovers auth via `authenticationService` | Some tests still pass param – remove as encountered |
+| safeHandler | Internal fallbacks using `DependencySystem` | Inject `safeHandler` via DI | Low-risk utility modules still have fallback warnings |
+| Backend routes | `/kb/files (deprecated routes)` | Use new REST endpoints shown in route docstrings | Call-site migration ongoing |
+| CSS | Tailwind v3 opacity utilities (`bg-opacity-{n}`) | v4 slash syntax (`bg-black/50`) | Replace on sight |
+| Token Stats | `tokenStatsManagerProxy` buffering shim | Direct `tokenStatsManager` once early init is stable | Remove after Phase 3 |
+
+### How to update this section
+1. When you **remove** a deprecated item, delete or edit the corresponding table row and append the
+   commit SHA in parentheses to the description.
+2. If you temporarily add a workaround or shim that must be cleaned up later, document it in a new row
+   with “Temporary” in the Status column.
+
+Maintainers review this table at each Phase exit gate. Keep it accurate — outdated documentation is a
+compliance violation.
+

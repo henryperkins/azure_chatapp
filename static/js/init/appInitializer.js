@@ -30,6 +30,8 @@ import { createPollingService } from "../pollingService.js";
 import { createChatExtensions } from "../chatExtensions.js";
 // Unified Event Service (Phase-3) – replaces scattered AppBus/AuthBus/etc.
 import { createEventService } from "../../services/eventService.js";
+// UI State Service (Phase-2.3)
+import { createUIStateService } from "../uiStateService.js";
 
 // Phase-1 remediation: central auth state façade
 import { createAuthenticationService } from "../../services/authenticationService.js";
@@ -206,6 +208,12 @@ export function createAppInitializer(opts = {}) {
         DependencySystem.register('tokenStatsManagerProxy', tokenStatsProxy);
         // Also expose under canonical name so ChatManager resolves it transparently
         DependencySystem.register('tokenStatsManager', tokenStatsProxy);
+
+        // ------------------------------------------------------------------
+        // Phase-2.3 – UI State Service registration
+        // ------------------------------------------------------------------
+        const uiStateService = createUIStateService({ logger });
+        DependencySystem.register('uiStateService', uiStateService);
 
         // Provide everything we just created
         return {
@@ -1582,7 +1590,10 @@ if (handlers?.dispatch) {
 
                 // New Phase-1 DI props
                 authenticationService: DependencySystem.modules.get('authenticationService'),
-                authBus: DependencySystem.modules.get('auth')?.eventBus
+                authBus: DependencySystem.modules.get('auth')?.eventBus,
+
+                // Phase-2.3 – uiStateService centralised flags
+                uiStateService: DependencySystem.modules.get('uiStateService')
             });
             DependencySystem.register('sidebar', sidebar);
 
