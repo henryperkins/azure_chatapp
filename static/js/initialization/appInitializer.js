@@ -7,15 +7,10 @@
  */
 
 // Import external dependencies (already extracted)
-import { createLogDeliveryService } from "../logDeliveryService.js";
-import { createDomAPI } from "../utils/domAPI.js";
-import { createEventHandlers } from "../eventHandler.js";
-import { createSafeHandler } from "../safeHandler.js";
-import { createDomReadinessService } from "../utils/domReadinessService.js";
-import { createLogger } from "../logger.js";
-import { createCustomEventPolyfill } from "../utils/polyfillCustomEvent.js";
-import { createKnowledgeBaseReadinessService } from "../knowledgeBaseReadinessService.js";
-// ... all other external imports ...
+// External helper factories are provided indirectly via BootstrapCore.  They
+// are *not* imported here to keep the orchestrator lean and to avoid circular
+// dependency pitfalls.  All heavy lifting (logger, domAPI, eventHandlers,
+// etc.) happens inside bootstrapCore.initializeCoreServices().
 
 // Import extracted initialization modules
 import { createAppState } from "./state/appState.js";

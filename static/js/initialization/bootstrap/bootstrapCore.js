@@ -7,16 +7,21 @@
  * Extracted from initialDISetup()
  */
 
-import { createLogDeliveryService } from "../../logDeliveryService.js";
 import { createDomAPI } from "../../utils/domAPI.js";
 import { createEventHandlers } from "../../eventHandler.js";
 import { createSafeHandler } from "../../safeHandler.js";
 import { createDomReadinessService } from "../../utils/domReadinessService.js";
 import { createLogger } from "../../logger.js";
 import { createCustomEventPolyfill } from "../../utils/polyfillCustomEvent.js";
-import { createEventService } from "../../../services/eventService.js";
+import { createEventService } from "../../services/eventService.js";
 import { createUIStateService } from "../../uiStateService.js";
 import { setBrowserService as registerSessionBrowserService, getSessionId as coreGetSessionId } from "../../utils/session.js";
+
+// Statically import modules that were previously loaded with dynamic `import()`.
+import { createTokenStatsManagerProxy } from "../../tokenStatsManagerProxy.js";
+import { createAuthFormHandler } from "../../authFormHandler.js";
+import { createAuthApiService } from "../../authApiService.js";
+import { createAuthStateManager } from "../../authStateManager.js";
 
 export function createBootstrapCore(opts) {
     const { DependencySystem, browserService, APP_CONFIG } = opts;
@@ -183,7 +188,6 @@ export function createBootstrapCore(opts) {
         };
 
         // Register token stats proxy
-        const { createTokenStatsManagerProxy } = await import("../../tokenStatsManagerProxy.js");
         const tokenStatsProxy = createTokenStatsManagerProxy({ DependencySystem, logger });
         DependencySystem.register('tokenStatsManagerProxy', tokenStatsProxy);
 
@@ -192,10 +196,6 @@ export function createBootstrapCore(opts) {
         DependencySystem.register('uiStateService', uiStateService);
 
         // Register auth component factories
-        const { createAuthFormHandler } = await import("../../authFormHandler.js");
-        const { createAuthApiService } = await import("../../authApiService.js");
-        const { createAuthStateManager } = await import("../../authStateManager.js");
-
         const authFormHandler = createAuthFormHandler({
             domAPI, sanitizer, eventHandlers, logger, safeHandler
         });
@@ -216,6 +216,16 @@ export function createBootstrapCore(opts) {
         DependencySystem.register('authStateManager', authStateManager);
 
         // Return all created services
+        // Start background factory registration (non-blocking)
+        try {
+            // Intentionally not awaited – side-effects only.
+            registerFactories();
+        } catch (err) {
+            logger.warn('[bootstrapCore] registerFactories() failed', err, {
+                context: 'bootstrapCore:registerFactories'
+            });
+        }
+
         return {
             logger,
             eventHandlers,
