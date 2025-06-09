@@ -38,7 +38,9 @@ export function createConversationManager({
   if (!eventBus) throw new Error('[ConversationManager] eventBus dependency missing');
 
   const MODULE_CONTEXT = 'ConversationManager';
-  
+
+  const _emit = (name, detail) => eventService.emit(name, detail);
+
   // Internal state
   const state = {
     currentConversationId: null,

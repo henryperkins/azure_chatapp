@@ -56,7 +56,7 @@ export function createChatManager({
   /* ------------------------------------------------------------------ */
   // Use the unified eventService bus instead of a private EventTarget to
   // avoid event-system fragmentation.
-  const chatBus = eventService?.getAppBus?.() || eventService?._getBus?.();
+  // const chatBus = eventService?.getAppBus?.() || eventService?._getBus?.(); // unused
 
   let inputField = null;
   let sendButton = null;
