@@ -23,3 +23,31 @@ Cline/*
 # Ignore large local installer files
 google-chrome-stable_current_amd64.deb
 coverage/
+
+# ---------- Added standard ignores ----------
+# Python bytecode / packaging
+*.py[cod]
+__pypackages__/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Editor & IDE folders
+.vscode/
+.idea/
+
+# OS-generated files
+.DS_Store
+Thumbs.db
+
+# Coverage output
+.coverage
+coverage.xml
+htmlcov/
+
+# Build / distribution artefacts
+dist/
+build/
+
+# Logs
+*.log
