@@ -140,11 +140,11 @@ export function createBootstrapCore(opts) {
         }
 
         // Create real safeHandler with logger
-        const { safeHandler } = createSafeHandler({ logger });
+        const safeHandlerInstance = createSafeHandler({ logger });
 
         // Upgrade eventHandlers with real safeHandler
         if (typeof eventHandlers.setSafeHandler === 'function') {
-            eventHandlers.setSafeHandler(safeHandler);
+            eventHandlers.setSafeHandler(safeHandlerInstance.safeHandler);
         }
 
         // Register core objects into DependencySystem
@@ -152,7 +152,7 @@ export function createBootstrapCore(opts) {
         DependencySystem.register('logger', logger);
         DependencySystem.register('sanitizer', sanitizer);
         DependencySystem.register('domPurify', sanitizer); // legacy alias
-        DependencySystem.register('safeHandler', safeHandler);
+        DependencySystem.register('safeHandler', safeHandlerInstance.safeHandler);
         DependencySystem.register('createChatManager', opts.createChatManager);
         DependencySystem.register('domAPI', domAPI);
         DependencySystem.register('eventHandlers', eventHandlers);
