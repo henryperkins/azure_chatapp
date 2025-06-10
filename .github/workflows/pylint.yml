@@ -70,6 +70,14 @@ jobs:
         path: pylint-report.txt
         if-no-files-found: ignore
 
+    # ----------------------------------------------------------------------------
+    # Codecov upload
+    # ----------------------------------------------------------------------------
+    - name: Upload coverage reports to Codecov
+      uses: codecov/codecov-action@v5
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+
   security-scan:
     runs-on: ubuntu-latest
     needs: lint

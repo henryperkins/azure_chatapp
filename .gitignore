@@ -22,3 +22,4 @@ sam-installation/*
 Cline/*
 # Ignore large local installer files
 google-chrome-stable_current_amd64.deb
+coverage/

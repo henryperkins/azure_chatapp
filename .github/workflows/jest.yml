@@ -1,0 +1,53 @@
+name: JavaScript / Jest CI
+
+on:
+  push:
+    branches: [ main, after-claude ]
+    paths:
+      - '**/*.js'
+      - 'package.json'
+      - 'jest.config.cjs'
+      - '.github/workflows/jest.yml'
+  pull_request:
+    paths:
+      - '**/*.js'
+      - 'package.json'
+      - 'jest.config.cjs'
+      - '.github/workflows/jest.yml'
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Jest on Node ${{ matrix.node-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: ["18.x", "20.x"]
+      fail-fast: false
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install dependencies (npm ci)
+        run: npm ci --prefer-offline --no-audit --fund=false
+
+      - name: Run Jest unit tests with coverage
+        run: npm test -- --coverage --ci
+
+      - name: Upload Jest coverage to Codecov
+        if: success()
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage/lcov.info
+          flags: unit,jest
+          name: jest-coverage
+          fail_ci_if_error: true
+          verbose: false
