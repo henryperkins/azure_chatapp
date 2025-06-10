@@ -136,20 +136,15 @@ export function createAppInitializer(opts = {}) {
             timestamp: Date.now()
         });
         
-        if (!appModule.state.isReady) {
-            logger.info('[appInitializer] Emitting final app:ready event', { 
-                context: 'appInitializer:finalEmit',
-                timestamp: Date.now()
-            });
+        if (appModule.state.isReady) {
             coreServices.domReadinessService.emitReplayable('app:ready');
-            logger.info('[appInitializer] Final app:ready event emitted', { 
+            logger.info('[appInitializer] app:ready event emitted', {
                 context: 'appInitializer:finalEmit',
                 timestamp: Date.now()
             });
         } else {
-            logger.info('[appInitializer] Skipping app:ready emit - already ready', { 
-                context: 'appInitializer:finalEmit',
-                isReady: appModule.state.isReady
+            logger.info('[appInitializer] app not marked ready – skipping app:ready emit', {
+                context: 'appInitializer:finalEmit'
             });
         }
 

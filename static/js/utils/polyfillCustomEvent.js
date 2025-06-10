@@ -5,12 +5,19 @@ export function createCustomEventPolyfill({ browserService, logger } = {}) {
   if (typeof win.CustomEvent === 'function')
     return { applied: false, cleanup () {} };
 
-  function CustomEvent(event, params = { bubbles:false, cancelable:false, detail:undefined }) {
-    const evt = doc.createEvent('CustomEvent');
-    evt.initCustomEvent(event, params.bubbles, params.cancelable, params.detail);
-    return evt;
+  function CustomEvent(event, params = { bubbles: false, cancelable: false, detail: undefined }) {
+    if (typeof doc?.createEvent === 'function') {
+      const evt = doc.createEvent('CustomEvent');
+      evt.initCustomEvent(event, params.bubbles, params.cancelable, params.detail);
+      return evt;
+    }
+    return { type: event, detail: params.detail, bubbles: params.bubbles, cancelable: params.cancelable };
   }
-  CustomEvent.prototype = win.Event.prototype;
+
+  if (typeof win.Event === 'function') {
+    CustomEvent.prototype = win.Event.prototype;
+  }
+
   win.CustomEvent = CustomEvent;
 
   logger?.info?.('[CustomEventPolyfill] applied', { context: 'CustomEventPolyfill' });
