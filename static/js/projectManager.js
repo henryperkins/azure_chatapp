@@ -1169,6 +1169,7 @@ export function createProjectManager({
     domReadinessService,
     logger,
     timer,
+    eventHandlers,
     eventService,
     ...otherDeps
   };

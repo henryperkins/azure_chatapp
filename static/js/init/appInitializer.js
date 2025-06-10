@@ -115,6 +115,15 @@ export function createAppInitializer(opts = {}) {
         // Execute phases sequentially
         await phaseRunner('services:basic', () => serviceInit.registerBasicServices());
         await phaseRunner('services:advanced', () => serviceInit.registerAdvancedServices());
+        
+        // Debug: Check if auth module is registered after advanced services
+        const authAfterServices = DependencySystem.modules.get('auth');
+        logger.info('[appInitializer] Auth module status after services phase:', {
+            isRegistered: !!authAfterServices,
+            hasInit: !!(authAfterServices && authAfterServices.init),
+            context: 'appInitializer:debug'
+        });
+        
         await phaseRunner('errors', () => errorInit.initializeErrorHandling());
         await phaseRunner('core', () => coreInit.initializeCoreSystems());
         await phaseRunner('auth', () => authInit.initializeAuthSystem());

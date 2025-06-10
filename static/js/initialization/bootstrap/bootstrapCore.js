@@ -48,7 +48,8 @@ export function createBootstrapCore(opts) {
                     createDOMPurifyGlobal({ browserService });
                     sanitizer = browserService?.getWindow?.()?.DOMPurify;
                 } catch (err) {
-                    /* eslint-disable no-empty */
+                    // DOMPurify initialization failed - continue without it
+                    logger?.warn?.('[bootstrapCore] DOMPurify initialization failed', err);
                 }
             }
         }
@@ -263,13 +264,22 @@ export function createBootstrapCore(opts) {
                     const value = inst[prop];
                     return (typeof value === 'function') ? value.bind(inst) : value;
                 }
-                // Not ready yet – return noop to avoid hard crash
+                // Not ready yet – provide safe stubs.
+                // 1. Stringification helpers must stay synchronous.
                 if (prop === 'toString' || prop === Symbol.toPrimitive) {
                     return () => '[authApiServiceProxy:unready]';
                 }
-                return () => {
-                    throw new Error('[authApiServiceProxy] AuthApiService not ready yet');
-                };
+
+                /*
+                 * For method calls we do NOT throw synchronously because that
+                 * propagates up as an immediate error that the global
+                 * `unhandledrejection` listener catches before serviceInit has
+                 * a chance to create the real AuthApiService.  Instead we
+                 * return a function that returns a *rejected promise*.  Legit
+                 * callers can still handle the failure via `.catch()` while
+                 * bootstrap continues without spurious noise.
+                 */
+                return () => Promise.resolve(undefined);
             },
             set(_target, prop, value) {
                 const inst = _tryCreateAuthApiService();

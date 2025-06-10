@@ -46,6 +46,7 @@ export function createCoreInit(deps = {}) {
     eventHandlers,
     domReadinessService,
     sanitizer,
+    APP_CONFIG,
 
     // Injected factory helpers (may be undefined)
     createChatManager : injectedCreateChatManager,
@@ -109,6 +110,7 @@ export function createCoreInit(deps = {}) {
       logger.error('[coreInit] Failed to bootstrap ModalManager', err, { context: 'coreInit:modalManager' });
       throw err;
     }
+
 
     /* ---------------- Project Manager ---------------- */
     try {

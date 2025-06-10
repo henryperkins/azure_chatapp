@@ -31,7 +31,7 @@ export function createMessageHandler({
       chatUIEnhancements?.scrollToBottom?.();
       return resp?.data ?? null;
     } catch (err) {
-      logger.error('[MessageHandler] sendMessage failed', err); // eslint-disable-line
+      logger.error('[MessageHandler] sendMessage failed', err);  
       throw err;
     }
   }
@@ -42,7 +42,7 @@ export function createMessageHandler({
       const resp = await apiRequest.post('/tokens/estimate', { text: inputText });
       return resp?.data?.tokens ?? 0;
     } catch (err) {
-      logger.warn('[MessageHandler] token estimation failed', err); // eslint-disable-line
+      logger.warn('[MessageHandler] token estimation failed', err);  
       return 0;
     }
   }

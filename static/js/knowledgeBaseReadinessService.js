@@ -13,7 +13,7 @@
  * appInitializer.js – serviceInit.registerAdvancedServices).
  */
 
-/* eslint-disable consistent-return */
+ 
 
 export function createKnowledgeBaseReadinessService({
   DependencySystem,
@@ -136,7 +136,7 @@ export function createKnowledgeBaseReadinessService({
       if (status?.available) return status;
       attempt += 1;
       if (attempt < maxAttempts) {
-        // eslint-disable-next-line no-await-in-loop
+         
         await new Promise((r) => setTimeout(r, interval));
       }
     }

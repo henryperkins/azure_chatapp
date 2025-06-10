@@ -7,7 +7,20 @@
  * ~150 lines
  */
 
+import { createAuth } from "../../auth.js";
+
 export function createServiceInit(deps) {
+    // Debug: Check what we're getting in deps
+    const logger = deps.logger;
+    if (logger && logger.info) {
+        logger.info('[serviceInit] Dependency check at creation:', {
+            hasCreateApiClient: !!(deps.createApiClient),
+            hasGlobalUtils: !!(deps.globalUtils),
+            depsKeys: Object.keys(deps).sort(),
+            context: 'serviceInit:constructor'
+        });
+    }
+    
     const {
         DependencySystem, domAPI, browserService, eventHandlers,
         domReadinessService, sanitizer, APP_CONFIG, getSessionId,
@@ -67,27 +80,40 @@ export function createServiceInit(deps) {
         if (typeof createApiEndpoints !== 'function') {
             throw new Error('[serviceInit] createApiEndpoints factory missing.');
         }
-        const apiEndpointsInstance = createApiEndpoints({ logger, DependencySystem, config: APP_CONFIG });
-        const resolvedEndpoints = apiEndpointsInstance; // Assuming createApiEndpoints returns the endpoints object directly
-        safeRegister('apiEndpoints', resolvedEndpoints);
-
-        logger.debug('[serviceInit] API endpoints registered.', {
-            endpointCount: Object.keys(resolvedEndpoints).length,
-            context: 'serviceInit:registerBasicServices'
-        });
+        
+        try {
+            const apiEndpointsInstance = createApiEndpoints({ logger, DependencySystem, config: APP_CONFIG });
+            const resolvedEndpoints = apiEndpointsInstance.endpoints; // Get the endpoints from the factory result
+            safeRegister('apiEndpoints', resolvedEndpoints);
+            
+            logger.debug('[serviceInit] API endpoints created and registered.', {
+                endpointCount: Object.keys(resolvedEndpoints).length,
+                hasAuthEndpoints: !!(resolvedEndpoints.AUTH_LOGIN && resolvedEndpoints.AUTH_CSRF),
+                context: 'serviceInit:registerBasicServices'
+            });
+        } catch (err) {
+            logger.error('[serviceInit] Failed to create API endpoints', err, {
+                context: 'serviceInit:registerBasicServices'
+            });
+            throw err;
+        }
 
         logger.info('[serviceInit] Basic services registration completed.', {
             context: 'serviceInit:registerBasicServices'
         });
     }
 
-    function registerAdvancedServices() {
+    async function registerAdvancedServices() {
         logger.info('[serviceInit] Starting registration of advanced services...', {
             context: 'serviceInit:registerAdvancedServices'
         });
 
         // API Client creation and registration
         let apiClientInstance = null;
+        logger.info(`[serviceInit] API client creation check: createApiClient=${!!createApiClient}, globalUtils=${!!globalUtils}`, {
+            context: 'serviceInit:registerAdvancedServices'
+        });
+        
         if (createApiClient && globalUtils) {
             logger.debug('[serviceInit] Creating API client...', {
                 context: 'serviceInit:registerAdvancedServices'
@@ -118,6 +144,12 @@ export function createServiceInit(deps) {
             safeRegister('apiClientObject', apiClientInstance);
 
             logger.debug('[serviceInit] API client created and registered.', {
+                context: 'serviceInit:registerAdvancedServices'
+            });
+        } else {
+            logger.error('[serviceInit] Cannot create API client - missing dependencies', {
+                hasCreateApiClient: !!createApiClient,
+                hasGlobalUtils: !!globalUtils,
                 context: 'serviceInit:registerAdvancedServices'
             });
         }
@@ -223,6 +255,53 @@ export function createServiceInit(deps) {
                 logger.error('[serviceInit] Failed to initialize LogDeliveryService', err, {
                     context: 'serviceInit:registerAdvancedServices'
                 });
+            }
+        }
+
+        // --------------------------------------------------------------
+        // Auth Module – requires apiClient to be available
+        // --------------------------------------------------------------
+        if (apiClientInstance) {
+            try {
+                if (!DependencySystem.modules.get('auth')) {
+                    logger.info('[serviceInit] Creating Auth module...', {
+                        context: 'serviceInit:registerAdvancedServices'
+                    });
+
+
+                    const authModule = createAuth({
+                        apiClient: apiClientInstance,
+                        logger,
+                        domReadinessService,
+                        eventHandlers,
+                        domAPI,
+                        sanitizer,
+                        apiEndpoints: DependencySystem.modules.get('apiEndpoints'),
+                        safeHandler: DependencySystem.modules.get('safeHandler'),
+                        browserService,
+                        eventService: DependencySystem.modules.get('eventService'),
+                        appModule: DependencySystem.modules.get('appModule'),
+                        storageService: browserService, // browserService provides storage methods
+                        modalManager: DependencySystem.modules.get('modalManager') || null, // Optional dependency
+                        DependencySystem,
+                        APP_CONFIG: deps.APP_CONFIG
+                    });
+
+                    safeRegister('auth', authModule);
+                    
+                    if (typeof authModule.init === 'function') {
+                        await authModule.init();
+                    }
+
+                    logger.info('[serviceInit] Auth module created and registered successfully.', {
+                        context: 'serviceInit:registerAdvancedServices'
+                    });
+                }
+            } catch (err) {
+                logger.error('[serviceInit] Failed to initialize Auth Module', err, {
+                    context: 'serviceInit:registerAdvancedServices'
+                });
+                throw err;
             }
         }
 

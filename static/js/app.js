@@ -38,7 +38,7 @@ import { createProjectDetailsEnhancements } from './project-details-enhancements
 import { createTokenStatsManager } from './tokenStatsManager.js';
 import { createLogDeliveryService } from './logDeliveryService.js';
 import { createModalManager } from './modalManager.js';
-import { createAuthModule } from './auth.js';
+import { createAuth } from './auth.js';
 import { createProjectManager } from './projectManager.js';
 import { createModelConfig } from './modelConfig.js';
 import { createProjectDashboard } from './projectDashboard.js';
@@ -86,7 +86,7 @@ const factories = {
   createTokenStatsManager,
   createLogDeliveryService,
   createModalManager,
-  createAuthModule,
+  createAuth,
   createProjectManager,
   createModelConfig,
   createProjectDashboard,
@@ -105,6 +105,16 @@ const factories = {
   createProjectEventHandlers
 };
 
+// Create globalUtils object for services that need it
+const globalUtils = {
+  shouldSkipDedup,
+  stableStringify,
+  isAbsoluteUrl,
+  formatBytes: globalFormatBytes,
+  formatDate: globalFormatDate,
+  fileIcon: globalFileIcon
+};
+
 const appInit = createAppInitializer({
   DependencySystem,
   browserService,
@@ -116,9 +126,11 @@ const appInit = createAppInitializer({
   globalFormatDate,
   globalFileIcon,
   isValidProjectId,
+  globalUtils,
   MODAL_MAPPINGS,
   // Top-level factories required by createAppInitializer
   createApiEndpoints,
+  createApiClient,
   createChatManager,
   // UIInit mandatory factories
   createKnowledgeBaseComponent,
