@@ -65,7 +65,10 @@ export function createProjectListComponent(deps) {
     let element = null;
     let gridElement = null;
     let isRendering = false;
-    const eventBus = eventService || new EventTarget();
+    if (!eventService) {
+        throw new Error('[ProjectListComponent] eventService is required');
+    }
+    const eventBus = eventService;
 
     // Migrate state to UIStateService
     const STATE_COMPONENT = 'ProjectListComponent';

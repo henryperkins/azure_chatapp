@@ -13,14 +13,14 @@ export function createUIInit(deps) {
         domReadinessService, logger, APP_CONFIG, safeHandler,
         sanitizer, createProjectDetailsEnhancements,
         createTokenStatsManager, createKnowledgeBaseComponent,
-        uiUtils
+        createChatExtensions, uiUtils
     } = deps;
 
     if (!DependencySystem || !domAPI || !browserService || !eventHandlers ||
         !domReadinessService || !logger || !APP_CONFIG || !safeHandler ||
         !sanitizer || !createProjectDetailsEnhancements ||
         !createTokenStatsManager || !createKnowledgeBaseComponent ||
-        !domReadinessService || !uiUtils) {
+        !createChatExtensions || !domReadinessService || !uiUtils) {
         throw new Error('[uiInit] Missing required dependencies for UI initialization.');
     }
 
@@ -434,6 +434,28 @@ export function createUIInit(deps) {
                 } catch (err) {
                     logger.error('[uiInit] AccessibilityUtils.init failed', err, { context: 'uiInit' });
                 }
+            }
+
+            // Initialize chat extensions if feature enabled
+            try {
+                const chatExtensions = createChatExtensions({
+                    DependencySystem,
+                    eventHandlers,
+                    domAPI,
+                    domReadinessService,
+                    logger,
+                    extChatEnabled: true // Enable by default, can be feature-flagged later
+                });
+                
+                DependencySystem.register('chatExtensions', chatExtensions);
+                
+                if (chatExtensions.init) {
+                    await chatExtensions.init();
+                    logger.debug('[uiInit] ChatExtensions initialized', { context: 'uiInit' });
+                }
+            } catch (err) {
+                // Don't fail the entire UI init if chat extensions fail
+                logger.warn('[uiInit] ChatExtensions initialization failed', err, { context: 'uiInit' });
             }
 
             _uiInitialized = true;

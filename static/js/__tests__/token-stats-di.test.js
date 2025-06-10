@@ -86,6 +86,7 @@ test('tokenStatsManager placeholder exists before coreInit', async () => {
     browserService: createStubBrowserService(),
     createChatManager: () => ({}),
     createApiEndpoints: () => createStubApiEndpoints(),
+    createChatExtensions: () => ({ init: () => {}, cleanup: () => {} }),
     APP_CONFIG: {
       TIMEOUTS: { DOM_READY: 1000 }
     },

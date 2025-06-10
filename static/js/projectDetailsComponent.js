@@ -262,7 +262,6 @@ class ProjectDetailsComponent {
 
     this.projectData = null;
     this.listenersContext = MODULE_CONTEXT + "_listeners";
-    // this.bus = new EventTarget();
     this.fileUploadComponent = null;
     this.elements = {};
     // Phase-1.3: Store injected authModule instead of runtime lookup

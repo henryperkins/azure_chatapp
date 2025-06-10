@@ -67,5 +67,9 @@
   "static/js/modalRenderer.js",
   "static/js/modalStateManager.js",
   "static/js/modalFormHandler.js",
-  "static/js/projectEventHandlers.js"
+  "static/js/projectEventHandlers.js",
+  "static/js/components/authHeaderUI.js",
+  "static/js/utils/pullToRefresh.js",
+  "static/js/knowledgeBaseReadinessService.js",
+  "static/js/pollingService.js"
 ]

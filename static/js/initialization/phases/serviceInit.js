@@ -13,18 +13,13 @@ export function createServiceInit(deps) {
         domReadinessService, sanitizer, APP_CONFIG, getSessionId,
         uiUtils, globalUtils, createFileUploadComponent,
         createApiEndpoints, createApiClient, createAccessibilityEnhancements,
-        createNavigationService, createHtmlTemplateLoader, createUiRenderer
+        createNavigationService, createHtmlTemplateLoader, createUiRenderer,
+        logger, errorReporter
     } = deps;
 
-    let logger = DependencySystem?.modules?.get('logger');
-
     if (!DependencySystem || !domAPI || !browserService || !eventHandlers ||
-        !domReadinessService || !sanitizer || !APP_CONFIG || !getSessionId) {
+        !domReadinessService || !sanitizer || !APP_CONFIG || !getSessionId || !logger || !errorReporter) {
         throw new Error('[serviceInit] Missing required dependencies for service initialization.');
-    }
-
-    if (!logger) {
-        throw new Error('[serviceInit] Logger instance is required; fallback removed.');
     }
 
     function safeRegister(name, value) {
@@ -48,11 +43,8 @@ export function createServiceInit(deps) {
         safeRegister('eventHandlers', eventHandlers);
         safeRegister('domReadinessService', domReadinessService);
 
-        const existingErrorReporter = DependencySystem.modules.get('errorReporter');
-        if (!existingErrorReporter) {
-            throw new Error('[serviceInit] errorReporter module must be registered before ServiceInit runs.');
-        }
-        safeRegister('errorReporter', existingErrorReporter);
+        // Register the injected errorReporter (no runtime lookup needed)
+        safeRegister('errorReporter', errorReporter);
 
         if (uiUtils) safeRegister('uiUtils', uiUtils);
         if (globalUtils) safeRegister('globalUtils', globalUtils);

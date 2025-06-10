@@ -42,6 +42,7 @@ import { createProjectManager } from './projectManager.js';
 import { createModelConfig } from './modelConfig.js';
 import { createProjectDashboard } from './projectDashboard.js';
 import { createChatManager } from './chat.js';
+import { createChatExtensions } from './chatExtensions.js';
 import { createProjectDetailsComponent } from './projectDetailsComponent.js';
 import { createProjectListComponent } from './projectListComponent.js';
 import { createProjectModal } from './modalManager.js';
@@ -88,6 +89,7 @@ const factories = {
   createModelConfig,
   createProjectDashboard,
   createChatManager,
+  createChatExtensions,
   createProjectDetailsComponent,
   createProjectListComponent,
   createProjectModal,
@@ -120,6 +122,7 @@ const appInit = createAppInitializer({
   createKnowledgeBaseComponent,
   createProjectDetailsEnhancements,
   createTokenStatsManager,
+  createChatExtensions,
   // new pattern
   factories,
   // prerequisite factories (previously executed here)

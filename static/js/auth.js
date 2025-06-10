@@ -58,7 +58,10 @@ export function createAuth(deps) {
   });
 
   // === LEGACY EVENT BUS SUPPORT ===
-  const AuthBus = eventService.getAuthBus ? eventService.getAuthBus() : new EventTarget();
+  if (!eventService.getAuthBus) {
+    throw new Error('[auth] eventService.getAuthBus() is required');
+  }
+  const AuthBus = eventService.getAuthBus();
 
   // === APP STATE INTEGRATION ===
   function getAppState() {

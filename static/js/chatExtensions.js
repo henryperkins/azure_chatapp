@@ -155,20 +155,8 @@ export function createChatExtensions(options = {}) {
     }
   }
 
-  // Register instance in DI container before exposing public API so that other
-  // modules can resolve it immediately. The guard-rails allow registration at
-  // factory-execution time inside appInitializer-imported modules.
-  try {
-    if (typeof DependencySystem?.modules?.get === 'function' &&
-        !DependencySystem.modules.get('chatExtensions') &&
-        typeof DependencySystem.register === 'function') {
-      DependencySystem.register('chatExtensions', { init, destroy, cleanup: destroy });
-    }
-  } catch (regErr) {
-    try {
-      logger?.warn?.('[chatExtensions] Failed to register instance in DependencySystem', regErr, { context: MODULE_CONTEXT });
-    } catch {/* noop */}
-  }
+  // Note: Registration is handled by the calling module (e.g., appInitializer)
+  // to maintain centralized DI management
 
   return { init, destroy, cleanup: destroy };
 }
