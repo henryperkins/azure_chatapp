@@ -482,6 +482,25 @@ export function createDomReadinessService({
       ttl: now + REPLAY_CONFIG.ttlMs
     });
 
+    // Diagnostic assertion for app:ready caching
+    if (eventName === 'app:ready') {
+      const cached = firedEvents.get('app:ready');
+      if (!cached) {
+        _logger.error?.('[domReadinessService] ASSERTION FAILED: app:ready not found in cache after set', {
+          eventName,
+          cacheSize: firedEvents.size,
+          allCachedEvents: Array.from(firedEvents.keys())
+        });
+      } else {
+        _logger.info?.('[domReadinessService] app:ready successfully cached', {
+          eventName,
+          cacheSize: firedEvents.size,
+          timestamp: cached.timestamp,
+          ttl: cached.ttl
+        });
+      }
+    }
+
     // Start cleanup interval timer if not started
     startCleanupTimer();
 

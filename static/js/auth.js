@@ -412,14 +412,29 @@ export function createAuth(deps) {
         });
       }
 
-      // Wait for global "app:ready" event with extended timeout. Use configurable
-      // APP_READY_WAIT so slower devices/network conditions do not cause a
-      // bootstrap dead-letter. Falls back to 30 s if the config key is missing.
-      const appReadyTimeout = APP_CONFIG?.TIMEOUTS?.APP_READY_WAIT ?? 30000;
-      await domReadinessService.waitForEvent('app:ready', { timeout: appReadyTimeout, context: MODULE_CONTEXT + ':initialize' });
+      // NOTE: Removed app:ready wait to fix circular dependency issue.
+      // AuthModule runs in services:advanced phase, but app:ready is emitted in ui phase.
+      // This was causing a deadlock where AuthModule waits for an event that only fires
+      // after AuthModule completes. The DOM and dependencies should be ready by this point
+      // in the initialization sequence.
+      logger.info('[AuthModule] Skipping app:ready wait - running in services:advanced phase', {
+        context: MODULE_CONTEXT + ':initialize',
+        phase: 'services:advanced'
+      });
 
-      // Verify current session
-      await verifySession();
+      // Verify current session (non-blocking during initialization)
+      try {
+        await verifySession();
+      } catch (error) {
+        logger.warn('[AuthModule] Session verification failed during initialization - continuing with unauthenticated state', error, {
+          context: MODULE_CONTEXT + ':initialize'
+        });
+        // Set unauthenticated state but don't fail initialization
+        updateAppState({
+          isAuthenticated: false,
+          currentUser: null
+        });
+      }
 
       // Set up periodic session verification
       if (stateManager.isAuthenticated() && stateManager.shouldVerifySession(60000)) {

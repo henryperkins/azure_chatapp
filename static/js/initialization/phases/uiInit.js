@@ -364,11 +364,24 @@ export function createUIInit(deps) {
 
             // Emit early readiness events
             try {
+                logger.info('[uiInit] About to emit early app:ready event', { 
+                    context: 'uiInit:earlyAppReady',
+                    timestamp: Date.now()
+                });
                 domReadinessService.emitReplayable('app:ready');
+                logger.info('[uiInit] Early app:ready event emitted successfully', { 
+                    context: 'uiInit:earlyAppReady',
+                    timestamp: Date.now()
+                });
+                
                 const appModule = DependencySystem.modules.get('appModule');
                 appModule.setAppLifecycleState({ isReady: true, currentPhase: 'ui_ready_partial' });
+                logger.info('[uiInit] App state set to ready', { 
+                    context: 'uiInit:earlyAppReady',
+                    isReady: true
+                });
             } catch (earlyEmitErr) {
-                logger.warn('[uiInit] Early app:ready emit failed', earlyEmitErr, {
+                logger.error('[uiInit] Early app:ready emit failed', earlyEmitErr, {
                     context: 'uiInit:earlyAppReady'
                 });
             }

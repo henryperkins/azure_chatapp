@@ -113,7 +113,22 @@ export function createAuthApiService({
         config.body = JSON.stringify(body);
       }
 
+      logger.info(`[${MODULE}] Making request to ${endpoint}`, {
+        method,
+        hasBody: !!body,
+        headers: Object.keys(headers),
+        context: `${MODULE}:authRequest`
+      });
+
       const response = await apiClient(endpoint, config);
+      
+      logger.info(`[${MODULE}] Received response`, {
+        status: response?.status,
+        statusText: response?.statusText,
+        ok: response?.ok,
+        responseType: typeof response,
+        context: `${MODULE}:authRequest`
+      });
       
       if (!response.ok) {
         let errorMessage = `Request failed: ${response.status} ${response.statusText}`;

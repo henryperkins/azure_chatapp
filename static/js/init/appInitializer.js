@@ -115,15 +115,6 @@ export function createAppInitializer(opts = {}) {
         // Execute phases sequentially
         await phaseRunner('services:basic', () => serviceInit.registerBasicServices());
         await phaseRunner('services:advanced', () => serviceInit.registerAdvancedServices());
-        
-        // Debug: Check if auth module is registered after advanced services
-        const authAfterServices = DependencySystem.modules.get('auth');
-        logger.info('[appInitializer] Auth module status after services phase:', {
-            isRegistered: !!authAfterServices,
-            hasInit: !!(authAfterServices && authAfterServices.init),
-            context: 'appInitializer:debug'
-        });
-        
         await phaseRunner('errors', () => errorInit.initializeErrorHandling());
         await phaseRunner('core', () => coreInit.initializeCoreSystems());
         await phaseRunner('auth', () => authInit.initializeAuthSystem());
@@ -138,8 +129,28 @@ export function createAppInitializer(opts = {}) {
         });
 
         // Emit app ready event
+        logger.info('[appInitializer] Checking app ready state', { 
+            context: 'appInitializer:finalEmit',
+            isReady: appModule.state.isReady,
+            currentPhase: appModule.state.currentPhase,
+            timestamp: Date.now()
+        });
+        
         if (!appModule.state.isReady) {
+            logger.info('[appInitializer] Emitting final app:ready event', { 
+                context: 'appInitializer:finalEmit',
+                timestamp: Date.now()
+            });
             coreServices.domReadinessService.emitReplayable('app:ready');
+            logger.info('[appInitializer] Final app:ready event emitted', { 
+                context: 'appInitializer:finalEmit',
+                timestamp: Date.now()
+            });
+        } else {
+            logger.info('[appInitializer] Skipping app:ready emit - already ready', { 
+                context: 'appInitializer:finalEmit',
+                isReady: appModule.state.isReady
+            });
         }
 
         logger.info('[appInitializer] Boot sequence complete – app is READY');

@@ -8,28 +8,21 @@
  */
 
 import { createAuth } from "../../auth.js";
+import { createApiClient } from "../../utils/apiClient.js";
 
 export function createServiceInit(deps) {
-    // Debug: Check what we're getting in deps
-    const logger = deps.logger;
-    if (logger && logger.info) {
-        logger.info('[serviceInit] Dependency check at creation:', {
-            hasCreateApiClient: !!(deps.createApiClient),
-            hasGlobalUtils: !!(deps.globalUtils),
-            depsKeys: Object.keys(deps).sort(),
-            context: 'serviceInit:constructor'
-        });
-    }
     
     const {
         DependencySystem, domAPI, browserService, eventHandlers,
         domReadinessService, sanitizer, APP_CONFIG, getSessionId,
         uiUtils, globalUtils, createFileUploadComponent,
-        createApiEndpoints, createApiClient, createAccessibilityEnhancements,
+        createApiEndpoints, createAccessibilityEnhancements,
         createNavigationService, createHtmlTemplateLoader, createUiRenderer,
         createLogDeliveryService,
         errorReporter
     } = deps;
+    
+    // Use imported createApiClient since it's not being passed correctly in dependencies
     
     let { logger } = deps;
 
@@ -110,16 +103,14 @@ export function createServiceInit(deps) {
 
         // API Client creation and registration
         let apiClientInstance = null;
-        logger.info(`[serviceInit] API client creation check: createApiClient=${!!createApiClient}, globalUtils=${!!globalUtils}`, {
-            context: 'serviceInit:registerAdvancedServices'
-        });
         
         if (createApiClient && globalUtils) {
-            logger.debug('[serviceInit] Creating API client...', {
+            logger.info('[serviceInit] Creating API client...', {
                 context: 'serviceInit:registerAdvancedServices'
             });
 
-            apiClientInstance = createApiClient({
+            try {
+                apiClientInstance = createApiClient({
                 APP_CONFIG,
                 globalUtils: {
                     shouldSkipDedup: globalUtils.shouldSkipDedup,
@@ -131,26 +122,31 @@ export function createServiceInit(deps) {
                 browserService,
                 eventHandlers,
                 logger
-            });
+                });
 
-            // Register API client
-            if (DependencySystem.modules.has('apiRequest')) {
-                DependencySystem.modules.set('apiRequest', apiClientInstance.fetch);
-            } else {
-                safeRegister('apiRequest', apiClientInstance.fetch);
+                // Register API client
+                if (DependencySystem.modules.has('apiRequest')) {
+                    DependencySystem.modules.set('apiRequest', apiClientInstance.fetch);
+                } else {
+                    safeRegister('apiRequest', apiClientInstance.fetch);
+                }
+
+                safeRegister('apiClient', apiClientInstance.fetch);
+                safeRegister('apiClientObject', apiClientInstance);
+
+                logger.info('[serviceInit] API client created and registered.', {
+                    context: 'serviceInit:registerAdvancedServices'
+                });
+            } catch (error) {
+                logger.error('[serviceInit] Failed to create API client', error, {
+                    context: 'serviceInit:registerAdvancedServices'
+                });
             }
-
-            safeRegister('apiClient', apiClientInstance.fetch);
-            safeRegister('apiClientObject', apiClientInstance);
-
-            logger.debug('[serviceInit] API client created and registered.', {
-                context: 'serviceInit:registerAdvancedServices'
-            });
         } else {
             logger.error('[serviceInit] Cannot create API client - missing dependencies', {
-                hasCreateApiClient: !!createApiClient,
-                hasGlobalUtils: !!globalUtils,
-                context: 'serviceInit:registerAdvancedServices'
+                context: 'serviceInit:registerAdvancedServices',
+                createApiClient: !!createApiClient,
+                globalUtils: !!globalUtils
             });
         }
 
@@ -270,7 +266,7 @@ export function createServiceInit(deps) {
 
 
                     const authModule = createAuth({
-                        apiClient: apiClientInstance,
+                        apiClient: apiClientInstance.fetch,
                         logger,
                         domReadinessService,
                         eventHandlers,
