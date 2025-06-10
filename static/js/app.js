@@ -36,6 +36,7 @@ import { createUiRenderer } from './uiRenderer.js';
 import { createKnowledgeBaseComponent } from './knowledgeBaseComponent.js';
 import { createProjectDetailsEnhancements } from './project-details-enhancements.js';
 import { createTokenStatsManager } from './tokenStatsManager.js';
+import { createLogDeliveryService } from './logDeliveryService.js';
 import { createModalManager } from './modalManager.js';
 import { createAuthModule } from './auth.js';
 import { createProjectManager } from './projectManager.js';
@@ -83,6 +84,7 @@ const factories = {
   createKnowledgeBaseComponent,
   createProjectDetailsEnhancements,
   createTokenStatsManager,
+  createLogDeliveryService,
   createModalManager,
   createAuthModule,
   createProjectManager,
@@ -123,6 +125,7 @@ const appInit = createAppInitializer({
   createProjectDetailsEnhancements,
   createTokenStatsManager,
   createChatExtensions,
+  createLogDeliveryService,
   // new pattern
   factories,
   // prerequisite factories (previously executed here)

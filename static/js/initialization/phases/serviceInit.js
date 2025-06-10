@@ -14,8 +14,11 @@ export function createServiceInit(deps) {
         uiUtils, globalUtils, createFileUploadComponent,
         createApiEndpoints, createApiClient, createAccessibilityEnhancements,
         createNavigationService, createHtmlTemplateLoader, createUiRenderer,
-        logger, errorReporter
+        createLogDeliveryService,
+        errorReporter
     } = deps;
+    
+    let { logger } = deps;
 
     if (!DependencySystem || !domAPI || !browserService || !eventHandlers ||
         !domReadinessService || !sanitizer || !APP_CONFIG || !getSessionId || !logger || !errorReporter) {
@@ -192,6 +195,34 @@ export function createServiceInit(deps) {
                     }
                 });
                 safeRegister('uiRenderer', uiRendererInstance);
+            }
+        }
+
+        // --------------------------------------------------------------
+        // Client Log Delivery Service – send console logs to backend
+        // --------------------------------------------------------------
+        if (createLogDeliveryService && apiClientInstance) {
+            try {
+                const logDeliveryServiceInstance = createLogDeliveryService({
+                    apiClient: apiClientInstance,
+                    browserService,
+                    eventHandlers,
+                    enabled: true // Start immediately; respects internal batching
+                });
+
+                if (typeof logDeliveryServiceInstance.start === 'function') {
+                    logDeliveryServiceInstance.start();
+                }
+
+                safeRegister('logDeliveryService', logDeliveryServiceInstance);
+
+                logger.debug('[serviceInit] LogDeliveryService registered and started.', {
+                    context: 'serviceInit:registerAdvancedServices'
+                });
+            } catch (err) {
+                logger.error('[serviceInit] Failed to initialize LogDeliveryService', err, {
+                    context: 'serviceInit:registerAdvancedServices'
+                });
             }
         }
 

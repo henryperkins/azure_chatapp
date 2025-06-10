@@ -44,7 +44,10 @@ class Settings:
     APP_NAME = os.getenv("APP_NAME", "azure-chatapp")  # Added APP_NAME
 
     # Client logging configuration
-    CLIENT_LOG_FILE = os.getenv("CLIENT_LOG_FILE", "")  # Empty string = no file logging
+    # Location where client (browser) logs will be persisted. Defaults to
+    # a local relative file so that developers without console access can
+    # inspect the logs easily after running the application.
+    CLIENT_LOG_FILE = os.getenv("CLIENT_LOG_FILE", "client_logs.log")
     CLIENT_ERROR_DEDUP_TTL = int(
         os.getenv("CLIENT_ERROR_DEDUP_TTL", "300")
     )  # 5 minutes

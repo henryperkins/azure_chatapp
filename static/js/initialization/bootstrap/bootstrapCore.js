@@ -222,7 +222,7 @@ export function createBootstrapCore(opts) {
 
         // Register auth component factories
         const authFormHandler = createAuthFormHandler({
-            domAPI, sanitizer, eventHandlers, logger, safeHandler
+            domAPI, sanitizer, eventHandlers, logger, safeHandler: safeHandlerInstance.safeHandler
         });
         DependencySystem.register('authFormHandler', authFormHandler);
 
@@ -303,7 +303,7 @@ export function createBootstrapCore(opts) {
             logger,
             eventHandlers,
             domAPI,
-            safeHandler,
+            safeHandler: safeHandlerInstance.safeHandler,
             sanitizer,
             domReadinessService,
             uiUtils,
