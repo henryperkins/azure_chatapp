@@ -63,6 +63,11 @@ export function createServiceInit(deps) {
             safeRegister('FileUploadComponent', createFileUploadComponent);
         }
 
+        // No need to register tokenStatsManager placeholder here. bootstrapCore
+        // already exposes tokenStatsManagerProxy under both
+        // 'tokenStatsManagerProxy' *and* the canonical 'tokenStatsManager'
+        // module names.
+
         // Register API endpoints
         if (typeof createApiEndpoints !== 'function') {
             throw new Error('[serviceInit] createApiEndpoints factory missing.');

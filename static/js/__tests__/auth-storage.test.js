@@ -24,6 +24,7 @@ describe("Auth Token Storage Persistence", () => {
       browserService: { FormData: function() {}, setInterval: jest.fn(), clearInterval: jest.fn(), getWindow: () => ({}) },
       eventService: { getAuthBus: () => new EventTarget(), emit: jest.fn(), on: jest.fn(), off: jest.fn() },
       appModule: { state: { isAuthenticated: false }, setAuthState: jest.fn() },
+      APP_CONFIG: { AUTH_POLL_INTERVAL_MS: 60000 },
       storageService: fakeStorage,
       DependencySystem: {
         modules: {

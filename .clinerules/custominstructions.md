@@ -36,6 +36,42 @@ domReadinessService.documentReady().then(() => appInit.initializeApp());
 
 **No business logic, orchestration, or singleton allocation outside `app.js` and `appInitializer.js`.**
 
+#### 🆕 2025-06-10 – Initialization phases quick reference
+
+The refactor introduced a **strictly phased** boot sequence implemented under
+`static/js/initialization/`:
+
+| Phase (file) | Purpose | Registers / Emits |
+|-------------|---------|-------------------|
+| `bootstrap/bootstrapCore.js` | Core **infrastructure** (logger, domAPI, eventHandlers, safeHandler) and lightweight proxies such as **`tokenStatsManagerProxy`**. | `logger`, `domAPI`, `eventHandlers`, `eventService`, `uiStateService`, and **`tokenStatsManager` (proxy)** |
+| `state/appState.js` | Creates `appModule.state` single-source-of-truth. | `appModule`, legacy alias `app` |
+| `phases/serviceInit.js` | Basic → advanced service registration (apiEndpoints, apiClient, navigationService, …). | `apiEndpoints`, `apiRequest`, `navigationService`, … |
+| `phases/errorInit.js` | Global `window.error` + `unhandledrejection` hooks. | – |
+| `phases/coreInit.js` | Heavy managers (ModalManager, ProjectManager, ChatManager). | `modalManager`, `projectManager`, `chatManager` |
+| `phases/authInit.js` | AuthFormHandler, AuthApiService, AuthStateManager. | `authenticationService` plus legacy `AuthBus` alias via `eventService.getAuthBus()` |
+| `phases/uiInit.js` | Late-stage UI: ProjectDetailsEnhancements, **real** TokenStatsManager, navigation view wiring. | Replaces proxy with concrete `tokenStatsManager`, registers `projectDetailsEnhancements`, etc. |
+
+The canonical order executed by `createAppInitializer()` is:
+
+```
+serviceInit.registerBasicServices()
+serviceInit.registerAdvancedServices()
+errorInit.initializeErrorHandling()
+coreInit.initializeCoreSystems()
+authInit.initializeAuthSystem()
+uiInit.initializeUIComponents()
+```
+
+`uiInit` replaces any placeholders (e.g. `tokenStatsManagerProxy`) with the
+real implementation and **must** be the final phase before emitting
+`app:ready`.
+
+**Why this matters:** many test harnesses spin up only up to
+`registerAdvancedServices` to keep runtime small.  When you add a new service
+that downstream code depends on _during early initialization_, ensure it is
+registered in `bootstrapCore` or `serviceInit:basic` — never in later phases
+unless you update all tests accordingly.
+
 ---
 
 ### ❗ **DI and Canonical Factories**

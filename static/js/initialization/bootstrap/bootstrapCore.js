@@ -33,8 +33,26 @@ export function createBootstrapCore(opts) {
         // 1. Attach browserService to session for backward-compatibility
         registerSessionBrowserService(browserService);
 
-        // 2. Ensure DOMPurify (sanitizer) is available
-        const sanitizer = browserService?.getWindow?.()?.DOMPurify;
+        // 2. Ensure DOMPurify (sanitizer) is available.
+        // If it does not exist yet, attempt to lazily create it using the
+        // injected `createDOMPurifyGlobal` factory (added to opts by
+        // app.js).  This preserves the original safety check while avoiding
+        // a hard-failure during early bootstrap ordering.
+
+        let sanitizer = browserService?.getWindow?.()?.DOMPurify;
+
+        if (!sanitizer) {
+            const { createDOMPurifyGlobal } = opts;
+            if (typeof createDOMPurifyGlobal === 'function') {
+                try {
+                    createDOMPurifyGlobal({ browserService });
+                    sanitizer = browserService?.getWindow?.()?.DOMPurify;
+                } catch (err) {
+                    /* eslint-disable no-empty */
+                }
+            }
+        }
+
         if (!sanitizer) {
             throw new Error('[appInitializer] DOMPurify not found — cannot proceed (security requirement).');
         }
@@ -190,6 +208,13 @@ export function createBootstrapCore(opts) {
         // Register token stats proxy
         const tokenStatsProxy = createTokenStatsManagerProxy({ DependencySystem, logger });
         DependencySystem.register('tokenStatsManagerProxy', tokenStatsProxy);
+        // Alias: expose proxy under canonical name so downstream modules can
+        // safely `modules.get('tokenStatsManager')` before the real manager is
+        // ready.  uiInit later replaces this entry with the concrete
+        // implementation.
+        if (!DependencySystem.modules.get('tokenStatsManager')) {
+            DependencySystem.register('tokenStatsManager', tokenStatsProxy);
+        }
 
         // UI State Service
         const uiStateService = createUIStateService({ logger });
@@ -201,13 +226,61 @@ export function createBootstrapCore(opts) {
         });
         DependencySystem.register('authFormHandler', authFormHandler);
 
-        const authApiService = createAuthApiService({
-            apiClient: null, // will be set later
-            apiEndpoints: opts.apiEndpoints,
-            logger,
-            browserService
+        // AuthApiService requires a functional apiClient and apiEndpoints.
+        // These are only available after serviceInit's basic & advanced
+        // registrations.  Therefore we register *a factory wrapper* that can
+        // lazily create the real service on first access, once the
+        // dependencies exist.  This prevents an early boot failure while
+        // keeping the module name reserved in the DI container.
+
+        function _tryCreateAuthApiService() {
+            let instance = DependencySystem.modules.get('__authApiServiceReal');
+            if (instance) return instance;
+
+            const apiClient    = DependencySystem.modules.get('apiRequest')
+                              || DependencySystem.modules.get('apiClient');
+            const apiEndpoints = DependencySystem.modules.get('apiEndpoints') || opts.apiEndpoints;
+
+            if (!apiClient || !apiEndpoints) {
+                return null; // dependencies not ready yet
+            }
+
+            instance = createAuthApiService({
+                apiClient,
+                apiEndpoints,
+                logger,
+                browserService
+            });
+
+            DependencySystem.register('__authApiServiceReal', instance);
+            return instance;
+        }
+
+        const authApiServiceProxy = new Proxy({}, {
+            get(_target, prop) {
+                const inst = _tryCreateAuthApiService();
+                if (inst) {
+                    const value = inst[prop];
+                    return (typeof value === 'function') ? value.bind(inst) : value;
+                }
+                // Not ready yet – return noop to avoid hard crash
+                if (prop === 'toString' || prop === Symbol.toPrimitive) {
+                    return () => '[authApiServiceProxy:unready]';
+                }
+                return () => {
+                    throw new Error('[authApiServiceProxy] AuthApiService not ready yet');
+                };
+            },
+            set(_target, prop, value) {
+                const inst = _tryCreateAuthApiService();
+                if (inst) {
+                    inst[prop] = value;
+                }
+                return true;
+            }
         });
-        DependencySystem.register('authApiService', authApiService);
+
+        DependencySystem.register('authApiService', authApiServiceProxy);
 
         const authStateManager = createAuthStateManager({
             eventService, logger, browserService,

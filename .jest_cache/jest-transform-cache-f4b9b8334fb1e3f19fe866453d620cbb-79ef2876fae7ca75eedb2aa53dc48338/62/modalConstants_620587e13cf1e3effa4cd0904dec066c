@@ -1,0 +1,46 @@
+d4e3ff81d47d78c275b1768e2084c316
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.MODAL_MAPPINGS = void 0;
+exports.createModalConstants = createModalConstants;
+exports.default = void 0;
+/**
+ * modalConstants.js
+ * Centralized modal mapping contract for the application.
+ *
+ * This file defines the single source of truth for all modal logical keys and their corresponding DOM element IDs.
+ *
+ * When adding or modifying a modal, update this mapping and ensure the HTML template matches.
+ *
+ * Usage:
+ *   import { MODAL_MAPPINGS } from './modalConstants.js';
+*   // or via DI container registration name `modalMapping` (retrieved during bootstrap only).
+ */
+
+function createModalConstants() {
+  const MODAL_MAPPINGS = {
+    // moved inside: no top-level state
+    project: 'projectModal',
+    login: 'loginModal',
+    // Alias "register" maps to the same combined login/register dialog
+    register: 'loginModal',
+    delete: 'deleteConfirmModal',
+    confirm: 'confirmActionModal',
+    error: 'errorModal',
+    knowledge: 'knowledgeBaseSettingsModal',
+    knowledgeResult: 'knowledgeResultModal',
+    instructions: 'instructionsModal',
+    contentView: 'contentViewModal',
+    tokenStats: 'tokenStatsModal'
+  };
+  return {
+    MODAL_MAPPINGS,
+    cleanup() {}
+  };
+}
+var _default = exports.default = createModalConstants;
+const MODAL_MAPPINGS = exports.MODAL_MAPPINGS = createModalConstants().MODAL_MAPPINGS; // compat
+//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJuYW1lcyI6WyJjcmVhdGVNb2RhbENvbnN0YW50cyIsIk1PREFMX01BUFBJTkdTIiwicHJvamVjdCIsImxvZ2luIiwicmVnaXN0ZXIiLCJkZWxldGUiLCJjb25maXJtIiwiZXJyb3IiLCJrbm93bGVkZ2UiLCJrbm93bGVkZ2VSZXN1bHQiLCJpbnN0cnVjdGlvbnMiLCJjb250ZW50VmlldyIsInRva2VuU3RhdHMiLCJjbGVhbnVwIiwiX2RlZmF1bHQiLCJleHBvcnRzIiwiZGVmYXVsdCJdLCJzb3VyY2VzIjpbIm1vZGFsQ29uc3RhbnRzLmpzIl0sInNvdXJjZXNDb250ZW50IjpbIi8qKlxuICogbW9kYWxDb25zdGFudHMuanNcbiAqIENlbnRyYWxpemVkIG1vZGFsIG1hcHBpbmcgY29udHJhY3QgZm9yIHRoZSBhcHBsaWNhdGlvbi5cbiAqXG4gKiBUaGlzIGZpbGUgZGVmaW5lcyB0aGUgc2luZ2xlIHNvdXJjZSBvZiB0cnV0aCBmb3IgYWxsIG1vZGFsIGxvZ2ljYWwga2V5cyBhbmQgdGhlaXIgY29ycmVzcG9uZGluZyBET00gZWxlbWVudCBJRHMuXG4gKlxuICogV2hlbiBhZGRpbmcgb3IgbW9kaWZ5aW5nIGEgbW9kYWwsIHVwZGF0ZSB0aGlzIG1hcHBpbmcgYW5kIGVuc3VyZSB0aGUgSFRNTCB0ZW1wbGF0ZSBtYXRjaGVzLlxuICpcbiAqIFVzYWdlOlxuICogICBpbXBvcnQgeyBNT0RBTF9NQVBQSU5HUyB9IGZyb20gJy4vbW9kYWxDb25zdGFudHMuanMnO1xuKiAgIC8vIG9yIHZpYSBESSBjb250YWluZXIgcmVnaXN0cmF0aW9uIG5hbWUgYG1vZGFsTWFwcGluZ2AgKHJldHJpZXZlZCBkdXJpbmcgYm9vdHN0cmFwIG9ubHkpLlxuICovXG5cbmV4cG9ydCBmdW5jdGlvbiBjcmVhdGVNb2RhbENvbnN0YW50cygpIHtcbiAgY29uc3QgTU9EQUxfTUFQUElOR1MgPSB7ICAgICAgICAgICAvLyBtb3ZlZCBpbnNpZGU6IG5vIHRvcC1sZXZlbCBzdGF0ZVxuICAgIHByb2plY3Q6ICdwcm9qZWN0TW9kYWwnLFxuICAgIGxvZ2luOiAnbG9naW5Nb2RhbCcsXG4gICAgLy8gQWxpYXMgXCJyZWdpc3RlclwiIG1hcHMgdG8gdGhlIHNhbWUgY29tYmluZWQgbG9naW4vcmVnaXN0ZXIgZGlhbG9nXG4gICAgcmVnaXN0ZXI6ICdsb2dpbk1vZGFsJyxcbiAgICBkZWxldGU6ICdkZWxldGVDb25maXJtTW9kYWwnLFxuICAgIGNvbmZpcm06ICdjb25maXJtQWN0aW9uTW9kYWwnLFxuICAgIGVycm9yOiAnZXJyb3JNb2RhbCcsXG4gICAga25vd2xlZGdlOiAna25vd2xlZGdlQmFzZVNldHRpbmdzTW9kYWwnLFxuICAgIGtub3dsZWRnZVJlc3VsdDogJ2tub3dsZWRnZVJlc3VsdE1vZGFsJyxcbiAgICBpbnN0cnVjdGlvbnM6ICdpbnN0cnVjdGlvbnNNb2RhbCcsXG4gICAgY29udGVudFZpZXc6ICdjb250ZW50Vmlld01vZGFsJyxcbiAgICB0b2tlblN0YXRzOiAndG9rZW5TdGF0c01vZGFsJ1xuICB9O1xuICByZXR1cm4geyBNT0RBTF9NQVBQSU5HUywgY2xlYW51cCgpIHt9IH07XG59XG5cbmV4cG9ydCBkZWZhdWx0IGNyZWF0ZU1vZGFsQ29uc3RhbnRzO1xuZXhwb3J0IGNvbnN0IE1PREFMX01BUFBJTkdTID0gY3JlYXRlTW9kYWxDb25zdGFudHMoKS5NT0RBTF9NQVBQSU5HUzsgLy8gY29tcGF0XG4iXSwibWFwcGluZ3MiOiI7Ozs7Ozs7O0FBQUE7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBO0FBQ0E7QUFDQTtBQUNBOztBQUVPLFNBQVNBLG9CQUFvQkEsQ0FBQSxFQUFHO0VBQ3JDLE1BQU1DLGNBQWMsR0FBRztJQUFZO0lBQ2pDQyxPQUFPLEVBQUUsY0FBYztJQUN2QkMsS0FBSyxFQUFFLFlBQVk7SUFDbkI7SUFDQUMsUUFBUSxFQUFFLFlBQVk7SUFDdEJDLE1BQU0sRUFBRSxvQkFBb0I7SUFDNUJDLE9BQU8sRUFBRSxvQkFBb0I7SUFDN0JDLEtBQUssRUFBRSxZQUFZO0lBQ25CQyxTQUFTLEVBQUUsNEJBQTRCO0lBQ3ZDQyxlQUFlLEVBQUUsc0JBQXNCO0lBQ3ZDQyxZQUFZLEVBQUUsbUJBQW1CO0lBQ2pDQyxXQUFXLEVBQUUsa0JBQWtCO0lBQy9CQyxVQUFVLEVBQUU7RUFDZCxDQUFDO0VBQ0QsT0FBTztJQUFFWCxjQUFjO0lBQUVZLE9BQU9BLENBQUEsRUFBRyxDQUFDO0VBQUUsQ0FBQztBQUN6QztBQUFDLElBQUFDLFFBQUEsR0FBQUMsT0FBQSxDQUFBQyxPQUFBLEdBRWNoQixvQkFBb0I7QUFDNUIsTUFBTUMsY0FBYyxHQUFBYyxPQUFBLENBQUFkLGNBQUEsR0FBR0Qsb0JBQW9CLENBQUMsQ0FBQyxDQUFDQyxjQUFjLENBQUMsQ0FBQyIsImlnbm9yZUxpc3QiOltdfQ==

@@ -36,6 +36,10 @@ function createStubBrowserService({ documentObject, windowObject } = {}) {
     clearTimeout() {},
     performance: { now: () => 0 },
     URL: { createObjectURL: () => '', revokeObjectURL: () => '' },
+    Event: function () {},
+    crypto: {
+      randomUUID: () => '00000000-0000-4000-8000-000000000000'
+    },
     document : documentObject
   };
 
@@ -85,6 +89,7 @@ test('tokenStatsManager placeholder exists before coreInit', async () => {
     APP_CONFIG: {
       TIMEOUTS: { DOM_READY: 1000 }
     },
+    MODAL_MAPPINGS: {},
     // The remaining optional config/factories are left undefined intentionally
   });
 

@@ -1,4 +1,5 @@
 venv
+.jest_cache
 node_modules
 .env
 __pycache__

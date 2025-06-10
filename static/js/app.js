@@ -113,6 +113,13 @@ const appInit = createAppInitializer({
   globalFileIcon,
   isValidProjectId,
   MODAL_MAPPINGS,
+  // Top-level factories required by createAppInitializer
+  createApiEndpoints,
+  createChatManager,
+  // UIInit mandatory factories
+  createKnowledgeBaseComponent,
+  createProjectDetailsEnhancements,
+  createTokenStatsManager,
   // new pattern
   factories,
   // prerequisite factories (previously executed here)
