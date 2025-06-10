@@ -120,6 +120,7 @@ export function createCoreInit(deps = {}) {
           timer         : browserService,
           eventHandlers,
           eventService  : DependencySystem.modules.get('eventService'),
+          apiEndpoints  : DependencySystem.modules.get('apiEndpoints'),
         });
 
         registerInstance('projectManager', projectMgr);

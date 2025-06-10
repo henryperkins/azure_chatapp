@@ -73,7 +73,7 @@ export function createServiceInit(deps) {
             throw new Error('[serviceInit] createApiEndpoints factory missing.');
         }
         const apiEndpointsInstance = createApiEndpoints({ logger, DependencySystem, config: APP_CONFIG });
-        const resolvedEndpoints = DependencySystem.modules.get('apiEndpoints') || apiEndpointsInstance.endpoints;
+        const resolvedEndpoints = apiEndpointsInstance; // Assuming createApiEndpoints returns the endpoints object directly
         safeRegister('apiEndpoints', resolvedEndpoints);
 
         logger.debug('[serviceInit] API endpoints registered.', {

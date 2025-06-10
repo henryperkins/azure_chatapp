@@ -236,10 +236,10 @@ export function createBootstrapCore(opts) {
         function _tryCreateAuthApiService() {
             let instance = DependencySystem.modules.get('__authApiServiceReal');
             if (instance) return instance;
-
+            
             const apiClient    = DependencySystem.modules.get('apiRequest')
                               || DependencySystem.modules.get('apiClient');
-            const apiEndpoints = DependencySystem.modules.get('apiEndpoints') || opts.apiEndpoints;
+            const apiEndpoints = DependencySystem.modules.get('apiEndpoints');
 
             if (!apiClient || !apiEndpoints) {
                 return null; // dependencies not ready yet
