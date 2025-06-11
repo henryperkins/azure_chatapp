@@ -11,6 +11,7 @@
 import { createAuthHeaderUI } from "../../components/authHeaderUI.js";
 import { createAuthFormListenerFactory } from "../../authFormListenerFactory.js";
 import { createProjectDashboardUtils } from "../../projectDashboardUtils.js";
+import { createLoginButtonHandler } from "../../loginButtonHandler.js";
 
 export function createUIInit(deps) {
     const {
@@ -18,14 +19,14 @@ export function createUIInit(deps) {
         domReadinessService, logger, APP_CONFIG, safeHandler,
         sanitizer, createProjectDetailsEnhancements,
         createTokenStatsManager, createKnowledgeBaseComponent,
-        createChatExtensions, uiUtils
+        createChatExtensions, createLoginButtonHandler, uiUtils
     } = deps;
 
     if (!DependencySystem || !domAPI || !browserService || !eventHandlers ||
         !domReadinessService || !logger || !APP_CONFIG || !safeHandler ||
         !sanitizer || !createProjectDetailsEnhancements ||
         !createTokenStatsManager || !createKnowledgeBaseComponent ||
-        !createChatExtensions || !domReadinessService || !uiUtils) {
+        !createChatExtensions || !createLoginButtonHandler || !domReadinessService || !uiUtils) {
         throw new Error('[uiInit] Missing required dependencies for UI initialization.');
     }
 
@@ -247,10 +248,11 @@ export function createUIInit(deps) {
                 eventHandlers,
                 safeHandler: DependencySystem.modules.get('safeHandler'),
                 eventService: DependencySystem.modules.get('eventService'),
-                logger
+                logger,
+                DependencySystem
             });
             DependencySystem.register('authHeaderUI', authHeaderUI);
-            
+
             if (typeof authHeaderUI.initialize === 'function') {
                 await authHeaderUI.initialize().catch(err =>
                     logger.error('[UIInit] AuthHeaderUI init failed', err, {
@@ -299,6 +301,32 @@ export function createUIInit(deps) {
         } catch (err) {
             logger.error('[UIInit] Failed to create ProjectDashboardUtils', err, {
                 context: 'uiInit:projectDashboardUtils'
+            });
+        }
+
+        // Login Button Handler
+        try {
+            const loginButtonHandler = createLoginButtonHandler({
+                DependencySystem,
+                domAPI,
+                eventHandlers,
+                domReadinessService,
+                logger,
+                modalManager: DependencySystem.modules.get('modalManager'),
+                modalConstants: DependencySystem.modules.get('modalConstants')
+            });
+            DependencySystem.register('loginButtonHandler', loginButtonHandler);
+
+            if (typeof loginButtonHandler.initialize === 'function') {
+                await loginButtonHandler.initialize().catch(err =>
+                    logger.error('[UIInit] LoginButtonHandler init failed', err, {
+                        context: 'uiInit:loginButtonHandler'
+                    })
+                );
+            }
+        } catch (err) {
+            logger.error('[UIInit] Failed to create LoginButtonHandler', err, {
+                context: 'uiInit:loginButtonHandler'
             });
         }
 
@@ -440,19 +468,19 @@ export function createUIInit(deps) {
 
             // Emit early readiness events
             try {
-                logger.info('[uiInit] About to emit early app:ready event', { 
+                logger.info('[uiInit] About to emit early app:ready event', {
                     context: 'uiInit:earlyAppReady',
                     timestamp: Date.now()
                 });
                 domReadinessService.emitReplayable('app:ready');
-                logger.info('[uiInit] Early app:ready event emitted successfully', { 
+                logger.info('[uiInit] Early app:ready event emitted successfully', {
                     context: 'uiInit:earlyAppReady',
                     timestamp: Date.now()
                 });
-                
+
                 const appModule = DependencySystem.modules.get('appModule');
                 appModule.setAppLifecycleState({ isReady: true, currentPhase: 'ui_ready_partial' });
-                logger.info('[uiInit] App state set to ready', { 
+                logger.info('[uiInit] App state set to ready', {
                     context: 'uiInit:earlyAppReady',
                     isReady: true
                 });
@@ -538,9 +566,9 @@ export function createUIInit(deps) {
                     logger,
                     extChatEnabled: true // Enable by default, can be feature-flagged later
                 });
-                
+
                 DependencySystem.register('chatExtensions', chatExtensions);
-                
+
                 if (chatExtensions.init) {
                     await chatExtensions.init();
                     logger.debug('[uiInit] ChatExtensions initialized', { context: 'uiInit' });

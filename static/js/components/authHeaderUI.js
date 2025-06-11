@@ -7,9 +7,10 @@ export function createAuthHeaderUI({
   eventHandlers,
   safeHandler,
   eventService,
-  logger
+  logger,
+  DependencySystem
 }) {
-  if (!domAPI || !eventHandlers || !safeHandler || !eventService) {
+  if (!domAPI || !eventHandlers || !safeHandler || !eventService || !DependencySystem) {
     throw new Error('[authHeaderUI] Missing required dependencies');
   }
 
@@ -88,13 +89,34 @@ export function createAuthHeaderUI({
 
   function init() {
     _cacheDom();
-    // Sync once immediately if state already available
-    // Consumers may call render() manually after creating the component; we
-    // leave initial paint optional to avoid introducing extra dependencies.
-
-    eventService.on('authStateChanged', ({ detail }) => {
-      render(detail || {});
+    
+    // Listen for auth state changes
+    eventService.on('authStateChanged', (event) => {
+      // Handle both direct event data and detail property
+      const authData = event?.detail || event || {};
+      logger.debug('[authHeaderUI] Received authStateChanged event', authData, { context: 'authHeaderUI:init' });
+      render({
+        isAuthenticated: authData.authenticated || authData.isAuthenticated || false,
+        currentUser: authData.user || authData.currentUser || null
+      });
     });
+
+    // Try to get initial auth state and render immediately
+    try {
+      const authenticationService = DependencySystem?.modules?.get('authenticationService');
+      if (authenticationService) {
+        const isAuthenticated = authenticationService.isAuthenticated();
+        const currentUser = authenticationService.getCurrentUser();
+        
+        logger.debug('[authHeaderUI] Rendering initial auth state', { 
+          isAuthenticated, currentUser, context: 'authHeaderUI:init' 
+        });
+        
+        render({ isAuthenticated, currentUser });
+      }
+    } catch (err) {
+      logger.warn('[authHeaderUI] Could not get initial auth state', err, { context: 'authHeaderUI:init' });
+    }
   }
 
   function cleanup() {

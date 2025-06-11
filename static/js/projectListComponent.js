@@ -217,6 +217,27 @@ export function createProjectListComponent(deps) {
         _bindEventListeners();
         _bindCreateProjectButtons();
 
+        // Listen for authentication state changes
+        if (eventService) {
+            eventService.on('authStateChanged', (event) => {
+                const authData = event?.detail || event || {};
+                const isAuthenticated = authData.authenticated || authData.isAuthenticated || false;
+                
+                logger.debug('[ProjectListComponent] Auth state changed', { 
+                    isAuthenticated, 
+                    context: MODULE_CONTEXT + ':authStateChanged' 
+                });
+                
+                // If user just logged in, refresh the project list
+                if (isAuthenticated) {
+                    _loadProjects();
+                } else {
+                    // If user logged out, show login required
+                    _showLoginRequired();
+                }
+            });
+        }
+
         eventBus.dispatchEvent(new CustomEvent('initialized', { detail: { success: true } }));
 
         try {
@@ -642,10 +663,9 @@ export function createProjectListComponent(deps) {
         // Remove the problematic elementsReady call that causes timeouts
         // The elements should already be ready from initialize()
 
-        // CONSOLIDATED: Check authentication state before showing content
-        const isAuthenticated = typeof projectManager?.isAuthenticated === 'function'
-            ? projectManager.isAuthenticated()
-            : (app?.state?.isAuthenticated ?? false);
+        // CONSOLIDATED: Check authentication state using canonical authenticationService
+        const authenticationService = DependencySystem.modules.get('authenticationService');
+        const isAuthenticated = authenticationService?.isAuthenticated?.() ?? false;
 
         logger.debug('[ProjectListComponent][show] Checking auth state before showing content', {
             isAuthenticated,
@@ -684,10 +704,9 @@ export function createProjectListComponent(deps) {
                 context: MODULE_CONTEXT + '_loadProjects'
             });
 
-            // CONSOLIDATED: Check authentication state before loading projects
-            const isAuthenticated = typeof projectManager?.isAuthenticated === 'function'
-                ? projectManager.isAuthenticated()
-                : (app?.state?.isAuthenticated ?? false);
+            // CONSOLIDATED: Check authentication state using canonical authenticationService
+            const authenticationService = DependencySystem.modules.get('authenticationService');
+            const isAuthenticated = authenticationService?.isAuthenticated?.() ?? false;
 
             if (!isAuthenticated) {
                 logger.debug('[ProjectListComponent][_loadProjects] User not authenticated, showing login required', { context: MODULE_CONTEXT });
