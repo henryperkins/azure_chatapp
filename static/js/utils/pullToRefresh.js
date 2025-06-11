@@ -1,8 +1,12 @@
 export function createPullToRefresh({
   element, onRefresh,
-  eventHandlers, domAPI, browserService,
+  eventHandlers, domAPI, browserService, logger,
   threshold = 70, ctx = 'pull-to-refresh'
 }) {
+  if (!eventHandlers || !domAPI || !browserService) {
+    throw new Error('[pullToRefresh] Missing required dependencies: eventHandlers, domAPI, browserService');
+  }
+  
   if (!element || element.dataset.ptrBound === '1') return;
   element.dataset.ptrBound = '1';
 

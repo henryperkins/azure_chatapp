@@ -10,6 +10,12 @@
 import { createAuth } from "../../auth.js";
 import { createApiClient } from "../../utils/apiClient.js";
 
+// Standalone service imports
+import { createThemeManager } from "../../theme-toggle.js";
+import { createKnowledgeBaseReadinessService } from "../../knowledgeBaseReadinessService.js";
+import { createKbResultHandlers } from "../../kb-result-handlers.js";
+import { createAuthenticationService } from "../../../services/authenticationService.js";
+
 export function createServiceInit(deps) {
     
     const {
@@ -19,6 +25,8 @@ export function createServiceInit(deps) {
         createApiEndpoints, createAccessibilityEnhancements,
         createNavigationService, createHtmlTemplateLoader, createUiRenderer,
         createLogDeliveryService,
+        createModalConstants,
+        createSelectorConstants,
         errorReporter
     } = deps;
     
@@ -60,6 +68,35 @@ export function createServiceInit(deps) {
         safeRegister('sanitizer', sanitizer);
         safeRegister('domPurify', sanitizer);
 
+        // Modal / Selector constants registration (if factories provided)
+        if (typeof createModalConstants === 'function') {
+            try {
+                const modalConst = createModalConstants();
+                if (modalConst?.MODAL_MAPPINGS) {
+                    safeRegister('modalConstants', modalConst.MODAL_MAPPINGS);
+                    safeRegister('MODAL_MAPPINGS', modalConst.MODAL_MAPPINGS); // legacy alias / convenience
+                } else {
+                    safeRegister('modalConstants', modalConst);
+                }
+            } catch (err) {
+                logger.error('[serviceInit] Failed to create modalConstants', err, { context: 'serviceInit:modalConstants' });
+            }
+        }
+
+        if (typeof createSelectorConstants === 'function') {
+            try {
+                const selConst = createSelectorConstants();
+                if (selConst?.SELECTORS) {
+                    safeRegister('selectorConstants', selConst.SELECTORS);
+                    safeRegister('ELEMENT_SELECTORS', selConst.ELEMENT_SELECTORS || selConst.SELECTORS);
+                } else {
+                    safeRegister('selectorConstants', selConst);
+                }
+            } catch (err) {
+                logger.error('[serviceInit] Failed to create selectorConstants', err, { context: 'serviceInit:selectorConstants' });
+            }
+        }
+
         if (createFileUploadComponent) {
             safeRegister('FileUploadComponent', createFileUploadComponent);
         }
@@ -100,6 +137,33 @@ export function createServiceInit(deps) {
         logger.info('[serviceInit] Starting registration of advanced services...', {
             context: 'serviceInit:registerAdvancedServices'
         });
+
+        // ------------------------------------------------------------------
+        // Register AuthenticationService façade (requires appModule)
+        // ------------------------------------------------------------------
+
+        const existingAuthSvc = DependencySystem.modules.get('authenticationService');
+        const appModuleInst   = DependencySystem.modules.get('appModule');
+
+        if (!existingAuthSvc && appModuleInst) {
+            try {
+                const authSvc = createAuthenticationService({
+                    DependencySystem,
+                    logger,
+                    appModule: appModuleInst
+                });
+                DependencySystem.register('authenticationService', authSvc);
+                // Expose on opts (outer scope) so that later phases receive it
+                deps.authenticationService = authSvc;
+                logger.debug('[serviceInit] authenticationService registered.', {
+                    context: 'serviceInit:registerAdvancedServices'
+                });
+            } catch (err) {
+                logger.error('[serviceInit] Failed to register authenticationService', err, {
+                    context: 'serviceInit:registerAdvancedServices'
+                });
+            }
+        }
 
         // API Client creation and registration
         let apiClientInstance = null;
@@ -299,6 +363,75 @@ export function createServiceInit(deps) {
                 });
                 throw err;
             }
+        }
+
+        // --------------------------------------------------------------
+        // Standalone Services
+        // --------------------------------------------------------------
+        
+        // Theme Manager
+        try {
+            // ThemeManager factory expects a `dom` abstraction, but we expose our
+            // canonical wrapper as `domAPI` throughout the DI chain. Pass it over
+            // under the expected property name to satisfy the factory contract.
+            const themeManager = createThemeManager({
+                dom: domAPI,
+                eventHandlers,
+                logger
+            });
+            safeRegister('themeManager', themeManager);
+            
+            logger.debug('[serviceInit] ThemeManager registered.', {
+                context: 'serviceInit:registerAdvancedServices'
+            });
+        } catch (err) {
+            logger.error('[serviceInit] Failed to initialize ThemeManager', err, {
+                context: 'serviceInit:registerAdvancedServices'
+            });
+        }
+
+        // Knowledge Base Readiness Service
+        if (apiClientInstance) {
+            try {
+                const kbReadinessService = createKnowledgeBaseReadinessService({
+                    DependencySystem,
+                    logger,
+                    apiClient: apiClientInstance.fetch,
+                    eventHandlers,
+                    browserService
+                });
+                safeRegister('knowledgeBaseReadinessService', kbReadinessService);
+                
+                logger.debug('[serviceInit] KnowledgeBaseReadinessService registered.', {
+                    context: 'serviceInit:registerAdvancedServices'
+                });
+            } catch (err) {
+                logger.error('[serviceInit] Failed to initialize KnowledgeBaseReadinessService', err, {
+                    context: 'serviceInit:registerAdvancedServices'
+                });
+            }
+        }
+
+        // KB Result Handlers
+        try {
+            const kbResultHandlers = createKbResultHandlers({
+                DependencySystem,
+                logger,
+                domAPI,
+                eventHandlers,
+                sanitizer,
+                browserService,
+                safeHandler: DependencySystem.modules.get('safeHandler')
+            });
+            safeRegister('kbResultHandlers', kbResultHandlers);
+            
+            logger.debug('[serviceInit] KbResultHandlers registered.', {
+                context: 'serviceInit:registerAdvancedServices'
+            });
+        } catch (err) {
+            logger.error('[serviceInit] Failed to initialize KbResultHandlers', err, {
+                context: 'serviceInit:registerAdvancedServices'
+            });
         }
 
         logger.info('[serviceInit] Advanced services registration completed.', {

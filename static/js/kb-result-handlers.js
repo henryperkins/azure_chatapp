@@ -50,7 +50,7 @@ export function createKbResultHandlers({
       try {
         observer.disconnect();
       } catch (err) {
-        logger?.warn?.(`[${MODULE_CONTEXT}] Failed to disconnect observer`, err, { context: MODULE_CONTEXT });
+        logger.error(`[${MODULE_CONTEXT}] Failed to disconnect observer`, err, { context: MODULE_CONTEXT });
       }
       observer = null;
     }

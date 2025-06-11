@@ -4,7 +4,6 @@
   "static/js/appConfig.js",
   "static/js/auth.js",
   "static/js/authFormListenerFactory.js",
-  "static/js/chat-ui-utils.js",
   "static/js/chat.js",
   "static/js/chatExtensions.js",
   "static/js/chatUIEnhancements.js",
@@ -36,8 +35,7 @@
   "static/js/theme-toggle.js",
   "static/js/tokenStatsManager.js",
   "static/js/uiRenderer.js",
-  "static/js/init/appInitializer.js",
-  "static/js/init/appInitializer.js.backup",
+  "static/js/initialization/appInitializer.js",
   "static/js/chatUIController.js",
   "static/js/conversationManager.js",
   "static/js/messageHandler.js",
@@ -71,5 +69,13 @@
   "static/js/components/authHeaderUI.js",
   "static/js/utils/pullToRefresh.js",
   "static/js/knowledgeBaseReadinessService.js",
-  "static/js/pollingService.js"
+  "static/js/pollingService.js",
+  "static/js/initialization/bootstrap/bootstrapCore.js",
+  "static/js/initialization/bootstrap/circularDeps.js",
+  "static/js/initialization/phases/authInit.js",
+  "static/js/initialization/phases/coreInit.js",
+  "static/js/initialization/phases/errorInit.js",
+  "static/js/initialization/phases/serviceInit.js",
+  "static/js/initialization/phases/uiInit.js",
+  "static/js/initialization/state/appState.js"
 ]

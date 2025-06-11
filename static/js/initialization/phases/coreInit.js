@@ -126,6 +126,11 @@ export function createCoreInit(deps = {}) {
         });
 
         registerInstance('projectManager', projectMgr);
+        
+        // Inject projectManager into eventHandlers
+        if (typeof eventHandlers.setProjectManager === 'function') {
+          eventHandlers.setProjectManager(projectMgr);
+        }
       }
     } catch (err) {
       logger.error('[coreInit] Failed to bootstrap ProjectManager', err, { context: 'coreInit:projectManager' });

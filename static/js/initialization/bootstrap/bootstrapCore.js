@@ -17,6 +17,11 @@ import { createEventService } from "../../services/eventService.js";
 import { createUIStateService } from "../../uiStateService.js";
 import { setBrowserService as registerSessionBrowserService, getSessionId as coreGetSessionId } from "../../utils/session.js";
 
+// Core utility imports
+import { createStorageService } from "../../utils/storageService.js";
+import { createFormattingUtils } from "../../formatting.js";
+import { createPullToRefresh } from "../../utils/pullToRefresh.js";
+
 // Statically import modules that were previously loaded with dynamic `import()`.
 import { createTokenStatsManagerProxy } from "../../tokenStatsManagerProxy.js";
 import { createAuthFormHandler } from "../../authFormHandler.js";
@@ -221,6 +226,26 @@ export function createBootstrapCore(opts) {
         const uiStateService = createUIStateService({ logger });
         DependencySystem.register('uiStateService', uiStateService);
 
+        // Core utility services
+        const storageService = createStorageService({
+            browserService,
+            logger
+        });
+        DependencySystem.register('storageService', storageService);
+
+        const formattingUtils = createFormattingUtils({
+            logger
+        });
+        DependencySystem.register('formattingUtils', formattingUtils);
+
+        const pullToRefresh = createPullToRefresh({
+            domAPI,
+            eventHandlers,
+            logger,
+            browserService
+        });
+        DependencySystem.register('pullToRefresh', pullToRefresh);
+
         // Register auth component factories
         const authFormHandler = createAuthFormHandler({
             domAPI, sanitizer, eventHandlers, logger, safeHandler: safeHandlerInstance.safeHandler
@@ -293,8 +318,11 @@ export function createBootstrapCore(opts) {
         DependencySystem.register('authApiService', authApiServiceProxy);
 
         const authStateManager = createAuthStateManager({
-            eventService, logger, browserService,
-            storageService: null // will be set later
+            eventService,
+            logger,
+            browserService,
+            storageService,
+            DependencySystem
         });
         DependencySystem.register('authStateManager', authStateManager);
 

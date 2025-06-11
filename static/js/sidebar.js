@@ -93,7 +93,8 @@ export function createSidebar({
     logger,
     sanitizer,
     safeHandler,
-    domReadinessService
+    domReadinessService,
+    authenticationService
   });
 
   // DOM references

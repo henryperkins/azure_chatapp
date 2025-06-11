@@ -54,7 +54,8 @@ export function createAuth(deps) {
     eventService,
     logger,
     browserService,
-    storageService
+    storageService,
+    DependencySystem
   });
 
   // === LEGACY EVENT BUS SUPPORT ===

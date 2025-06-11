@@ -5,11 +5,35 @@
  * and session management. Extracted from oversized auth.js.
  */
 
+// ----------------------------------------------------------------------------
+// AuthStateManager – v2 (2025-06-11)
+// ----------------------------------------------------------------------------
+// This revision removes the *duplicate* mutable authentication copy that used
+// to live exclusively inside AuthStateManager.  From now on the canonical
+// source-of-truth for `isAuthenticated` and `currentUser` is
+// `appModule.state`, which every other front-end service (including the thin
+// `authenticationService` façade) already relies on.  AuthStateManager still
+// owns *session-related* fields (lastVerification, sessionStartTime) and the
+// periodic session-age timer – no other module needs to mutate those.
+//
+// design notes:
+//   • We lazily resolve `appModule` (and therefore `authenticationService`)
+//     because bootstrapCore creates AuthStateManager *before* appModule has
+//     been registered.  The resolve helper retries whenever it is needed so
+//     early-boot code keeps functioning with a local fallback, while every
+//     subsequent access uses the global state once available.
+//   • All public read helpers (`isAuthenticated`, `getCurrentUser`, …)
+//     delegate to `authenticationService` when available; otherwise they read
+//     the local fallback copy (harmless during the few milliseconds in early
+//     boot).
+// ----------------------------------------------------------------------------
+
 export function createAuthStateManager({
   eventService,
   logger,
   browserService,
-  storageService
+  storageService,
+  DependencySystem // optional – provided by bootstrapCore for lazy look-ups
 } = {}) {
   const MODULE = 'AuthStateManager';
 
@@ -29,8 +53,20 @@ export function createAuthStateManager({
     });
   };
 
-  // Internal state
-  let authState = {
+  // -------------------------------------------------------------
+  // Lazy DI helpers – resolve appModule & authenticationService
+  // -------------------------------------------------------------
+
+  function _getAppModule() {
+    return DependencySystem?.modules?.get?.('appModule') || null;
+  }
+
+  function _getAuthService() {
+    return DependencySystem?.modules?.get?.('authenticationService') || null;
+  }
+
+  // Internal *fallback* state – used only until appModule is ready.
+  let _fallbackAuthState = {
     isAuthenticated: false,
     currentUser: null,
     lastVerification: null,
@@ -42,13 +78,27 @@ export function createAuthStateManager({
   const SESSION_WARNING_THRESHOLD = 10 * 60 * 1000; // 10 minutes before expiry
   let sessionCheckTimer = null;
 
+  function _readAuthStateFromSource() {
+    const authSvc = _getAuthService();
+    if (authSvc) {
+      return authSvc.getAuthState();
+    }
+
+    const appMod = _getAppModule();
+    if (appMod?.state) {
+      return {
+        isAuthenticated: appMod.state.isAuthenticated,
+        currentUser: appMod.state.currentUser,
+        lastVerification: _fallbackAuthState.lastVerification,
+        sessionStartTime: _fallbackAuthState.sessionStartTime
+      };
+    }
+
+    return { ..._fallbackAuthState };
+  }
+
   function getAuthState() {
-    return {
-      isAuthenticated: authState.isAuthenticated,
-      currentUser: authState.currentUser ? { ...authState.currentUser } : null,
-      lastVerification: authState.lastVerification,
-      sessionStartTime: authState.sessionStartTime
-    };
+    return _readAuthStateFromSource();
   }
 
   function setAuthenticatedState(user) {
@@ -58,13 +108,24 @@ export function createAuthStateManager({
     }
 
     const previousState = getAuthState();
-    
-    authState.isAuthenticated = true;
-    authState.currentUser = { ...user };
-    authState.lastVerification = Date.now();
-    
-    if (!authState.sessionStartTime) {
-      authState.sessionStartTime = Date.now();
+
+    // --- Update canonical state ---------------------------------------
+    const appMod = _getAppModule();
+    if (appMod?.setAuthState) {
+      try {
+        appMod.setAuthState({ isAuthenticated: true, currentUser: user });
+      } catch (e) {
+        _logError('Failed to update appModule.setAuthState', e);
+      }
+    } else {
+      // Fallback early-boot local copy
+      _fallbackAuthState.isAuthenticated = true;
+      _fallbackAuthState.currentUser = { ...user };
+    }
+
+    _fallbackAuthState.lastVerification = Date.now();
+    if (!_fallbackAuthState.sessionStartTime) {
+      _fallbackAuthState.sessionStartTime = Date.now();
     }
 
     _log('Authentication state updated', {
@@ -73,13 +134,10 @@ export function createAuthStateManager({
       previouslyAuthenticated: previousState.isAuthenticated
     });
 
-    // Start session monitoring
     startSessionMonitoring();
 
-    // Broadcast state change
     broadcastAuthStateChange(previousState, getAuthState());
 
-    // Store user info if storage service available
     if (storageService) {
       try {
         storageService.setItem('lastUser', JSON.stringify({
@@ -95,24 +153,30 @@ export function createAuthStateManager({
 
   function setUnauthenticatedState() {
     const previousState = getAuthState();
-    
-    authState.isAuthenticated = false;
-    authState.currentUser = null;
-    authState.lastVerification = null;
-    authState.sessionStartTime = null;
+
+    const appMod = _getAppModule();
+    if (appMod?.setAuthState) {
+      try {
+        appMod.setAuthState({ isAuthenticated: false, currentUser: null });
+      } catch (e) {
+        _logError('Failed to clear auth state via appModule', e);
+      }
+    }
+
+    _fallbackAuthState.isAuthenticated = false;
+    _fallbackAuthState.currentUser = null;
+    _fallbackAuthState.lastVerification = null;
+    _fallbackAuthState.sessionStartTime = null;
 
     _log('Authentication state cleared', {
       wasAuthenticated: previousState.isAuthenticated,
       previousUser: previousState.currentUser?.username
     });
 
-    // Stop session monitoring
     stopSessionMonitoring();
 
-    // Broadcast state change
     broadcastAuthStateChange(previousState, getAuthState());
 
-    // Clear stored user info if storage service available
     if (storageService) {
       try {
         storageService.removeItem('lastUser');
@@ -123,7 +187,7 @@ export function createAuthStateManager({
   }
 
   function updateLastVerification() {
-    authState.lastVerification = Date.now();
+    _fallbackAuthState.lastVerification = Date.now();
     _log('Last verification timestamp updated');
   }
 
@@ -163,25 +227,26 @@ export function createAuthStateManager({
     }
 
     sessionCheckTimer = setInterval(() => {
-      if (!authState.isAuthenticated) {
+      if (!_fallbackAuthState.isAuthenticated && !_getAuthService()?.isAuthenticated?.()) {
         stopSessionMonitoring();
         return;
       }
 
       const now = Date.now();
-      const timeSinceLastVerification = now - (authState.lastVerification || 0);
+      const lastVerif = _fallbackAuthState.lastVerification || 0;
+      const timeSinceLastVerification = now - lastVerif;
       
       // Emit session warning if approaching timeout
       if (timeSinceLastVerification > SESSION_WARNING_THRESHOLD) {
         eventService.emit('auth:sessionWarning', {
           timeSinceLastVerification,
-          user: authState.currentUser
+          user: getCurrentUser()
         });
       }
 
       _log('Session monitoring check', {
         timeSinceLastVerification,
-        sessionAge: now - (authState.sessionStartTime || 0)
+        sessionAge: now - (_fallbackAuthState.sessionStartTime || 0)
       });
     }, SESSION_CHECK_INTERVAL);
 
@@ -197,33 +262,39 @@ export function createAuthStateManager({
   }
 
   function isAuthenticated() {
-    return authState.isAuthenticated;
+    const authSvc = _getAuthService();
+    if (authSvc) return authSvc.isAuthenticated();
+    return _fallbackAuthState.isAuthenticated;
   }
 
   function getCurrentUser() {
-    return authState.currentUser ? { ...authState.currentUser } : null;
+    const authSvc = _getAuthService();
+    if (authSvc) return authSvc.getCurrentUser();
+    return _fallbackAuthState.currentUser ? { ..._fallbackAuthState.currentUser } : null;
   }
 
   function getCurrentUserId() {
-    return authState.currentUser?.id || null;
+    const user = getCurrentUser();
+    return user?.id || null;
   }
 
   function getCurrentUsername() {
-    return authState.currentUser?.username || null;
+    const user = getCurrentUser();
+    return user?.username || null;
   }
 
   function getSessionAge() {
-    if (!authState.sessionStartTime) return 0;
-    return Date.now() - authState.sessionStartTime;
+    if (!_fallbackAuthState.sessionStartTime) return 0;
+    return Date.now() - _fallbackAuthState.sessionStartTime;
   }
 
   function getTimeSinceLastVerification() {
-    if (!authState.lastVerification) return Infinity;
-    return Date.now() - authState.lastVerification;
+    if (!_fallbackAuthState.lastVerification) return Infinity;
+    return Date.now() - _fallbackAuthState.lastVerification;
   }
 
   function shouldVerifySession(threshold = 5 * 60 * 1000) { // 5 minutes default
-    if (!authState.isAuthenticated) return false;
+    if (!isAuthenticated()) return false;
     return getTimeSinceLastVerification() > threshold;
   }
 

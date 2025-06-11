@@ -61,10 +61,19 @@ export function createModalManager({
     sanitizer: modalSanitizer
   });
 
+  // Resolve modal mappings – prefer injected param, then DI container, else constant fallback
+  let resolvedModalMappings = modalMapping;
+  if (!resolvedModalMappings && DependencySystem?.modules?.has?.('modalConstants')) {
+    resolvedModalMappings = DependencySystem.modules.get('modalConstants');
+  }
+  if (!resolvedModalMappings) {
+    resolvedModalMappings = MODAL_MAPPINGS;
+  }
+
   const stateManager = createModalStateManager({
     eventService: eventService || DependencySystem?.modules?.get?.('eventService'),
     logger,
-    modalMappings: modalMapping || MODAL_MAPPINGS
+    modalMappings: resolvedModalMappings
   });
 
   const formHandler = createModalFormHandler({

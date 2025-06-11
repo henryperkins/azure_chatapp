@@ -97,9 +97,15 @@ export function createAuthHeaderUI({
     });
   }
 
+  function cleanup() {
+    eventHandlers.cleanupListeners({ context: 'authHeaderUI' });
+    eventService.off('authStateChanged');
+  }
+
   return {
     init,
     render,
-    attachLogoutHandler
+    attachLogoutHandler,
+    cleanup
   };
 }

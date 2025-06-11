@@ -75,9 +75,16 @@ export function createKnowledgeBaseComponent(options = {}) {
   // --- domReadinessService Rule 7 compliance: replace any DependencySystem.waitFor(['app']) with domReadinessService.waitForEvent('app:ready', ...)
   // (No such code found in this file, so nothing to replace here.)
 
+  // Resolve selector constants via DI if available
+  const selectorConstantsFromDI = DS?.modules?.has?.('ELEMENT_SELECTORS')
+    ? DS.modules.get('ELEMENT_SELECTORS')
+    : null;
+
+  const elementSelectorsBase = selectorConstantsFromDI?.KB || ELEMENT_SELECTORS.KB;
+
   // Use centralized selectors for consistency
   const elementSelectors = {
-    ...ELEMENT_SELECTORS.KB,
+    ...elementSelectorsBase,
     // Add any additional selectors not in the centralized config
     searchInput: "knowledgeSearchInput", // Optional - will be added to HTML
     searchButton: "searchKnowledgeBtn", // Optional - will be added to HTML
@@ -101,28 +108,28 @@ export function createKnowledgeBaseComponent(options = {}) {
     kbGitHubFilePathsTextarea: "kbGitHubFilePathsTextarea",
     kbAttachRepoBtn: "kbAttachRepoBtn",
     // Map centralized names to local names for backward compatibility
-    container: ELEMENT_SELECTORS.KB.container,
-    activeSection: ELEMENT_SELECTORS.KB.activeSection,
-    inactiveSection: ELEMENT_SELECTORS.KB.inactiveSection,
-    statusBadge: ELEMENT_SELECTORS.KB.statusBadge,
-    kbToggle: ELEMENT_SELECTORS.KB.toggle,
-    reprocessButton: ELEMENT_SELECTORS.KB.reprocessButton,
-    setupButton: ELEMENT_SELECTORS.KB.setupButton,
-    settingsButton: ELEMENT_SELECTORS.KB.settingsButton,
-    kbNameDisplay: ELEMENT_SELECTORS.KB.baseName,
-    kbModelDisplay: ELEMENT_SELECTORS.KB.modelDisplay,
-    kbVersionDisplay: ELEMENT_SELECTORS.KB.versionDisplay,
-    kbLastUsedDisplay: ELEMENT_SELECTORS.KB.lastUsedDisplay,
-    settingsModal: ELEMENT_SELECTORS.KB.settingsModal,
-    settingsForm: ELEMENT_SELECTORS.KB.settingsForm,
-    cancelSettingsBtn: ELEMENT_SELECTORS.KB.cancelSettingsBtn,
-    deleteKnowledgeBaseBtn: ELEMENT_SELECTORS.KB.deleteBtn,
-    modelSelect: ELEMENT_SELECTORS.KB.modelSelect,
-    knowledgeBaseFilesSection: ELEMENT_SELECTORS.KB.filesSection,
-    knowledgeBaseFilesListContainer: ELEMENT_SELECTORS.KB.filesListContainer,
-    knowledgeFileCount: ELEMENT_SELECTORS.KB.docCount,
-    knowledgeChunkCount: ELEMENT_SELECTORS.KB.chunkCount,
-    knowledgeFileSize: ELEMENT_SELECTORS.KB.fileSize,
+    container: elementSelectorsBase.container,
+    activeSection: elementSelectorsBase.activeSection,
+    inactiveSection: elementSelectorsBase.inactiveSection,
+    statusBadge: elementSelectorsBase.statusBadge,
+    kbToggle: elementSelectorsBase.toggle,
+    reprocessButton: elementSelectorsBase.reprocessButton,
+    setupButton: elementSelectorsBase.setupButton,
+    settingsButton: elementSelectorsBase.settingsButton,
+    kbNameDisplay: elementSelectorsBase.baseName,
+    kbModelDisplay: elementSelectorsBase.modelDisplay,
+    kbVersionDisplay: elementSelectorsBase.versionDisplay,
+    kbLastUsedDisplay: elementSelectorsBase.lastUsedDisplay,
+    settingsModal: elementSelectorsBase.settingsModal,
+    settingsForm: elementSelectorsBase.settingsForm,
+    cancelSettingsBtn: elementSelectorsBase.cancelSettingsBtn,
+    deleteKnowledgeBaseBtn: elementSelectorsBase.deleteBtn,
+    modelSelect: elementSelectorsBase.modelSelect,
+    knowledgeBaseFilesSection: elementSelectorsBase.filesSection,
+    knowledgeBaseFilesListContainer: elementSelectorsBase.filesListContainer,
+    knowledgeFileCount: elementSelectorsBase.docCount,
+    knowledgeChunkCount: elementSelectorsBase.chunkCount,
+    knowledgeFileSize: elementSelectorsBase.fileSize,
   };
 
   // Resolve validateUUID and apiRequest with robust fallbacks

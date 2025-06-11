@@ -7,6 +7,11 @@
  * ~250 lines
  */
 
+// UI component imports
+import { createAuthHeaderUI } from "../../components/authHeaderUI.js";
+import { createAuthFormListenerFactory } from "../../authFormListenerFactory.js";
+import { createProjectDashboardUtils } from "../../projectDashboardUtils.js";
+
 export function createUIInit(deps) {
     const {
         DependencySystem, domAPI, browserService, eventHandlers,
@@ -63,6 +68,15 @@ export function createUIInit(deps) {
                 containerSelector: '#modalsContainer',
                 eventName: 'modalsHtmlLoaded'
             });
+
+            // Unhide the modals container after templates are loaded
+            const modalsContainer = domAPI.getElementById('modalsContainer');
+            if (modalsContainer) {
+                domAPI.removeClass(modalsContainer, 'hidden');
+                logger.debug('[UIInit] Modals container unhidden', {
+                    context: 'uiInit:loadTemplates'
+                });
+            }
 
             logger.log('[UIInit] Project templates loaded', {
                 context: 'uiInit:loadTemplates'
@@ -224,6 +238,68 @@ export function createUIInit(deps) {
                     });
                 }
             }
+        }
+
+        // Auth Header UI Component
+        try {
+            const authHeaderUI = createAuthHeaderUI({
+                domAPI,
+                eventHandlers,
+                safeHandler: DependencySystem.modules.get('safeHandler'),
+                eventService: DependencySystem.modules.get('eventService'),
+                logger
+            });
+            DependencySystem.register('authHeaderUI', authHeaderUI);
+            
+            if (typeof authHeaderUI.initialize === 'function') {
+                await authHeaderUI.initialize().catch(err =>
+                    logger.error('[UIInit] AuthHeaderUI init failed', err, {
+                        context: 'uiInit:authHeaderUI'
+                    })
+                );
+            }
+        } catch (err) {
+            logger.error('[UIInit] Failed to create AuthHeaderUI', err, {
+                context: 'uiInit:authHeaderUI'
+            });
+        }
+
+        // Auth Form Listener Factory
+        try {
+            const authFormListenerFactory = createAuthFormListenerFactory({
+                eventHandlers,
+                domAPI,
+                domReadinessService: DependencySystem.modules.get('domReadinessService'),
+                browserService: DependencySystem.modules.get('browserService'),
+                safeHandler: DependencySystem.modules.get('safeHandler'),
+                logger,
+                modalManager: DependencySystem.modules.get('modalManager'),
+                authApiService: DependencySystem.modules.get('authApiService')
+            });
+            DependencySystem.register('authFormListenerFactory', authFormListenerFactory);
+        } catch (err) {
+            logger.error('[UIInit] Failed to create AuthFormListenerFactory', err, {
+                context: 'uiInit:authFormListenerFactory'
+            });
+        }
+
+        // Project Dashboard Utils
+        try {
+            const projectDashboardUtils = createProjectDashboardUtils({
+                DependencySystem,
+                logger,
+                domAPI,
+                eventHandlers,
+                sanitizer,
+                globalUtils: DependencySystem.modules.get('globalUtils'),
+                modalManager: DependencySystem.modules.get('modalManager'),
+                projectManager: DependencySystem.modules.get('projectManager')
+            });
+            DependencySystem.register('projectDashboardUtils', projectDashboardUtils);
+        } catch (err) {
+            logger.error('[UIInit] Failed to create ProjectDashboardUtils', err, {
+                context: 'uiInit:projectDashboardUtils'
+            });
         }
 
         logger.log('[UIInit] Late-stage UI components registered', {
@@ -454,6 +530,9 @@ export function createUIInit(deps) {
                 const chatExtensions = createChatExtensions({
                     DependencySystem,
                     eventHandlers,
+                    eventService: DependencySystem.modules.get('eventService'),
+                    chatManager: DependencySystem.modules.get('chatManager'),
+                    app: DependencySystem.modules.get('appModule'),
                     domAPI,
                     domReadinessService,
                     logger,

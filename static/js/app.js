@@ -12,7 +12,7 @@ import { APP_CONFIG } from './appConfig.js';
 import { createBrowserService } from './utils/browserService.js';
 // DOMPurify injection helper – passed to initializer, **not executed here**
 import { createDOMPurifyGlobal } from './vendor/dompurify-global.js';
-import { createAppInitializer } from './init/appInitializer.js';
+import { createAppInitializer } from './initialization/appInitializer.js';
 
 // Factories and utilities to be passed to appInitializer
 import {
@@ -36,6 +36,8 @@ import { createUiRenderer } from './uiRenderer.js';
 import { createKnowledgeBaseComponent } from './knowledgeBaseComponent.js';
 import { createProjectDetailsEnhancements } from './project-details-enhancements.js';
 import { createTokenStatsManager } from './tokenStatsManager.js';
+import { createModalConstants } from './modalConstants.js';
+import { createSelectorConstants } from './utils/selectorConstants.js';
 import { createLogDeliveryService } from './logDeliveryService.js';
 import { createModalManager } from './modalManager.js';
 import { createAuth } from './auth.js';
@@ -54,6 +56,17 @@ import { createMessageHandler } from './messageHandler.js';
 import { createProjectDetailsRenderer } from './projectDetailsRenderer.js';
 import { createProjectDataCoordinator } from './projectDataCoordinator.js';
 import { createProjectEventHandlers } from './projectEventHandlers.js';
+
+// Previously uninitialized components
+import { createThemeManager } from './theme-toggle.js';
+import { createKnowledgeBaseReadinessService } from './knowledgeBaseReadinessService.js';
+import { createKbResultHandlers } from './kb-result-handlers.js';
+import { createAuthHeaderUI } from './components/authHeaderUI.js';
+import { createAuthFormListenerFactory } from './authFormListenerFactory.js';
+import { createProjectDashboardUtils } from './projectDashboardUtils.js';
+import { createStorageService } from './utils/storageService.js';
+import { createFormattingUtils } from './formatting.js';
+import { createPullToRefresh } from './utils/pullToRefresh.js';
 
 /**
  * STRICT: The only initialization code here is to create the 'browserService',
@@ -84,6 +97,8 @@ const factories = {
   createKnowledgeBaseComponent,
   createProjectDetailsEnhancements,
   createTokenStatsManager,
+  createModalConstants,
+  createSelectorConstants,
   createLogDeliveryService,
   createModalManager,
   createAuth,
@@ -102,7 +117,17 @@ const factories = {
   createMessageHandler,
   createProjectDetailsRenderer,
   createProjectDataCoordinator,
-  createProjectEventHandlers
+  createProjectEventHandlers,
+  // Previously uninitialized components
+  createThemeManager,
+  createKnowledgeBaseReadinessService,
+  createKbResultHandlers,
+  createAuthHeaderUI,
+  createAuthFormListenerFactory,
+  createProjectDashboardUtils,
+  createStorageService,
+  createFormattingUtils,
+  createPullToRefresh
 };
 
 // Create globalUtils object for services that need it
@@ -132,12 +157,20 @@ const appInit = createAppInitializer({
   createApiEndpoints,
   createApiClient,
   createChatManager,
+  // ServiceInit mandatory factories
+  createNavigationService,
+  createAccessibilityEnhancements,
+  createFileUploadComponent,
   // UIInit mandatory factories
   createKnowledgeBaseComponent,
   createProjectDetailsEnhancements,
   createTokenStatsManager,
+  createModalConstants,
+  createSelectorConstants,
   createChatExtensions,
   createLogDeliveryService,
+  createHtmlTemplateLoader,
+  createUiRenderer,
   // new pattern
   factories,
   // prerequisite factories (previously executed here)

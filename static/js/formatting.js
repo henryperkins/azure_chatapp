@@ -39,41 +39,17 @@ function escapeHtml(str) {
 }
 
 export { formatText };
-export function createFormattingUtils({ domAPI, sanitizer, eventHandlers, safeHandler, DependencySystem } = {}) {
-  if (!domAPI || !sanitizer || !safeHandler || !DependencySystem) {
-    throw new Error('[formatting] Missing required dependencies: domAPI, sanitizer, safeHandler, DependencySystem');
-  }
-
-  if (typeof safeHandler !== 'function') {
-    throw new Error('[formatting] safeHandler must be a function');
+export function createFormattingUtils({ logger } = {}) {
+  if (!logger) {
+    throw new Error('[formatting] Missing required dependency: logger');
   }
 
   return {
-    // expose any helpers you actually keep
+    formatText,
+    escapeHtml,
+    processCodeBlocks,
     cleanup() {
-      if (eventHandlers && eventHandlers.cleanupListeners) {
-        eventHandlers.cleanupListeners({ context: 'FormattingUtils' });
-      }
+      // No listeners to cleanup for utility functions
     }
-  };
-}
-/**
- * formatting.js
- * Formatting utilities with strict DI.
- */
-export function createFormatting({ domAPI } = {}) {
-  if (!domAPI) throw new Error('[formatting] domAPI is required');
-  // ... rest of the module logic ...
-  function htmlToText(html) {
-    const div = domAPI?.createElement
-      ? domAPI.createElement('div')
-      : (() => { throw new Error('[formatting] domAPI missing'); })();
-    div.innerHTML = html;
-    return div.textContent || '';
-  }
-  // ... other formatting helpers ...
-  return {
-    htmlToText
-    // ...other exports...
   };
 }

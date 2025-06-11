@@ -101,10 +101,17 @@ export function createKnowledgeBaseReadinessService({
       const status = await Promise.race([apiPromise, timeoutPromise]);
 
       _storeCache(cacheKey, status);
-      logger.debug(`[${MODULE}] Health check result`, { projectId, status });
+      logger.debug(`[${MODULE}] Health check result`, { 
+        projectId, 
+        status, 
+        context: 'KBReadinessService:healthCheck' 
+      });
       return status;
     } catch (err) {
-      logger.warn(`[${MODULE}] Health check failed`, err, { projectId });
+      logger.error(`[${MODULE}] Health check failed`, err, { 
+        context: 'KBReadinessService:healthCheck',
+        projectId 
+      });
       const fallback = {
         available: false,
         reason: 'Health check failed',

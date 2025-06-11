@@ -11,12 +11,19 @@ export function createAuthInit(deps) {
     const {
         DependencySystem, domAPI, eventHandlers,
         logger, sanitizer, safeHandler,
-        domReadinessService, APP_CONFIG
+        domReadinessService, APP_CONFIG,
+        authenticationService,
+        eventService
     } = deps;
+
+    // Lazy resolver for authenticationService in case it was not provided yet
+    function _getAuthService() {
+        return authenticationService || DependencySystem.modules.get('authenticationService');
+    }
 
     if (!DependencySystem || !domAPI || !eventHandlers ||
         !logger || !sanitizer || !safeHandler ||
-        !domReadinessService || !APP_CONFIG) {
+        !domReadinessService || !APP_CONFIG || !eventService) {
         throw new Error('[authInit] Missing required dependencies for auth initialization.');
     }
 
@@ -24,7 +31,10 @@ export function createAuthInit(deps) {
         await domReadinessService.documentReady();
         await domReadinessService.dependenciesAndElements({
             deps: ['auth', 'eventHandlers'],
-            domSelectors: ['#loginModalForm', '#authButton'],
+            // Wait only for elements that are guaranteed to be present in base.html.
+            // `#loginModalForm` is injected later by uiInit via htmlTemplateLoader
+            // and therefore must not block early auth initialization.
+            domSelectors: ['#authButton'],
             timeout: 8000,
             context: 'authInit.initializeAuthSystem'
         });
@@ -34,32 +44,27 @@ export function createAuthInit(deps) {
             throw new Error('[authInit] Auth module is missing or invalid.');
         }
 
-        // Register auth event listeners
-        if (auth.AuthBus) {
-            logger.info('[authInit] Registering AuthBus listeners', { context: 'authInit:init' });
+        // Register auth event listeners via unified eventService
+        logger.info('[authInit] Registering eventService auth listeners', { context: 'authInit:init' });
 
-            eventHandlers.trackListener(
-                auth.AuthBus,
-                'authStateChanged',
-                safeHandler((event) => {
-                    logger.info('[authInit][AuthBus] Received authStateChanged', event?.detail, { context: 'authInit:authStateChanged' });
-                    handleAuthStateChange(event);
-                }, 'AuthBus authStateChanged handler'),
-                { description: '[authInit] AuthBus authStateChanged', context: 'authInit' }
-            );
+        eventService.on(
+            'authStateChanged',
+            safeHandler((event) => {
+                logger.info('[authInit] Received authStateChanged', event?.detail, { context: 'authInit:authStateChanged' });
+                handleAuthStateChange(event);
+            }, 'eventService authStateChanged handler'),
+            { context: 'authInit' }
+        );
 
-            eventHandlers.trackListener(
-                auth.AuthBus,
-                'authReady',
-                safeHandler((event) => {
-                    logger.info('[authInit][AuthBus] Received authReady', event?.detail, { context: 'authInit:authReady' });
-                    handleAuthStateChange(event);
-                }, 'AuthBus authReady handler'),
-                { description: '[authInit] AuthBus authReady', context: 'authInit' }
-            );
-        } else {
-            logger.warn('[authInit] No AuthBus instance for registration', { context: 'authInit:init' });
-        }
+        // legacy 'authReady' alias emitted by auth.init()
+        eventService.on(
+            'authReady',
+            safeHandler((event) => {
+                logger.info('[authInit] Received authReady', event?.detail, { context: 'authInit:authReady' });
+                handleAuthStateChange(event);
+            }, 'eventService authReady handler'),
+            { context: 'authInit' }
+        );
 
         try {
             logger.info('[authInit] Calling auth.init()', { context: 'authInit:init' });
@@ -77,15 +82,15 @@ export function createAuthInit(deps) {
 
     function handleAuthStateChange(event) {
         const appModuleLocal = DependencySystem.modules.get('appModule');
-        const projectManager = DependencySystem.modules.get('projectManager');
+        const projectManager  = DependencySystem.modules.get('projectManager');
+
+        const isAuthenticated = _getAuthService()?.isAuthenticated?.() ?? false;
 
         logger.info('[authInit][handleAuthStateChange]', {
             eventDetail: event?.detail,
-            appModuleState: JSON.stringify(appModuleLocal.state),
+            isAuthenticated,
             context: 'authInit:handleAuthStateChange'
         });
-
-        const isAuthenticated = appModuleLocal.state.isAuthenticated;
         const navService = DependencySystem.modules.get('navigationService');
         const appReadyDispatched = DependencySystem.modules.get('appModule')?._appReadyDispatched;
         const readyNow = appReadyDispatched || appModuleLocal.state.isReady;
@@ -128,16 +133,9 @@ export function createAuthInit(deps) {
 
     function renderAuthHeader() {
         try {
-            const appModuleLocal = DependencySystem.modules.get('appModule');
-            if (!appModuleLocal) {
-                logger.error('[authInit][renderAuthHeader] appModule not found.', {
-                    context: 'authInit:renderAuthHeader'
-                });
-                return;
-            }
-
-            const isAuth = appModuleLocal.state.isAuthenticated;
-            const user = appModuleLocal.state.currentUser;
+            const authSvc = _getAuthService();
+            const isAuth = authSvc?.isAuthenticated?.() ?? false;
+            const user   = authSvc?.getCurrentUser?.() || null;
             const displayName = user?.name || user?.username || 'User';
 
             logger.debug('[authInit][renderAuthHeader] Rendering auth header', {

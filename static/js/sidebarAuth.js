@@ -14,13 +14,15 @@ export function createSidebarAuth({
   logger,
   sanitizer,
   safeHandler,
-  domReadinessService
+  domReadinessService,
+  authenticationService
 }) {
   if (!domAPI) throw new Error(`[${MODULE}] domAPI is required`);
   if (!eventHandlers) throw new Error(`[${MODULE}] eventHandlers is required`);
   if (!DependencySystem) throw new Error(`[${MODULE}] DependencySystem is required`);
   if (!logger) throw new Error(`[${MODULE}] logger is required`);
   if (typeof safeHandler !== 'function') throw new Error(`[${MODULE}] safeHandler required`);
+  if (!authenticationService) throw new Error(`[${MODULE}] authenticationService is required`);
 
   let isRegisterMode = false;
 
@@ -173,7 +175,7 @@ export function createSidebarAuth({
     if (event?.detail?.authenticated === undefined) {
       const appModule = DependencySystem.modules?.get('appModule');
       if (appModule?.state) {
-        authenticated = appModule.state.isAuthenticated;
+        authenticated = authenticationService?.isAuthenticated?.() ?? false;
         currentUser = appModule.state.currentUser;
       }
     }
@@ -207,7 +209,7 @@ export function createSidebarAuth({
     if (appModule?.state) {
       handleGlobalAuthStateChange({
         detail: {
-          authenticated: appModule.state.isAuthenticated,
+          authenticated: authenticationService?.isAuthenticated?.() ?? false,
           user: appModule.state.currentUser,
           source: 'forceSync'
         }

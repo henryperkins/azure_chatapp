@@ -120,39 +120,17 @@ export function createAuthApiService({
         context: `${MODULE}:authRequest`
       });
 
-      const response = await apiClient(endpoint, config);
-      
-      logger.info(`[${MODULE}] Received response`, {
-        status: response?.status,
-        statusText: response?.statusText,
-        ok: response?.ok,
-        responseType: typeof response,
+      // apiClient already throws on non-2xx and returns the **parsed payload**
+      // when the request succeeds.  Callers only need the data.
+
+      const data = await apiClient(endpoint, config);
+
+      logger.info(`[${MODULE}] Auth request succeeded`, {
+        endpoint,
+        method,
         context: `${MODULE}:authRequest`
       });
-      
-      if (!response.ok) {
-        let errorMessage = `Request failed: ${response.status} ${response.statusText}`;
-        try {
-          const errorData = await response.json();
-          if (errorData.detail) {
-            errorMessage = errorData.detail;
-          } else if (errorData.message) {
-            errorMessage = errorData.message;
-          } else if (errorData.error) {
-            errorMessage = errorData.error;
-          }
-        } catch (err) {
-          logger.warn(`[${MODULE}] Failed to parse error response JSON`, err, { context: MODULE, endpoint });
-        }
-        
-        const error = new Error(errorMessage);
-        error.status = response.status;
-        error.statusText = response.statusText;
-        throw error;
-      }
 
-      const data = await response.json();
-      _log('Auth request successful', { endpoint, method, status: response.status });
       return data;
     } catch (err) {
       logger.error('[AuthApiService] Auth request failed', err, { context: MODULE, endpoint, method });
