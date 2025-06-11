@@ -69,7 +69,34 @@ export function createAuthInit(deps) {
         try {
             logger.info('[authInit] Calling auth.init()', { context: 'authInit:init' });
             await auth.init();
+            
+            // Force immediate auth state sync after initialization
+            const isAuthenticated = auth.isAuthenticated();
+            const currentUser = auth.getCurrentUser();
+            
+            logger.info('[authInit] Auth state after init', { 
+                isAuthenticated, 
+                currentUser: currentUser ? { id: currentUser.id, username: currentUser.username } : null,
+                context: 'authInit:init' 
+            });
+            
+            // Dispatch auth state to the app module and UI
+            const appModule = DependencySystem.modules.get('appModule');
+            if (appModule && typeof appModule.setAuthState === 'function') {
+                appModule.setAuthState({
+                    isAuthenticated,
+                    currentUser
+                });
+            }
+            
+            // Emit events for other components to react
             eventHandlers.dispatch('authReady');
+            eventHandlers.dispatch('authStateChanged', { 
+                authenticated: isAuthenticated, 
+                user: currentUser, 
+                source: 'authInit' 
+            });
+            
             renderAuthHeader();
             return true;
         } catch (err) {

@@ -15,6 +15,7 @@ import { createThemeManager } from "../../theme-toggle.js";
 import { createKnowledgeBaseReadinessService } from "../../knowledgeBaseReadinessService.js";
 import { createKbResultHandlers } from "../../kb-result-handlers.js";
 import { createAuthenticationService } from "../../../services/authenticationService.js";
+import { createUIStateService } from "../../uiStateService.js";
 
 export function createServiceInit(deps) {
     
@@ -67,6 +68,15 @@ export function createServiceInit(deps) {
         if (globalUtils) safeRegister('globalUtils', globalUtils);
         safeRegister('sanitizer', sanitizer);
         safeRegister('domPurify', sanitizer);
+
+        // UI State Service - needed by sidebar and other UI components
+        try {
+            const uiStateService = createUIStateService({ logger });
+            safeRegister('uiStateService', uiStateService);
+            logger.debug('[serviceInit] UIStateService registered.', { context: 'serviceInit:registerBasicServices' });
+        } catch (err) {
+            logger.error('[serviceInit] Failed to create UIStateService', err, { context: 'serviceInit:registerBasicServices' });
+        }
 
         // Modal / Selector constants registration (if factories provided)
         if (typeof createModalConstants === 'function') {

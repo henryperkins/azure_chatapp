@@ -31,6 +31,7 @@
 // External factories (resolved at *runtime* to avoid circular deps)
 import { createModalManager }       from "../../modalManager.js";
 import { createProjectManager }     from "../../projectManager.js";
+import { createSidebar }            from "../../sidebar.js";
 
 // Optional factories live outside the initialization tree and are therefore
 // injected via the argument object.  Falling back to dynamic import would
@@ -204,6 +205,41 @@ export function createCoreInit(deps = {}) {
     } catch (err) {
       logger.error('[coreInit] Failed to bootstrap ChatManager', err, { context: 'coreInit:chatManager' });
       // Do *not* re-throw – chat is optional.
+    }
+
+    /* ---------------- Sidebar ---------------- */
+    try {
+      if (!DependencySystem.modules.get('sidebar')) {
+        const sidebar = createSidebar({
+          eventHandlers,
+          DependencySystem,
+          domAPI,
+          uiRenderer: DependencySystem.modules.get('uiRenderer'),
+          storageAPI: browserService,
+          projectManager: DependencySystem.modules.get('projectManager'),
+          modelConfig: DependencySystem.modules.get('modelConfig'),
+          app: DependencySystem.modules.get('appModule'),
+          projectDashboard: DependencySystem.modules.get('projectDashboard'),
+          viewportAPI: browserService,
+          accessibilityUtils: DependencySystem.modules.get('accessibilityUtils'),
+          sanitizer,
+          domReadinessService,
+          logger,
+          safeHandler: DependencySystem.modules.get('safeHandler'),
+          APP_CONFIG,
+          uiStateService: DependencySystem.modules.get('uiStateService'),
+          authenticationService: DependencySystem.modules.get('authenticationService'),
+          authBus: DependencySystem.modules.get('AuthBus'),
+          eventService: DependencySystem.modules.get('eventService')
+        });
+
+        registerInstance('sidebar', sidebar);
+        
+        logger.info('[coreInit] Sidebar registered successfully', { context: 'coreInit:sidebar' });
+      }
+    } catch (err) {
+      logger.error('[coreInit] Failed to bootstrap Sidebar', err, { context: 'coreInit:sidebar' });
+      // Don't throw - sidebar is not critical for basic app functionality
     }
 
     logger.info('[coreInit] Core systems initialised', { context: 'coreInit' });

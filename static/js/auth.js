@@ -116,6 +116,16 @@ export function createAuth(deps) {
         context: MODULE_CONTEXT + ':login' 
       });
 
+      // Emit auth state change event for UI components
+      eventService?.emit?.('authStateChanged', { 
+        authenticated: true, 
+        user: response.user, 
+        source: 'login' 
+      });
+      AuthBus?.dispatchEvent?.(new CustomEvent('authStateChanged', { 
+        detail: { authenticated: true, user: response.user, source: 'login' }
+      }));
+
       return response;
     } catch (err) {
       logger.error('[AuthModule] Login failed', err, { 
@@ -141,6 +151,16 @@ export function createAuth(deps) {
       });
 
       logger.info('[AuthModule] Logout successful', { context: MODULE_CONTEXT + ':logout' });
+
+      // Emit auth state change event for UI components
+      eventService?.emit?.('authStateChanged', { 
+        authenticated: false, 
+        user: null, 
+        source: 'logout' 
+      });
+      AuthBus?.dispatchEvent?.(new CustomEvent('authStateChanged', { 
+        detail: { authenticated: false, user: null, source: 'logout' }
+      }));
     } catch (err) {
       logger.error('[AuthModule] Logout failed', err, { context: MODULE_CONTEXT + ':logout' });
       // Update state even if API call failed (cleanup local state)
@@ -216,17 +236,60 @@ export function createAuth(deps) {
           userId: response.user.id,
           context: MODULE_CONTEXT + ':verify' 
         });
-      } else {
-        // Update to unauthenticated state
-        stateManager.setUnauthenticatedState();
-        updateAppState({
-          isAuthenticated: false,
-          currentUser: null
-        });
 
-        logger.debug('[AuthModule] Session verification failed - not authenticated', { 
-          context: MODULE_CONTEXT + ':verify' 
+        // Emit auth state change event for UI components
+        eventService?.emit?.('authStateChanged', { 
+          authenticated: true, 
+          user: response.user, 
+          source: 'verifySession' 
         });
+        AuthBus?.dispatchEvent?.(new CustomEvent('authStateChanged', { 
+          detail: { authenticated: true, user: response.user, source: 'verifySession' }
+        }));
+      } else {
+        /*
+         * If the server replies unauthenticated _immediately after_ a user
+         * just logged in there is a high chance that the backend session
+         * cookie has not propagated to subsequent XHRs yet (common with
+         * SameSite / Secure cookies on some browsers).  To avoid the
+         * frustrating “insta-logout” UX we do not flip the frontend state to
+         * unauthenticated on the very first failed verification that occurs
+         * within 5 seconds of the last authenticated state change.  We simply
+         * log the situation and retry at the next scheduled verification.
+         */
+
+        const now = Date.now();
+        const lastAuth = stateManager.getAuthState().lastVerification || 0;
+        const gracePeriodMs = 5000;
+
+        if (now - lastAuth > gracePeriodMs) {
+          // Grace period expired ➜ treat as real logout.
+          stateManager.setUnauthenticatedState();
+          updateAppState({
+            isAuthenticated: false,
+            currentUser: null
+          });
+
+          logger.debug('[AuthModule] Session verification indicates user is NOT authenticated – state cleared', {
+            context: MODULE_CONTEXT + ':verify',
+            gracePeriodMs
+          });
+
+          // Emit auth state change event for UI components
+          eventService?.emit?.('authStateChanged', { 
+            authenticated: false, 
+            user: null, 
+            source: 'verifySessionLogout' 
+          });
+          AuthBus?.dispatchEvent?.(new CustomEvent('authStateChanged', { 
+            detail: { authenticated: false, user: null, source: 'verifySessionLogout' }
+          }));
+        } else {
+          logger.info('[AuthModule] Session verification unauthenticated but within grace period – keeping current state', {
+            context: MODULE_CONTEXT + ':verify',
+            sinceLoginMs: now - lastAuth
+          });
+        }
       }
 
       return response;
@@ -235,14 +298,16 @@ export function createAuth(deps) {
         context: MODULE_CONTEXT + ':verify' 
       });
       
-      // Set unauthenticated state on error
-      stateManager.setUnauthenticatedState();
-      updateAppState({
-        isAuthenticated: false,
-        currentUser: null
+      // Do NOT immediately clear auth state on network errors – servers may
+      // return intermittent 5xx or the client may be offline.  We preserve
+      // the optimistic auth state and let the next successful request decide.
+
+      logger.warn('[AuthModule] Verification request failed – keeping existing auth state (optimistic)', {
+        context: MODULE_CONTEXT + ':verify:error',
+        preservedAuthenticated: stateManager.isAuthenticated()
       });
 
-      return { authenticated: false, user: null };
+      return { authenticated: stateManager.isAuthenticated(), user: stateManager.getCurrentUser() };
     }
   }
 
