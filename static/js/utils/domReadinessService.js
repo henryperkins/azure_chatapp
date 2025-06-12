@@ -213,10 +213,32 @@ export function createDomReadinessService({
         }
 
         // Setup a timeout for safety
+        // Hold the polling interval id (if one is created) so we can
+        // guarantee it is cleared when the outer timeout fires.  Without
+        // this we leak an active interval that continues to run every
+        // 500 ms forever, eventually flooding the event loop and crashing
+        // the browser after a series of unresolved `elementsReady()`
+        // promises – exactly the issue reported by users.
+        let pollingIntervalId = null;
+
         const timeoutId = browserService.setTimeout(() => {
           // Clean up from structures
           pendingPromises.delete(key);
           appearanceListeners.delete(key);
+
+          // NEW: ensure any polling interval started in _pollForElements is
+          // cancelled as well.  If we do not clear it here, the callback
+          // continues to run every 500 ms forever, causing an ever-growing
+          // number of active intervals on repeated timeouts which will
+          // eventually exhaust the browser’s resources.
+          if (pollingIntervalId !== null) {
+            try {
+              browserService.clearInterval(pollingIntervalId);
+            } catch (err) {
+              logger.error('[domReadinessService] Failed to clear leaking polling interval', err,
+                { context: 'domReadinessService:elementsReady:timeout' });
+            }
+          }
 
           const missing = selectorArray.filter((sel) => domAPI.querySelector(sel) === null);
           missing.forEach((sel) => _missingSelectors.add(sel));
@@ -269,7 +291,7 @@ export function createDomReadinessService({
         } else {
           // Fallback to a quick polling if we don't want to use observers
           try {
-            _pollForElements({
+            pollingIntervalId = _pollForElements({
               selectors: selectorArray,
               timeoutId,
               resolve
@@ -291,7 +313,9 @@ export function createDomReadinessService({
    * Helper to poll for elements (used when observeMutations=false).
    * Checks from time to time until either we find our elements or the outer
    * timeout triggers.
-   */
+  * @returns {number} The interval id so callers can clear it manually if
+  *          the surrounding promise times out before the elements are found.
+  */
   function _pollForElements({ selectors, timeoutId, resolve }) {
     const intervalId = browserService.setInterval(() => {
       const found = selectors.map((sel) => domAPI.querySelector(sel));
@@ -307,6 +331,8 @@ export function createDomReadinessService({
         resolve(found);
       }
     }, 500);
+
+    return intervalId;
   }
 
   /**

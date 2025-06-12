@@ -116,21 +116,35 @@ export function createCoreInit(deps = {}) {
     /* ---------------- Project Manager ---------------- */
     try {
       if (!DependencySystem.modules.get('projectManager')) {
-        const projectMgr = createProjectManager({
-          DependencySystem,
-          domReadinessService,
-          logger,
-          timer         : browserService,
-          eventHandlers,
-          eventService  : DependencySystem.modules.get('eventService'),
-          apiEndpoints  : DependencySystem.modules.get('apiEndpoints'),
-        });
-
-        registerInstance('projectManager', projectMgr);
+        const projectAPIService = DependencySystem.modules.get('projectAPIService');
+        const projectContextService = DependencySystem.modules.get('projectContextService');
         
-        // Inject projectManager into eventHandlers
-        if (typeof eventHandlers.setProjectManager === 'function') {
-          eventHandlers.setProjectManager(projectMgr);
+        if (projectAPIService && projectContextService) {
+          const projectMgr = createProjectManager({
+            logger,
+            projectAPIService,
+            projectContextService,
+            // chatManager will be injected later via setChatManager() method
+            chatManager: null
+          });
+
+          registerInstance('projectManager', projectMgr);
+          
+          // Inject projectManager into eventHandlers
+          if (typeof eventHandlers.setProjectManager === 'function') {
+            eventHandlers.setProjectManager(projectMgr);
+          }
+
+          logger.debug('[coreInit] ProjectManager registered successfully', {
+            context: 'coreInit:projectManager'
+          });
+        } else {
+          logger.error('[coreInit] Cannot create ProjectManager - required services missing', {
+            hasProjectAPIService: !!projectAPIService,
+            hasProjectContextService: !!projectContextService,
+            context: 'coreInit:projectManager'
+          });
+          throw new Error('ProjectManager dependencies not available');
         }
       }
     } catch (err) {
@@ -170,7 +184,6 @@ export function createCoreInit(deps = {}) {
               tokenStatsManager : DependencySystem.modules.get('tokenStatsManagerProxy'),
               modelConfig       : DependencySystem.modules.get('modelConfig'),
               eventService      : DependencySystem.modules.get('eventService'),
-              eventBus          : DependencySystem.modules.get('AppBus'),
             }),
 
             messageHandler : createMessageHandler({
@@ -192,6 +205,15 @@ export function createCoreInit(deps = {}) {
           });
 
           registerInstance('chatManager', chatMgr);
+
+          // Inject chatManager into projectManager if it exists
+          const projectManager = DependencySystem.modules.get('projectManager');
+          if (projectManager && typeof projectManager.setChatManager === 'function') {
+            projectManager.setChatManager(chatMgr);
+            logger.debug('[coreInit] ChatManager injected into ProjectManager', {
+              context: 'coreInit:chatManager'
+            });
+          }
 
           if (chatMgr.initialize) {
             chatMgr.initialize().catch((err) => {

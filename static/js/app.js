@@ -5,6 +5,7 @@
  */
 
  // CustomEvent polyfill (DI-safe factory)
+console.log('[DEBUG] app.js: Loading imports...');
 import { createCustomEventPolyfill } from './utils/polyfillCustomEvent.js';
 
 // Core config & factory imports for bootstrapping
@@ -56,6 +57,16 @@ import { createMessageHandler } from './messageHandler.js';
 import { createProjectDetailsRenderer } from './projectDetailsRenderer.js';
 import { createProjectDataCoordinator } from './projectDataCoordinator.js';
 import { createProjectEventHandlers } from './projectEventHandlers.js';
+import { createLoginButtonHandler } from './loginButtonHandler.js';
+import { createProjectListRenderer } from './projectListRenderer.js';
+
+// Newly hooked factories (Phase 2025-06-11)
+import { createModalFormHandler } from './modalFormHandler.js';
+import { createModalStateManager } from './modalStateManager.js';
+import { createModalRenderer } from './modalRenderer.js';
+import { createSidebarAuth } from './sidebarAuth.js';
+import { createSidebarEnhancements } from './sidebar-enhancements.js';
+import { createSidebarMobileDock } from './sidebarMobileDock.js';
 
 // Previously uninitialized components
 import { createThemeManager } from './theme-toggle.js';
@@ -73,14 +84,18 @@ import { createPullToRefresh } from './utils/pullToRefresh.js';
  * acquire the DependencySystem instance, and pass factories to the AppInitializer.
  * All wiring, DI registration, side effects or checks have been migrated to appInitializer.js.
  */
+console.log('[DEBUG] app.js: Starting application bootstrap');
+
 const browserService = createBrowserService({
   windowObject: (typeof window !== 'undefined') ? window : undefined
 });
+console.log('[DEBUG] app.js: browserService created successfully');
 
 
 // DO NOT execute DOMPurify injection or polyfills here – pass factories instead.
 
 const DependencySystem = browserService.getDependencySystem();
+console.log('[DEBUG] app.js: DependencySystem acquired');
 
 // Instantiate and run the app initializer
 // --------------------------------------------------------------
@@ -111,6 +126,8 @@ const factories = {
   createProjectListComponent,
   createProjectModal,
   createSidebar,
+  // New renderer for project list
+  createProjectListRenderer,
   // Phase-2/3 extracted factories
   createChatUIController,
   createConversationManager,
@@ -118,6 +135,14 @@ const factories = {
   createProjectDetailsRenderer,
   createProjectDataCoordinator,
   createProjectEventHandlers,
+  createLoginButtonHandler,
+  // Modal/Sidebar sub-factories (newly registered)
+  createModalFormHandler,
+  createModalStateManager,
+  createModalRenderer,
+  createSidebarAuth,
+  createSidebarEnhancements,
+  createSidebarMobileDock,
   // Previously uninitialized components
   createThemeManager,
   createKnowledgeBaseReadinessService,
@@ -139,6 +164,8 @@ const globalUtils = {
   formatDate: globalFormatDate,
   fileIcon: globalFileIcon
 };
+
+console.log('[DEBUG] app.js: Creating appInitializer with dependencies');
 
 const appInit = createAppInitializer({
   DependencySystem,
@@ -168,6 +195,7 @@ const appInit = createAppInitializer({
   createModalConstants,
   createSelectorConstants,
   createChatExtensions,
+  createLoginButtonHandler,
   createLogDeliveryService,
   createHtmlTemplateLoader,
   createUiRenderer,
@@ -177,9 +205,20 @@ const appInit = createAppInitializer({
   createDOMPurifyGlobal,
   createCustomEventPolyfill
 });
+console.log('[DEBUG] app.js: appInitializer created successfully');
 
 // The ONLY orchestration in app.js: start up through the unified initializer
-appInit.initializeApp();
+console.log('[DEBUG] app.js: Calling initializeApp()');
+try {
+  appInit.initializeApp();
+  console.log('[DEBUG] app.js: initializeApp() called successfully');
+} catch (error) {
+  console.error('[DEBUG] app.js: Error in initializeApp():', error);
+  // Dispatch error event for HTML to catch
+  window.dispatchEvent(new CustomEvent('app:error', {
+    detail: { message: `Initialization failed: ${error.message}` }
+  }));
+}
 
 // Optionally re-export the appConfig for test harnessing or diagnostics
 export { createAppConfig } from './appConfig.js';

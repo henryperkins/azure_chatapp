@@ -425,7 +425,10 @@ function vFactory(err, file, config) {
           (
             firstParamNode.type === 'ObjectPattern' ||                              // { logger, … }
             (firstParamNode.type === 'AssignmentPattern' &&
-             firstParamNode.left.type === 'ObjectPattern')                         // { … } = {}
+             firstParamNode.left.type === 'ObjectPattern') ||                      // { … } = {}
+            (firstParamNode.type === 'AssignmentPattern' &&
+             firstParamNode.left.type === 'Identifier') ||                         // dependencies = {}
+            (firstParamNode.type === 'Identifier')                                 // dependencies
           );
 
         if (!isDIObjectParam) {

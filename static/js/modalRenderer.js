@@ -77,7 +77,7 @@ export function createModalRenderer({
         }
       }
     } catch (err) {
-      _logError('Failed to manage body scroll', err, { enableScroll });
+      logger.error('[ModalRenderer] Failed to manage body scroll', err, { enableScroll, context: 'ModalRenderer:manageBodyScroll' });
     }
   }
 
@@ -113,7 +113,7 @@ export function createModalRenderer({
 
       return true;
     } catch (err) {
-      _logError('Failed to show modal element', err, { modalId: modalEl.id });
+      logger.error('[ModalRenderer] Failed to show modal element', err, { modalId: modalEl.id, context: 'ModalRenderer:showModalElement' });
       return false;
     }
   }
@@ -142,7 +142,7 @@ export function createModalRenderer({
 
       return true;
     } catch (err) {
-      _logError('Failed to hide modal element', err, { modalId: modalEl.id });
+      logger.error('[ModalRenderer] Failed to hide modal element', err, { modalId: modalEl.id, context: 'ModalRenderer:hideModalElement' });
       return false;
     }
   }
@@ -158,7 +158,7 @@ export function createModalRenderer({
       }
       return modalEl;
     } catch (err) {
-      _logError('Failed to find modal element', err, { modalId });
+      logger.error('[ModalRenderer] Failed to find modal element', err, { modalId, context: 'ModalRenderer:findModalElement' });
       return null;
     }
   }

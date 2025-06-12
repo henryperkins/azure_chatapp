@@ -44,6 +44,7 @@
   "static/js/services/starredStorage.js",
   "static/services/authenticationService.js",
   "static/services/projectContextService.js",
+  "static/services/projectAPIService.js",
   "static/services/eventService.js",
   "static/js/utils/apiClient.js",
   "static/js/utils/apiEndpoints.js",

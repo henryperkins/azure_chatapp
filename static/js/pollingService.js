@@ -37,26 +37,22 @@ export function createPollingService({
   // Resolve once at factory-time – no runtime container look-ups later.
   // ------------------------------------------------------------------
 
-  const AppBus = DependencySystem?.modules?.get?.('AppBus');
-
   // Prefer injected domAPI/authModule; fall back to DI container (one-time).
   const _domAPI = domAPI || DependencySystem?.modules?.get?.('domAPI');
   const _authModule = authModule || DependencySystem?.modules?.get?.('auth');
 
-  // Use eventService for unified event system instead of local EventTarget
+  // Use eventService for unified event system instead of deprecated AppBus
+  const _eventService = eventService || DependencySystem?.modules?.get?.('eventService');
 
   // Internal map: jobId → { intervalId, lastStatus }
   const _jobs = new Map();
 
-  function _dispatchAppBusEvent(name, detail) {
-    if (!AppBus || typeof AppBus.dispatchEvent !== 'function') return;
+  function _dispatchEvent(name, detail) {
+    if (!_eventService || typeof _eventService.emit !== 'function') return;
     try {
-      const evt = eventHandlers?.createCustomEvent
-        ? eventHandlers.createCustomEvent(name, { detail })
-        : new CustomEvent(name, { detail });
-      AppBus.dispatchEvent(evt);
+      _eventService.emit(name, detail);
     } catch (err) {
-      logger.warn(`[${MODULE}] Failed to dispatch AppBus event ${name}`, err, { context: MODULE });
+      logger.warn(`[${MODULE}] Failed to dispatch event ${name}`, err, { context: MODULE });
     }
   }
 
@@ -75,13 +71,13 @@ export function createPollingService({
       }
 
       // Analytics / global consumers
-      _dispatchAppBusEvent('knowledgebase:jobProgress', { jobId, status, progress });
+      _dispatchEvent('knowledgebase:jobProgress', { jobId, status, progress });
 
       if (status === 'completed' || status === 'failed' || status === 'cancelled') {
         stopJob(jobId); // auto-cleanup finished jobs
 
         if (status === 'completed') {
-          _dispatchAppBusEvent('knowledgebase:ready', { jobId });
+          _dispatchEvent('knowledgebase:ready', { jobId });
         }
       }
     } catch (err) {
@@ -137,8 +133,8 @@ export function createPollingService({
       });
     }
 
-    if (_authModule?.AuthBus) {
-      eventHandlers.trackListener(_authModule.AuthBus, 'authStateChanged', (e) => {
+    if (_eventService) {
+      _eventService.on('authStateChanged', (e) => {
         if (e?.detail?.authenticated === false) {
           cleanup();
         }

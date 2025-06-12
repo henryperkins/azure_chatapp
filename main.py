@@ -52,6 +52,23 @@ from fastapi.routing import APIRoute
 
 # Initialize telemetry (logging + Sentry) FIRST - must be at module level before any other logging
 from config import settings  # Now settings will use already loaded env vars
+# -----------------------------------------------------------------------------
+# EARLY CRITICAL CONFIG VALIDATION – MUST RUN *BEFORE* APP AND TELEMETRY BOOT
+# -----------------------------------------------------------------------------
+
+# Refuse to start if SESSION_SECRET is unset or obviously insecure. This check
+# happens *before* any other side-effect (database connection, telemetry, etc.)
+# so CI and container start-up fail fast with a clear error message instead of
+# a late middleware assertion.
+
+_raw_session_secret = os.getenv("SESSION_SECRET", "dev_insecure_key")
+
+if _raw_session_secret in ("", "dev_insecure_key", "DEV_DEBUG_KEY"):
+    raise RuntimeError(
+        "SESSION_SECRET environment variable is missing or insecure. "
+        "Set SESSION_SECRET to a strong random value before launching the application."
+    )
+
 from utils.bootstrap import init_telemetry
 
 # APP_NAME, APP_VERSION, ENVIRONMENT are now preferably accessed via settings
@@ -300,49 +317,62 @@ async def on_shutdown():
 
 # Serve static files with directory check (always absolute, robust for debug and prod)
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
-if not os.path.isdir(STATIC_DIR):
-    logger.critical(f"Static directory not found: {STATIC_DIR}. Aborting startup.")
-    raise RuntimeError(f"Static directory not found: {STATIC_DIR}")
+# Static-file availability check – *non-fatal*
+STATIC_AVAILABLE = os.path.isdir(STATIC_DIR)
 
-# Enhanced static file serving with more debugging
-try:
-    # Check if modals.html exists
-    modals_path = os.path.join(STATIC_DIR, "html", "modals.html")
-    if os.path.isfile(modals_path):
-        logger.info(f"Found modals.html at: {modals_path}")
-    else:
-        logger.critical(f"CRITICAL: modals.html not found at: {modals_path}")
-        # Try to locate modals.html anywhere in the project
-        import glob
-
-        modals_files = glob.glob("**/modals.html", recursive=True)
-        if modals_files:
-            logger.info(f"Found modals.html in alternative locations: {modals_files}")
+if not STATIC_AVAILABLE:
+    logger.critical(
+        f"Static directory not found at {STATIC_DIR}. Continuing startup without static assets."
+    )
+else:
+    # Enhanced static file serving with more debugging
+    try:
+        # Check if modals.html exists
+        modals_path = os.path.join(STATIC_DIR, "html", "modals.html")
+        if os.path.isfile(modals_path):
+            logger.info(f"Found modals.html at: {modals_path}")
         else:
-            logger.info("Could not find modals.html anywhere in the project")
+            logger.warning(f"modals.html not found at: {modals_path}")
 
-    # Mount static directory
-    app.mount("/static", NoCacheStatic(directory=STATIC_DIR), name="static")
-    logger.info(f"Static files mounted from {STATIC_DIR}")
-except Exception as e:
-    logger.critical(f"Failed to mount static files: {str(e)}", exc_info=True)
-    raise RuntimeError(f"Failed to mount static files: {str(e)}") from e
+        # Mount static directory
+        app.mount("/static", NoCacheStatic(directory=STATIC_DIR), name="static")
+        logger.info(f"Static files mounted from {STATIC_DIR}")
+    except Exception as e:
+        STATIC_AVAILABLE = False
+        logger.critical(
+            f"Failed to mount static files: {str(e)} – continuing without static assets.",
+            exc_info=True,
+        )
 
 
 @app.get("/", include_in_schema=False)
 async def index() -> Response:
-    """
-    Insecurely serve an HTML page (base.html).
-    """
-    return FileResponse("static/html/base.html")
+    """Serve the SPA root or report missing static assets."""
+
+    if STATIC_AVAILABLE:
+        base_path = os.path.join(STATIC_DIR, "html", "base.html")
+        if os.path.isfile(base_path):
+            return FileResponse(base_path)
+
+    return JSONResponse(
+        status_code=503,
+        content={
+            "detail": "Static assets are unavailable on this server instance. Please try again later or contact the administrator.",
+        },
+    )
 
 
 @app.get("/login", include_in_schema=False)
 async def serve_login() -> Response:
-    """
-    Insecurely serve the login page.
-    """
-    return FileResponse("static/html/login.html")
+    if STATIC_AVAILABLE:
+        path_ = os.path.join(STATIC_DIR, "html", "login.html")
+        if os.path.isfile(path_):
+            return FileResponse(path_)
+
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "Login page unavailable – static assets missing."},
+    )
 
 
 @app.get("/modals", include_in_schema=False)
@@ -350,16 +380,17 @@ async def serve_modals() -> Response:
     """
     Special direct route to serve modals.html for debugging.
     """
-    modals_path = "static/html/modals.html"
-    if os.path.isfile(modals_path):
-        logger.info(f"Serving modals.html via direct route from: {modals_path}")
-        return FileResponse(modals_path)
-    else:
-        logger.error(f"modals.html not found at {modals_path} in direct route")
-        return JSONResponse(
-            status_code=404,
-            content={"detail": f"modals.html not found at {modals_path}"},
-        )
+    if STATIC_AVAILABLE:
+        modals_path = os.path.join(STATIC_DIR, "html", "modals.html")
+        if os.path.isfile(modals_path):
+            logger.info(f"Serving modals.html from {modals_path}")
+            return FileResponse(modals_path)
+
+    logger.error("modals.html not available – static assets missing or file absent")
+    return JSONResponse(
+        status_code=404,
+        content={"detail": "modals.html not available on this server instance."},
+    )
 
 
 @app.get("/health")

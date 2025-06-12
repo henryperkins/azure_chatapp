@@ -48,7 +48,16 @@ export function createFileUploadComponent({
 
   // --- Configuration ---
   const fileConstants = {
-    allowedExtensions: ['.txt', '.md', '.csv', '.json', '.pdf', '.doc', '.docx', '.py', '.js', '.html', '.css', '.ini'],
+    allowedExtensions: [
+      '.txt', '.md', '.csv', '.json', '.pdf',
+      '.doc', '.docx', '.py', '.js', '.html', '.css', '.ini'
+    ],
+    allowedMimeTypes: [
+      'text/plain', 'text/markdown', 'text/csv', 'application/json',
+      'application/pdf',
+      'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'text/x-python', 'application/javascript', 'text/html', 'text/css', 'text/x-ini'
+    ],
     maxSizeMB: 30
   };
 
@@ -420,7 +429,7 @@ const _scheduler = scheduler || {
   }
 
   function _validateFiles(files) {
-    const { allowedExtensions, maxSizeMB } = fileConstants;
+    const { allowedExtensions, allowedMimeTypes, maxSizeMB } = fileConstants;
     const validFiles = [];
     const invalidFiles = [];
     for (let file of files) {
@@ -468,13 +477,14 @@ const _scheduler = scheduler || {
 
       const ext = file.name.includes('.') ? '.' + file.name.split('.').pop().toLowerCase() : '';
       const isValidExt = allowedExtensions.includes(ext);
+      const isValidMime = allowedMimeTypes.includes(file.type);
       const isValidSize = file.size <= maxSizeMB * 1024 * 1024;
 
-      if (!isValidExt) {
+      if (!isValidExt || !isValidMime) {
         invalidFiles.push({
           status: 400,
           data: { file },
-          message: `Invalid file type (${ext || 'none'}). Allowed: ${allowedExtensions.join(', ')}`
+          message: `Invalid file type. Allowed extensions: ${allowedExtensions.join(', ')}`
         });
       } else if (!isValidSize) {
         invalidFiles.push({

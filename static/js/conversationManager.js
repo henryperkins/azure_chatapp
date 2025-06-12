@@ -22,7 +22,6 @@ export function createConversationManager({
   tokenStatsManager,
   modelConfig,
   eventService,
-  eventBus,
   DependencySystem,
   CHAT_CONFIG
 } = {}) {
@@ -35,7 +34,6 @@ export function createConversationManager({
   if (!tokenStatsManager) throw new Error('[ConversationManager] tokenStatsManager dependency missing');
   if (!modelConfig) throw new Error('[ConversationManager] modelConfig dependency missing');
   if (!eventService) throw new Error('[ConversationManager] eventService dependency missing');
-  if (!eventBus) throw new Error('[ConversationManager] eventBus dependency missing');
 
   const MODULE_CONTEXT = 'ConversationManager';
 

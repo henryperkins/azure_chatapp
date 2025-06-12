@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Startup Test</title>
+</head>
+<body>
+    <div id="test">Testing JavaScript loading...</div>
+    <script type="module">
+        console.log('Basic ES6 module loading works');
+        document.getElementById('test').textContent = 'JavaScript executed successfully!';
+        
+        // Test import
+        try {
+            import('./static/js/app.js').then(() => {
+                console.log('app.js imported successfully');
+                document.getElementById('test').textContent += ' app.js loaded!';
+            }).catch(err => {
+                console.error('Failed to import app.js:', err);
+                document.getElementById('test').textContent += ' ERROR: ' + err.message;
+            });
+        } catch (err) {
+            console.error('Import error:', err);
+            document.getElementById('test').textContent += ' IMPORT ERROR: ' + err.message;
+        }
+    </script>
+</body>
+</html>

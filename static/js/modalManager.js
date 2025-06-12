@@ -160,7 +160,7 @@ export function createModalManager({
       if (modalId) {
         const modalName = stateManager.getModalName(modalId);
         if (modalName) {
-          logger.debug('[ModalManager] Close requested', { modalName, source });
+          logger.debug('[ModalManager] Close requested', { modalName, source }, { context: 'ModalManager:closeRequest' });
           hide(modalName);
         }
       }
@@ -175,10 +175,10 @@ export function createModalManager({
   // === CORE MODAL OPERATIONS ===
   function show(modalName, options = {}) {
     try {
-      logger.debug('[ModalManager] Showing modal', { modalName, options });
+      logger.debug('[ModalManager] Showing modal', { modalName, options }, { context: 'ModalManager:show' });
 
       if (!stateManager.canOpenModal(modalName)) {
-        logger.warn('[ModalManager] Cannot open modal', { modalName });
+        logger.warn('[ModalManager] Cannot open modal', { modalName }, { context: 'ModalManager:show' });
         return false;
       }
 
@@ -186,7 +186,7 @@ export function createModalManager({
       const modalEl = renderer.findModalElement(modalId);
 
       if (!modalEl) {
-        logger.error('[ModalManager] Modal element not found', { modalName, modalId });
+        logger.error('[ModalManager] Modal element not found', { modalName, modalId }, { context: 'ModalManager:show' });
         return false;
       }
 
@@ -208,7 +208,7 @@ export function createModalManager({
         try {
           options.updateContent(modalEl);
         } catch (err) {
-          logger.error('[ModalManager] Update content callback failed', err, { modalName });
+          logger.error('[ModalManager] Update content callback failed', err, { modalName, context: 'ModalManager:show' });
         }
       }
 
@@ -222,34 +222,34 @@ export function createModalManager({
           renderer.centerModal(modalEl);
         }
 
-        logger.info('[ModalManager] Modal shown successfully', { modalName });
+        logger.info('[ModalManager] Modal shown successfully', { modalName }, { context: 'ModalManager:show' });
         return true;
       } else {
-        logger.error('[ModalManager] Failed to show modal element', { modalName });
+        logger.error('[ModalManager] Failed to show modal element', { modalName }, { context: 'ModalManager:show' });
         return false;
       }
 
     } catch (err) {
-      logger.error('[ModalManager] Error showing modal', err, { modalName });
+      logger.error('[ModalManager] Error showing modal', err, { modalName, context: 'ModalManager:show' });
       return false;
     }
   }
 
   function hide(modalName) {
     try {
-      logger.debug('[ModalManager] Hiding modal', { modalName });
+      logger.debug('[ModalManager] Hiding modal', { modalName }, { context: 'ModalManager:hide' });
 
       if (!modalName) {
         // Hide active modal if no name provided
         modalName = stateManager.getActiveModal();
         if (!modalName) {
-          logger.warn('[ModalManager] No modal to hide');
+          logger.warn('[ModalManager] No modal to hide', null, { context: 'ModalManager:hide' });
           return false;
         }
       }
 
       if (!stateManager.canCloseModal(modalName)) {
-        logger.warn('[ModalManager] Cannot close modal', { modalName });
+        logger.warn('[ModalManager] Cannot close modal', { modalName }, { context: 'ModalManager:hide' });
         return false;
       }
 
@@ -257,7 +257,7 @@ export function createModalManager({
       const modalEl = renderer.findModalElement(modalId);
 
       if (!modalEl) {
-        logger.error('[ModalManager] Modal element not found for hiding', { modalName, modalId });
+        logger.error('[ModalManager] Modal element not found for hiding', { modalName, modalId }, { context: 'ModalManager:hide' });
         return false;
       }
 
@@ -265,15 +265,15 @@ export function createModalManager({
       const success = renderer.hideModalElement(modalEl);
       if (success) {
         stateManager.setActiveModal(null);
-        logger.info('[ModalManager] Modal hidden successfully', { modalName });
+        logger.info('[ModalManager] Modal hidden successfully', { modalName }, { context: 'ModalManager:hide' });
         return true;
       } else {
-        logger.error('[ModalManager] Failed to hide modal element', { modalName });
+        logger.error('[ModalManager] Failed to hide modal element', { modalName }, { context: 'ModalManager:hide' });
         return false;
       }
 
     } catch (err) {
-      logger.error('[ModalManager] Error hiding modal', err, { modalName });
+      logger.error('[ModalManager] Error hiding modal', err, { modalName, context: 'ModalManager:hide' });
       return false;
     }
   }
@@ -299,10 +299,10 @@ export function createModalManager({
         }
       });
 
-      logger.info('[ModalManager] All modals hidden', { count: closedModals.length });
+      logger.info('[ModalManager] All modals hidden', { count: closedModals.length }, { context: 'ModalManager:hideAll' });
       return closedModals;
     } catch (err) {
-      logger.error('[ModalManager] Error hiding all modals', err);
+      logger.error('[ModalManager] Error hiding all modals', err, { context: 'ModalManager:hideAll' });
       return [];
     }
   }
@@ -314,7 +314,7 @@ export function createModalManager({
       const modalEl = renderer.findModalElement(modalId);
 
       if (!modalEl) {
-        logger.error('[ModalManager] Cannot bind form - modal not found', { modalName, modalId });
+        logger.error('[ModalManager] Cannot bind form - modal not found', { modalName, modalId }, { context: 'ModalManager:bindForm' });
         return false;
       }
 
@@ -323,7 +323,7 @@ export function createModalManager({
         context: MODULE_CONTEXT + ':' + modalName
       });
     } catch (err) {
-      logger.error('[ModalManager] Error binding modal form', err, { modalName, formSelector });
+      logger.error('[ModalManager] Error binding modal form', err, { modalName, formSelector, context: 'ModalManager:bindForm' });
       return false;
     }
   }
@@ -474,7 +474,16 @@ export default class ModalManager {
       if (opts?.logger) {
         opts.logger.error('[ModalManager] Auto-initialization failed:', err, { context: 'ModalManager' });
       } else {
-        console.error('[ModalManager] Auto-initialization failed:', err);
+        /* Avoid direct console usage after bootstrap – attempt to obtain
+         * global logger via DependencySystem.  If that still fails we fall
+         * back to a silent no-op to comply with guard-rails.
+         */
+        try {
+          const globalLogger = (typeof window !== 'undefined')?.DependencySystem?.modules?.get?.('logger');
+          if (globalLogger?.error) {
+            globalLogger.error('[ModalManager] Auto-initialization failed:', err, { context: 'ModalManager' });
+          }
+        } catch (_) { /* noop */ }
       }
     });
   }

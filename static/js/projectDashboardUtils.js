@@ -144,8 +144,8 @@ export function createProjectDashboardUtils(options = {}) {
   const deps = _resolveDependencies({ DependencySystem, ...options });
   const { eventHandlers, projectManager, modalManager, sanitizer, domAPI, projectModal } = deps;
   const logger = _getDependency(options.logger, 'logger', DependencySystem, false);
-  // Event bus should be injected via DI (eventBus) – avoid container look-ups.
-  const eventBus = DependencySystem?.modules?.get?.("eventBus");
+  // Use unified eventService instead of deprecated eventBus
+  const eventService = DependencySystem?.modules?.get?.("eventService");
   const gUtils = options.globalUtils || null;
   if (!gUtils) {
     throw new Error(`[${MODULE}] globalUtils dependency is required`);
@@ -167,11 +167,9 @@ export function createProjectDashboardUtils(options = {}) {
           domAPI.dispatchEvent(doc, new CustomEvent('projectDashboardUtilsInitialized'));
         }
 
-        // Canonical event bus usage only if present
-        if (eventBus && typeof eventBus.dispatchEvent === "function") {
-          eventBus.dispatchEvent(
-            new CustomEvent('projectdashboardutils:initialized', { detail: { success: true } })
-          );
+        // Use unified eventService for initialization event
+        if (eventService && typeof eventService.emit === "function") {
+          eventService.emit('projectdashboardutils:initialized', { success: true });
         } else if (domAPI?.getDocument && domAPI?.dispatchEvent) {
           const eDoc = domAPI.getDocument();
           if (eDoc) {

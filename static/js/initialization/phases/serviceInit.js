@@ -9,6 +9,7 @@
 
 import { createAuth } from "../../auth.js";
 import { createApiClient } from "../../utils/apiClient.js";
+import { createAuthApiService } from "../../authApiService.js";
 
 // Standalone service imports
 import { createThemeManager } from "../../theme-toggle.js";
@@ -16,6 +17,10 @@ import { createKnowledgeBaseReadinessService } from "../../knowledgeBaseReadines
 import { createKbResultHandlers } from "../../kb-result-handlers.js";
 import { createAuthenticationService } from "../../../services/authenticationService.js";
 import { createUIStateService } from "../../uiStateService.js";
+
+// Project-related services
+import { createProjectAPIService } from "../../../services/projectAPIService.js";
+import { createProjectContextService } from "../../../services/projectContextService.js";
 
 export function createServiceInit(deps) {
     
@@ -211,6 +216,28 @@ export function createServiceInit(deps) {
                 logger.info('[serviceInit] API client created and registered.', {
                     context: 'serviceInit:registerAdvancedServices'
                 });
+
+                // Register AuthApiService now that apiClient and apiEndpoints are available
+                try {
+                    const apiEndpoints = DependencySystem.modules.get('apiEndpoints');
+                    if (apiEndpoints) {
+                        const authApiService = createAuthApiService({
+                            apiClient: apiClientInstance.fetch,
+                            apiEndpoints,
+                            logger,
+                            browserService
+                        });
+                        safeRegister('authApiService', authApiService);
+                        
+                        logger.debug('[serviceInit] AuthApiService registered.', {
+                            context: 'serviceInit:registerAdvancedServices'
+                        });
+                    }
+                } catch (authErr) {
+                    logger.error('[serviceInit] Failed to create AuthApiService', authErr, {
+                        context: 'serviceInit:registerAdvancedServices'
+                    });
+                }
             } catch (error) {
                 logger.error('[serviceInit] Failed to create API client', error, {
                     context: 'serviceInit:registerAdvancedServices'
@@ -373,6 +400,136 @@ export function createServiceInit(deps) {
                 });
                 throw err;
             }
+        }
+
+        // --------------------------------------------------------------
+        // Project-related Services
+        // --------------------------------------------------------------
+        
+        // Project API Service
+        if (apiClientInstance) {
+            try {
+                const apiEndpoints = DependencySystem.modules.get('apiEndpoints');
+                if (apiEndpoints) {
+                    const projectAPIService = createProjectAPIService({
+                        apiClient: apiClientInstance.fetch,
+                        apiEndpoints,
+                        logger
+                    });
+                    safeRegister('projectAPIService', projectAPIService);
+                    
+                    logger.debug('[serviceInit] ProjectAPIService registered.', {
+                        context: 'serviceInit:registerAdvancedServices'
+                    });
+                }
+            } catch (err) {
+                logger.error('[serviceInit] Failed to initialize ProjectAPIService', err, {
+                    context: 'serviceInit:registerAdvancedServices'
+                });
+            }
+        }
+        
+        // Project Context Service - Critical service, fail hard if missing
+        try {
+            const appModule = DependencySystem.modules.get('appModule');
+            const eventService = DependencySystem.modules.get('eventService');
+            
+            if (appModule && eventService) {
+                const projectContextService = createProjectContextService({
+                    eventService,
+                    logger,
+                    appModule
+                });
+                safeRegister('projectContextService', projectContextService);
+                
+                logger.debug('[serviceInit] ProjectContextService registered.', {
+                    context: 'serviceInit:registerAdvancedServices'
+                });
+            } else {
+                const missingDeps = [];
+                if (!appModule) missingDeps.push('appModule');
+                if (!eventService) missingDeps.push('eventService');
+                
+                logger.error('[serviceInit] Cannot create ProjectContextService - critical dependencies missing', {
+                    missingDependencies: missingDeps,
+                    context: 'serviceInit:registerAdvancedServices'
+                });
+                throw new Error(`ProjectContextService critical dependencies missing: ${missingDeps.join(', ')}`);
+            }
+        } catch (err) {
+            logger.error('[serviceInit] Failed to initialize ProjectContextService', err, {
+                context: 'serviceInit:registerAdvancedServices'
+            });
+            throw err; // Re-throw for critical services
+        }
+
+        // --------------------------------------------------------------
+        // Knowledge Base Services
+        // --------------------------------------------------------------
+        
+        // KB API Service - Optional feature, graceful degradation
+        if (apiClientInstance) {
+            try {
+                const kbAPIServiceFactory = DependencySystem.modules.get('KBAPIServiceFactory');
+                const apiEndpoints = DependencySystem.modules.get('apiEndpoints');
+                
+                if (kbAPIServiceFactory && apiEndpoints) {
+                    const kbAPIService = kbAPIServiceFactory({
+                        apiClient: apiClientInstance.fetch,
+                        apiEndpoints: apiEndpoints.endpoints || apiEndpoints,
+                        logger
+                    });
+                    safeRegister('KBAPIService', kbAPIService);
+                    
+                    logger.debug('[serviceInit] KBAPIService registered.', {
+                        context: 'serviceInit:registerAdvancedServices'
+                    });
+                } else {
+                    logger.debug('[serviceInit] KBAPIService skipped - factory or endpoints not available', {
+                        hasFactory: !!kbAPIServiceFactory,
+                        hasEndpoints: !!apiEndpoints,
+                        context: 'serviceInit:registerAdvancedServices'
+                    });
+                }
+            } catch (err) {
+                logger.warn('[serviceInit] Failed to initialize KBAPIService - knowledge base features disabled', err, {
+                    context: 'serviceInit:registerAdvancedServices'
+                });
+                // Don't throw - KB is optional
+            }
+        } else {
+            logger.debug('[serviceInit] KBAPIService skipped - no API client available', {
+                context: 'serviceInit:registerAdvancedServices'
+            });
+        }
+        
+        // KB State Service - Optional feature, graceful degradation
+        try {
+            const kbStateServiceFactory = DependencySystem.modules.get('KBStateServiceFactory');
+            const eventService = DependencySystem.modules.get('eventService');
+            
+            if (kbStateServiceFactory && eventService) {
+                const kbStateService = kbStateServiceFactory({
+                    eventService,
+                    logger
+                });
+                safeRegister('KBStateService', kbStateService);
+                
+                logger.debug('[serviceInit] KBStateService registered.', {
+                    context: 'serviceInit:registerAdvancedServices'
+                });
+            } else {
+                logger.debug('[serviceInit] KBStateService skipped - factory or eventService not available', {
+                    hasFactory: !!kbStateServiceFactory,
+                    hasEventService: !!eventService,
+                    context: 'serviceInit:registerAdvancedServices'
+                });
+            }
+        } catch (err) {
+            logger.warn('[serviceInit] Failed to initialize KBStateService - knowledge base state disabled', err, {
+                context: 'serviceInit:registerAdvancedServices'
+            });
+            // Don't throw - KB is optional
         }
 
         // --------------------------------------------------------------

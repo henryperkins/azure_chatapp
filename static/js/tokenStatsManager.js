@@ -243,10 +243,9 @@ export function createTokenStatsManager({
       { context: MODULE_CONTEXT }
     );
 
-    // Listen for AppBus current project changes
-    if (app && app.AppBus) {
-      eventHandlers.trackListener(
-        app.AppBus,
+    // Listen for eventService current project changes
+    if (eventService) {
+      eventService.on(
         'currentProjectChanged',
         safeHandler((e) => {
           const project = e.detail?.project;

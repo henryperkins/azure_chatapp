@@ -43,7 +43,14 @@ const DependencySystem = {
       try {
         callback(this.modules.get(name));
       } catch (error) {
-        console.error(`[DependencySystem] Error in waiter callback for ${name}:`, error);
+        const logger = this.modules?.get?.('logger');
+        if (logger?.error) {
+          logger.error(`[DependencySystem] Error in waiter callback for ${name}:`, error, {
+            context: 'DependencySystemStub:_notifyWaiters'
+          });
+        } else if (typeof console !== 'undefined' && console.error) {
+          console.error(`[DependencySystem] Error in waiter callback for ${name}:`, error);
+        }
       }
     });
     this.waiters.delete(name);

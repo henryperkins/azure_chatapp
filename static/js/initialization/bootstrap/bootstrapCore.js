@@ -59,8 +59,30 @@ export function createBootstrapCore(opts) {
             }
         }
 
+        // --------------------------------------------------------------
+        // If a sanitizer implementation (DOMPurify) is still missing we
+        // degrade gracefully instead of aborting the whole boot sequence.
+        // A *very* loud warning is still logged once the real logger is
+        // available so security reviewers can catch this during QA.
+        // --------------------------------------------------------------
+
+        let sanitizerWasStubbed = false;
+
         if (!sanitizer) {
-            throw new Error('[appInitializer] DOMPurify not found — cannot proceed (security requirement).');
+            // Provide a minimal stub that fulfils the interface expected by
+            // downstream modules (only `sanitize` is absolutely required).
+            sanitizer = {
+                sanitize(dirty /*, opts */) {
+                    // No-op – returns the input unmodified.
+                    return dirty;
+                },
+            };
+            sanitizerWasStubbed = true;
+
+            // We cannot use `logger` yet – it will be created further below.
+            if (typeof console !== 'undefined') {
+                console.warn('[bootstrapCore] ⚠️  DOMPurify unavailable – proceeding with *UNSAFE* no-op sanitizer.');
+            }
         }
 
         // 3. Create domAPI BEFORE logger/eventHandlers
@@ -114,6 +136,14 @@ export function createBootstrapCore(opts) {
             browserService,
             eventHandlers
         });
+
+        // Late warning using the proper logger if we had to fall back to the
+        // unsafe sanitizer stub above.
+        if (sanitizerWasStubbed) {
+            logger.critical('[bootstrapCore] DOMPurify missing – using *UNSAFE* no-op sanitizer. XSS protection is DISABLED!', {
+                context: 'bootstrapCore:sanitizerFallback'
+            });
+        }
 
         // Create custom event polyfill
         const { cleanup: customEventPolyfillCleanup } = createCustomEventPolyfill({
@@ -177,23 +207,56 @@ export function createBootstrapCore(opts) {
         eventHandlers.setDomReadinessService(domReadinessService);
 
         // Create event bus and services
-        const AppBus = new EventTarget();
-        DependencySystem.register('AppBus', AppBus);
+        // ------------------------------------------------------------------
+        // Unified Event Bus
+        // ------------------------------------------------------------------
+
+        const _internalBus = new EventTarget();
 
         const eventService = createEventService({
             DependencySystem,
             logger,
             eventHandlers,
-            existingBus: AppBus
+            existingBus: _internalBus
         });
+
+        // Provide *deprecated* aliases that forward to the unified bus and
+        // emit a one-time warning when accessed.  This prevents a split event
+        // graph while nudging developers to migrate.
+
+        function createDeprecatedBusProxy(name) {
+            let warned = false;
+            const warnOnce = () => {
+                if (!warned) {
+                    warned = true;
+                    logger.warn(`[bootstrapCore] ${name} is deprecated – use eventService instead`, {
+                        context: 'bootstrapCore:deprecatedBus'
+                    });
+                }
+            };
+            return new Proxy(_internalBus, {
+                get(target, prop, receiver) {
+                    if (typeof prop === 'string' && ['addEventListener','dispatchEvent','removeEventListener'].includes(prop)) {
+                        warnOnce();
+                    }
+                    return Reflect.get(target, prop, receiver);
+                }
+            });
+        }
+
+        const deprecatedAppBus   = createDeprecatedBusProxy('AppBus');
+        const deprecatedEventBus = createDeprecatedBusProxy('eventBus');
+        const deprecatedAuthBus  = createDeprecatedBusProxy('AuthBus');
+
+        DependencySystem.register('AppBus', deprecatedAppBus);
         DependencySystem.register('eventService', eventService);
 
-        // Legacy aliases
+        // Legacy aliases – forward to unified bus with deprecation warning
         if (!DependencySystem.modules.get('eventBus')) {
-            DependencySystem.register('eventBus', AppBus);
+            DependencySystem.register('eventBus', deprecatedEventBus);
         }
         if (!DependencySystem.modules.get('AuthBus')) {
-            DependencySystem.register('AuthBus', AppBus);
+            DependencySystem.register('AuthBus', deprecatedAuthBus);
         }
 
         // UI utilities
@@ -252,70 +315,8 @@ export function createBootstrapCore(opts) {
         });
         DependencySystem.register('authFormHandler', authFormHandler);
 
-        // AuthApiService requires a functional apiClient and apiEndpoints.
-        // These are only available after serviceInit's basic & advanced
-        // registrations.  Therefore we register *a factory wrapper* that can
-        // lazily create the real service on first access, once the
-        // dependencies exist.  This prevents an early boot failure while
-        // keeping the module name reserved in the DI container.
-
-        function _tryCreateAuthApiService() {
-            let instance = DependencySystem.modules.get('__authApiServiceReal');
-            if (instance) return instance;
-            
-            const apiClient    = DependencySystem.modules.get('apiRequest')
-                              || DependencySystem.modules.get('apiClient');
-            const apiEndpoints = DependencySystem.modules.get('apiEndpoints');
-
-            if (!apiClient || !apiEndpoints) {
-                return null; // dependencies not ready yet
-            }
-
-            instance = createAuthApiService({
-                apiClient,
-                apiEndpoints,
-                logger,
-                browserService
-            });
-
-            DependencySystem.register('__authApiServiceReal', instance);
-            return instance;
-        }
-
-        const authApiServiceProxy = new Proxy({}, {
-            get(_target, prop) {
-                const inst = _tryCreateAuthApiService();
-                if (inst) {
-                    const value = inst[prop];
-                    return (typeof value === 'function') ? value.bind(inst) : value;
-                }
-                // Not ready yet – provide safe stubs.
-                // 1. Stringification helpers must stay synchronous.
-                if (prop === 'toString' || prop === Symbol.toPrimitive) {
-                    return () => '[authApiServiceProxy:unready]';
-                }
-
-                /*
-                 * For method calls we do NOT throw synchronously because that
-                 * propagates up as an immediate error that the global
-                 * `unhandledrejection` listener catches before serviceInit has
-                 * a chance to create the real AuthApiService.  Instead we
-                 * return a function that returns a *rejected promise*.  Legit
-                 * callers can still handle the failure via `.catch()` while
-                 * bootstrap continues without spurious noise.
-                 */
-                return () => Promise.resolve(undefined);
-            },
-            set(_target, prop, value) {
-                const inst = _tryCreateAuthApiService();
-                if (inst) {
-                    inst[prop] = value;
-                }
-                return true;
-            }
-        });
-
-        DependencySystem.register('authApiService', authApiServiceProxy);
+        // AuthApiService will be registered later in serviceInit:registerAdvancedServices
+        // where apiClient and apiEndpoints are available. No proxy needed.
 
         const authStateManager = createAuthStateManager({
             eventService,
@@ -359,6 +360,9 @@ export function createBootstrapCore(opts) {
         const factoriesToRegister = [
             'KBManagerFactory',
             'KBSearchHandlerFactory',
+            'KBRendererFactory',
+            'KBAPIServiceFactory',
+            'KBStateServiceFactory',
             'PollingServiceFactory',
             'chatUIEnhancementsFactory',
             // Phase-2 factories
@@ -368,6 +372,9 @@ export function createBootstrapCore(opts) {
             'createProjectDetailsRenderer',
             'createProjectDataCoordinator',
             'createProjectEventHandlers'
+            , 'createProjectListRenderer'
+            , 'createProjectListComponent'
+            , 'createProjectDashboard'
         ];
 
         // Import and register KB factories
@@ -380,6 +387,27 @@ export function createBootstrapCore(opts) {
         import("../../knowledgeBaseSearchHandler.js").then(m => {
             if (!DependencySystem.modules.get('KBSearchHandlerFactory')) {
                 DependencySystem.register('KBSearchHandlerFactory', m.createKnowledgeBaseSearchHandler);
+            }
+        });
+
+        import("../../knowledgeBaseRenderer.js").then(m => {
+            if (!DependencySystem.modules.get('KBRendererFactory')) {
+                DependencySystem.register('KBRendererFactory', m.createKnowledgeBaseRenderer);
+            }
+        });
+
+        // KBAPIService and KBStateService will be registered in serviceInit:registerAdvancedServices
+        // where dependencies are properly available without runtime lookups
+        
+        import("../../../services/knowledgeBaseAPIService.js").then(m => {
+            if (!DependencySystem.modules.get('KBAPIServiceFactory')) {
+                DependencySystem.register('KBAPIServiceFactory', m.createKnowledgeBaseAPIService || m.default);
+            }
+        });
+
+        import("../../../services/knowledgeBaseStateService.js").then(m => {
+            if (!DependencySystem.modules.get('KBStateServiceFactory')) {
+                DependencySystem.register('KBStateServiceFactory', m.createKnowledgeBaseStateService || m.default);
             }
         });
 

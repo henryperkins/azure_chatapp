@@ -15,7 +15,8 @@ export function createSidebarAuth({
   sanitizer,
   safeHandler,
   domReadinessService,
-  authenticationService
+  authenticationService,
+  eventService
 }) {
   if (!domAPI) throw new Error(`[${MODULE}] domAPI is required`);
   if (!eventHandlers) throw new Error(`[${MODULE}] eventHandlers is required`);
@@ -23,6 +24,7 @@ export function createSidebarAuth({
   if (!logger) throw new Error(`[${MODULE}] logger is required`);
   if (typeof safeHandler !== 'function') throw new Error(`[${MODULE}] safeHandler required`);
   if (!authenticationService) throw new Error(`[${MODULE}] authenticationService is required`);
+  if (!eventService) throw new Error(`[${MODULE}] eventService is required`);
 
   let isRegisterMode = false;
 
@@ -219,32 +221,25 @@ export function createSidebarAuth({
 
   function _bindAuthStateListeners() {
     const doc = domAPI.getDocument?.();
-    const auth = DependencySystem.modules?.get?.('auth');
-
-    const EH = eventHandlers;
     const SH = safeHandler;
 
-    // Listen on AuthBus (preferred)…
-    if (auth?.AuthBus) {
-      EH.trackListener(
-        auth.AuthBus,
-        'authStateChanged',
-        SH(handleGlobalAuthStateChange, '[SidebarAuth] AuthBus authStateChanged'),
-        { context: MODULE }
-      );
-      EH.trackListener(
-        auth.AuthBus,
-        'authReady',
-        SH(handleGlobalAuthStateChange, '[SidebarAuth] AuthBus authReady'),
-        { context: MODULE, once: true }
-      );
-    }
+    // Listen on unified eventService
+    eventService.on(
+      'authStateChanged',
+      SH(handleGlobalAuthStateChange, '[SidebarAuth] eventService authStateChanged'),
+      { context: MODULE }
+    );
+    eventService.on(
+      'authReady',
+      SH(handleGlobalAuthStateChange, '[SidebarAuth] eventService authReady'),
+      { context: MODULE, once: true }
+    );
 
     // …and fall back to document-level events
     if (doc) {
       ['authStateChanged', 'auth:stateChanged', 'authReady', 'auth:ready']
         .forEach(evt =>
-          EH.trackListener(
+          eventHandlers.trackListener(
             doc,
             evt,
             SH(handleGlobalAuthStateChange, `[SidebarAuth] doc ${evt}`),
