@@ -184,7 +184,7 @@ function loadConfig(cwd) {
         }
 
         return effectiveConfig;
-      } catch (e) {
+      } catch {
         console.warn(`${SYM.warn} Failed to parse config file ${p}: ${e.message}.`);
       }
     }
@@ -485,8 +485,8 @@ function vFactory(err, file, config) {
             // ... (your existing if-statement based dep check logic) ...
             // For brevity, I'll assume this sets hasDepCheck correctly if criteria met.
             // Example:
-            const isParamNegation = (node) => { /* ... */ };
-            const hasParamValidation = (testNode) => { /* ... */ };
+            const _isParamNegation = (_node) => { /* ... */ };
+            const hasParamValidation = (_testNode) => { /* ... */ };
             if (hasParamValidation(ifPath.node.test)) hasDepCheck = true;
           },
           CallExpression(callPath) {
@@ -784,9 +784,7 @@ function vDI(err, file, isBootstrapFile, config) {
       if ( propName && STORAGE_IDENTIFIERS.includes(propName) && baseId?.type === "Identifier" && ["window", "globalThis"].includes(baseId.name) && !p.scope.hasBinding(baseId.name) ) {
         err.push(E(file, p.node.loc.start.line, 2, `Access to '${baseId.name}.${propName}' is forbidden.`, "Browser storage APIs violate guard-rails."));
       }
-    },
-    // Hidden Global Fallbacks: ban globalThis.DependencySystem in utils
-    MemberExpression(p) {
+      // Hidden Global Fallbacks: ban globalThis.DependencySystem in utils
       if (
         !isBootstrapFile &&
         file.includes(path.join('static', 'js', 'utils')) &&
@@ -1133,15 +1131,15 @@ function vBus(err, file, config) {
   return {
     CallExpression(p) {
       const callee = p.node.callee;
-      
+
       // Check for legacy bus dependency injection calls
-      if (callee.type === "MemberExpression" && 
+      if (callee.type === "MemberExpression" &&
           callee.object?.type === "MemberExpression" &&
           callee.object.object?.name === depSystemName &&
           callee.object.property?.name === "modules" &&
           callee.property?.name === "get" &&
           p.node.arguments.length > 0) {
-        
+
         const arg = p.node.arguments[0];
         if (arg.type === "StringLiteral" && (arg.value === "AppBus" || arg.value === "AuthBus")) {
           err.push(E(
@@ -1155,9 +1153,9 @@ function vBus(err, file, config) {
       }
 
       // Check for getDep calls with legacy buses
-      if (callee.type === "Identifier" && callee.name === "getDep" && 
+      if (callee.type === "Identifier" && callee.name === "getDep" &&
           p.node.arguments.length > 0) {
-        
+
         const arg = p.node.arguments[0];
         if (arg.type === "StringLiteral" && (arg.value === "AppBus" || arg.value === "AuthBus")) {
           err.push(E(
@@ -1171,10 +1169,10 @@ function vBus(err, file, config) {
       }
 
       // Check for legacy method calls (getAppBus, getAuthBus)
-      if (callee.type === "Identifier" && 
+      if (callee.type === "Identifier" &&
           (callee.name === "getAppBus" || callee.name === "getAuthBus") &&
           p.node.arguments.length === 0) {
-        
+
         err.push(E(
           file,
           p.node.loc.start.line,
@@ -1205,8 +1203,8 @@ function vBus(err, file, config) {
         }
 
         // Check for legacy bus variables
-        if (busSourceNode?.type === 'Identifier' && 
-            (busSourceNode.name === 'appBus' || busSourceNode.name === 'authBus' || 
+        if (busSourceNode?.type === 'Identifier' &&
+            (busSourceNode.name === 'appBus' || busSourceNode.name === 'authBus' ||
              busSourceNode.name === 'AppBus' || busSourceNode.name === 'AuthBus')) {
           err.push(E(
             file,
@@ -1233,8 +1231,8 @@ function vBus(err, file, config) {
         const busSourceNode = getExpressionSourceNode(busObjectPath);
 
         // Check for legacy bus variables
-        if (busSourceNode?.type === 'Identifier' && 
-            (busSourceNode.name === 'appBus' || busSourceNode.name === 'authBus' || 
+        if (busSourceNode?.type === 'Identifier' &&
+            (busSourceNode.name === 'appBus' || busSourceNode.name === 'authBus' ||
              busSourceNode.name === 'AppBus' || busSourceNode.name === 'AuthBus')) {
           err.push(E(
             file,
@@ -1252,8 +1250,8 @@ function vBus(err, file, config) {
         const busSourceNode = getExpressionSourceNode(busObjectPath);
 
         // Check for legacy bus variables
-        if (busSourceNode?.type === 'Identifier' && 
-            (busSourceNode.name === 'appBus' || busSourceNode.name === 'authBus' || 
+        if (busSourceNode?.type === 'Identifier' &&
+            (busSourceNode.name === 'appBus' || busSourceNode.name === 'authBus' ||
              busSourceNode.name === 'AppBus' || busSourceNode.name === 'AuthBus')) {
           err.push(E(
             file,
@@ -1268,10 +1266,10 @@ function vBus(err, file, config) {
 
     MemberExpression(p) {
       // Check for auth.AuthBus and authModule.AuthBus patterns
-      if (p.node.property?.name === "AuthBus" && 
+      if (p.node.property?.name === "AuthBus" &&
           p.node.object?.type === "Identifier" &&
           (p.node.object.name === "auth" || p.node.object.name === "authModule")) {
-        
+
         err.push(E(
           file,
           p.node.loc.start.line,
@@ -1286,12 +1284,12 @@ function vBus(err, file, config) {
       // Check for variable declarations that assign legacy buses
       if (p.node.init?.type === "CallExpression") {
         const callee = p.node.init.callee;
-        
+
         // Check getDep patterns
         if (callee.type === "Identifier" && callee.name === "getDep" &&
             p.node.init.arguments.length > 0 &&
             p.node.init.arguments[0].type === "StringLiteral") {
-          
+
           const depName = p.node.init.arguments[0].value;
           if (depName === "AppBus" || depName === "AuthBus") {
             err.push(E(
@@ -1312,7 +1310,7 @@ function vBus(err, file, config) {
             callee.property?.name === "get" &&
             p.node.init.arguments.length > 0 &&
             p.node.init.arguments[0].type === "StringLiteral") {
-          
+
           const depName = p.node.init.arguments[0].value;
           if (depName === "AppBus" || depName === "AuthBus") {
             err.push(E(
@@ -1336,7 +1334,7 @@ function vBus(err, file, config) {
               current.left.callee.name === "getDep" &&
               current.left.arguments[0]?.type === "StringLiteral" &&
               (current.left.arguments[0].value === "AppBus" || current.left.arguments[0].value === "AuthBus")) {
-            
+
             err.push(E(
               file,
               p.node.loc.start.line,
@@ -1758,7 +1756,7 @@ function analyze(file, code, configToUse) {
       plugins: ["jsx", "typescript", "classProperties", "decorators-legacy", "decoratorAutoAccessors", "dynamicImport", "optionalChaining", "nullishCoalescingOperator", "estree"],
       errorRecovery: true,
     });
-  } catch (e) {
+  } catch {
     const pe = E(file, e.loc ? e.loc.line : 1, 0, `Parse error: ${e.message}`);
     pe.actualLine = getLine(code, pe.line);
     return [pe, ...errors];
@@ -1943,7 +1941,7 @@ function groupByRule(errs) {
         const glob = require("glob");
         const foundFiles = glob.sync(path.join(dir, "**/*.{js,mjs,cjs,ts,jsx,tsx}"), { nodir: true, ignore: ['**/node_modules/**', '**/*.d.ts'] });
         allFiles.push(...foundFiles);
-    } catch (e) {
+    } catch {
         console.warn(chalk.yellow(`${SYM.warn} Failed to load 'glob' module. Directory scanning will be skipped. Please install glob: npm install glob`));
     }
   });

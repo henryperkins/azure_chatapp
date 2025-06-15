@@ -1,5 +1,7 @@
 export function createFoo({ eventService }) {
-  const bus = new EventTarget();
-  bus.dispatchEvent(new Event('foo'));
+  if (!eventService) {
+    throw new Error('[createFoo] Missing eventService dependency');
+  }
+  eventService.emit('foo');
   return { cleanup() {} };
 }

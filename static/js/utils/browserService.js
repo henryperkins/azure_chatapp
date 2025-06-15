@@ -162,13 +162,31 @@ export function createBrowserService({ windowObject, logger } = {}) {
     setSearchParam   : (k, v) => windowObject.history.replaceState({}, '', _buildUrl({ [k]: v })),
     removeSearchParam: (k) => windowObject.history.replaceState({}, '', _buildUrl({ [k]: '' })),
 
-    // Storage helpers
-    getItem   : (k) => windowObject.localStorage.getItem(k),
-    setItem   : (k, v) => windowObject.localStorage.setItem(k, v),
-    removeItem: (k) => windowObject.localStorage.removeItem(k),
-    clear     : () => windowObject.localStorage.clear(),
-    key       : (n) => windowObject.localStorage.key(n),
-    get length() { return windowObject.localStorage.length; },
+    // Storage helpers (delegated to canonical storageService)
+    getItem: (k) => {
+      const ss = windowObject.DependencySystem.modules.get('storageService');
+      return ss.getItem(k);
+    },
+    setItem: (k, v) => {
+      const ss = windowObject.DependencySystem.modules.get('storageService');
+      return ss.setItem(k, v);
+    },
+    removeItem: (k) => {
+      const ss = windowObject.DependencySystem.modules.get('storageService');
+      return ss.removeItem(k);
+    },
+    clear: () => {
+      const ss = windowObject.DependencySystem.modules.get('storageService');
+      return ss.clear();
+    },
+    key: (n) => {
+      const ss = windowObject.DependencySystem.modules.get('storageService');
+      return ss.key(n);
+    },
+    get length() {
+      const ss = windowObject.DependencySystem.modules.get('storageService');
+      return ss.length;
+    },
 
     // Timing helpers
     setTimeout: (...args) => {

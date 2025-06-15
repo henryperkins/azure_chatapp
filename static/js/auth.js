@@ -7,6 +7,9 @@
 const MODULE_CONTEXT = 'AuthModule';
 
 export function createAuth(dependencies = {}) {
+if (!dependencies.logger) {
+        throw new Error("Missing logger dependency");
+    }
     let {
         logger,
         eventService,

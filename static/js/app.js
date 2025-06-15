@@ -218,9 +218,8 @@ try {
   try {
     const browserService = createBrowserService();
     const windowEl = browserService.getWindow(); // DOM element - adding 'El' suffix
-    windowEl.dispatchEvent(new CustomEvent('app:error', {
-      detail: { message: `Initialization failed: ${error.message}` }
-    }));
+    const eventService = DependencySystem.modules.get('eventService'); // Obtain DI eventService
+eventService.emit('app:error', { message: `Initialization failed: ${error.message}` });
   } catch (dispatchError) {
     console.error('[DEBUG] app.js: Failed to dispatch error event:', dispatchError);
   }

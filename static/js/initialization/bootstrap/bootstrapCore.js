@@ -222,44 +222,8 @@ export function createBootstrapCore(opts) {
             existingBus: _internalBus
         });
 
-        // Provide *deprecated* aliases that forward to the unified bus and
-        // emit a one-time warning when accessed.  This prevents a split event
-        // graph while nudging developers to migrate.
-
-        function createDeprecatedBusProxy(name) {
-            let warned = false;
-            const warnOnce = () => {
-                if (!warned) {
-                    warned = true;
-                    logger.warn(`[bootstrapCore] ${name} is deprecated – use eventService instead`, {
-                        context: 'bootstrapCore:deprecatedBus'
-                    });
-                }
-            };
-            return new Proxy(_internalBus, {
-                get(target, prop, receiver) {
-                    if (typeof prop === 'string' && ['addEventListener','dispatchEvent','removeEventListener'].includes(prop)) {
-                        warnOnce();
-                    }
-                    return Reflect.get(target, prop, receiver);
-                }
-            });
-        }
-
-        const deprecatedAppBus   = createDeprecatedBusProxy('AppBus');
-        const deprecatedEventBus = createDeprecatedBusProxy('eventBus');
-        const deprecatedAuthBus  = createDeprecatedBusProxy('AuthBus');
-
-        DependencySystem.register('AppBus', deprecatedAppBus);
+        // Register canonical unified event service
         DependencySystem.register('eventService', eventService);
-
-        // Legacy aliases – forward to unified bus with deprecation warning
-        if (!DependencySystem.modules.get('eventBus')) {
-            DependencySystem.register('eventBus', deprecatedEventBus);
-        }
-        if (!DependencySystem.modules.get('AuthBus')) {
-            DependencySystem.register('AuthBus', deprecatedAuthBus);
-        }
 
         // UI utilities
         const uiUtils = {

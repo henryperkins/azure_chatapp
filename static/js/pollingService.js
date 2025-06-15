@@ -19,7 +19,7 @@ export function createPollingService({
   pollingInterval = 3000, // default 3 seconds
   domAPI = null,
   authModule = null,
-  eventService = null
+  eventService
 } = {}) {
   // ────────────────────────────────────────────────────────────
   // Dependency validation (fail-fast, guard-rail requirement)
@@ -29,6 +29,9 @@ export function createPollingService({
   if (!eventHandlers) throw new Error('[PollingService] Missing eventHandlers');
   if (!logger) {
     throw new Error('[PollingService] Missing logger');
+  }
+  if (!eventService) {
+    throw new Error('[PollingService] Missing eventService');
   }
 
   const MODULE = 'PollingService';
@@ -42,15 +45,16 @@ export function createPollingService({
   const _authModule = authModule || DependencySystem?.modules?.get?.('auth');
 
   // Use eventService for unified event system instead of deprecated AppBus
-  const _eventService = eventService || DependencySystem?.modules?.get?.('eventService');
+  // Use injected eventService; no fallback container lookup
+  const _eventService = eventService;
 
   // Internal map: jobId → { intervalId, lastStatus }
   const _jobs = new Map();
 
   function _dispatchEvent(name, detail) {
-    if (!_eventService || typeof _eventService.emit !== 'function') return;
+    if (typeof eventService.emit !== 'function') return;
     try {
-      _eventService.emit(name, detail);
+      eventService.emit(name, detail);
     } catch (err) {
       logger.warn(`[${MODULE}] Failed to dispatch event ${name}`, err, { context: MODULE });
     }
@@ -138,13 +142,11 @@ export function createPollingService({
       });
     }
 
-    if (_eventService) {
-      _eventService.on('authStateChanged', (e) => {
-        if (e?.detail?.authenticated === false) {
-          cleanup();
-        }
-      }, { context: MODULE, description: 'PollingService_AuthStateChanged' });
-    }
+    eventService.on('authStateChanged', (e) => {
+      if (e?.detail?.authenticated === false) {
+        cleanup();
+      }
+    }, { context: MODULE, description: 'PollingService_AuthStateChanged' });
   }());
 
   // Public, immutable API

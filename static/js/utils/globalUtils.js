@@ -35,8 +35,7 @@ export { createBrowserService } from './browserService.js';
 
 
 // General-purpose helper functions
-import { isValidProjectId as rawIsValidProjectId } from "../projectManager.js";
-export const isValidProjectId = rawIsValidProjectId;
+import { isValidProjectId } from '../projectManager.js';
 
 /* Only keep one implementation of each helper below (NO duplicates) */
 
@@ -44,57 +43,11 @@ export const isValidProjectId = rawIsValidProjectId;
  *  URL / request helpers required by createApiClient & app.js
  * ------------------------------------------------------------------*/
 
-/** True ⇢ `url` already contains a protocol or starts with ‘//’. */
-export function isAbsoluteUrl(url = '') {
-  return /^(?:[a-z]+:)?\/\//i.test(String(url));
-}
+import { isAbsoluteUrl, shouldSkipDedup } from './urlUtils.js';
+export { isAbsoluteUrl, shouldSkipDedup };
 
-/**
- * CONSOLIDATED: normaliseUrl moved to browserService.js to eliminate duplication.
- * This is a re-export for backward compatibility.
- */
-export { normaliseUrl, normalizeUrl } from './browserService.js';
-
-/**
- * Returns true when a GET request to `url` should NOT be deduplicated
- * (each call is unique even if the URL string repeats).  Extend the
- * regex list as new endpoints are discovered.
- */
-const DEDUP_EXCLUSION_RE = /\/api\/log_notification\b|\/(sse|stream|events)\b/i;
-export function shouldSkipDedup(url = '') {
-  return DEDUP_EXCLUSION_RE.test(url);
-}
-
-/**
- * debounce – DI-safe version.
- * Requires a timer API that exposes { setTimeout, clearTimeout }.
- * If no timerAPI is supplied, it attempts to obtain the injected
- * browserService from the global DependencySystem.
- */
-export function debounce(fn, wait = 250, timerAPI = null) {
-  let timerId = null;
-
-  /* Resolve timer helpers strictly via DI (never from window/global). */
-  const getTimerAPI = () => {
-    if (timerAPI?.setTimeout && timerAPI?.clearTimeout) return timerAPI;
-
-    // Fallback: look-up browserService already registered in DI
-    const ds = globalThis?.DependencySystem;
-    const bs = ds?.modules?.get?.('browserService');
-    if (bs?.setTimeout && bs?.clearTimeout) return bs;
-
-    throw new Error('[globalUtils.debounce] timerAPI with setTimeout/clearTimeout is required (strict DI)');
-  };
-
-  return function debounced(...args) {
-    const api = getTimerAPI();
-    api.clearTimeout(timerId);
-    timerId = api.setTimeout(() => {
-      timerId = null;
-      fn.apply(this, args);
-    }, wait);
-  };
-}
+import { debounce } from './debounce.js';
+export { debounce };
 
 // ------------------------------------------------------------------
 // Named JSON helpers (public API)
@@ -105,77 +58,16 @@ export function debounce(fn, wait = 250, timerAPI = null) {
 // logic or exposing logger dependencies at the top level.  The DI-aware
 // version remains available via createGlobalUtils({ logger }).
 
-export { _safeParseJSON as safeParseJSON };
+import { stableStringify, safeParseJSON } from './jsonUtils.js';
+export { stableStringify, safeParseJSON };
 
-// JSON helpers
-export function stableStringify(v) {
-  if (v === null || typeof v !== "object") return JSON.stringify(v);
-  if (Array.isArray(v)) return `[${v.map(stableStringify).join(",")}]`;
-  return `{${Object.keys(v)
-    .sort()
-    .map((k) => `${JSON.stringify(k)}:${stableStringify(v[k])}`)
-    .join(",")}}`;
-}
-function _safeParseJSON(str) {
-  if (typeof str !== "string") throw new Error('[globalUtils.safeParseJSON] Input not a string and fallback is forbidden.');
-  try {
-    return JSON.parse(str);
-  } catch (err) {
-    throw new Error('[globalUtils.safeParseJSON] JSON parse failed and fallback is forbidden: ' + (err?.message || err));
-  }
-}
+import { createElement, toggleElement } from './elementUtils.js';
+export { createElement, toggleElement };
+
+import { formatNumber, formatDate, formatBytes, fileIcon } from './formatUtils.js';
+export { formatNumber, formatDate, formatBytes, fileIcon };
 
 // DOM helpers (only single definition, prefer domAPI for new code)
-function _createElement(tag, opts = {}, trackListener, domAPI) {
-  const doc = domAPI?.getDocument?.();
-  if (!doc) throw new Error('[globalUtils.createElement] domAPI with getDocument() is required');
-
-  const el = doc.createElement(tag);
-  if (opts.className) el.className = opts.className;
-  if (opts.id) el.id = opts.id;
-  if ("textContent" in opts) el.textContent = opts.textContent;
-  if ("innerHTML" in opts) {
-    if (domAPI?.setInnerHTML) {
-      domAPI.setInnerHTML(el, opts.innerHTML);   // sanitizer aware
-    } else {
-      // Fallback: escape tags to avoid XSS
-      el.textContent = String(opts.innerHTML).replace(/<[^>]*>?/gm, '');
-    }
-  }
-
-  // Attach event listeners via DI tracker
-  Object.entries(opts).forEach(([k, v]) => {
-    if (k.startsWith("on") && typeof v === "function") {
-      const evt = k.slice(2).toLowerCase();
-      if (!trackListener)
-        throw new Error(`[globalUtils] createElement requires trackListener for ${evt}`);
-      trackListener(el, evt, v);
-    }
-  });
-
-  // data‑* attributes & common HTML props
-  Object.entries(opts).forEach(([k, v]) => {
-    if (k.startsWith("data-")) el.setAttribute(k, v);
-  });
-  [
-    "title",
-    "alt",
-    "src",
-    "href",
-    "placeholder",
-    "type",
-    "value",
-    "name",
-  ].forEach((p) => {
-    if (opts[p] !== undefined) el[p] = opts[p];
-  });
-
-  return el;
-}
-
-// Re-export createElement for legacy callers (e.g., chatUIEnhancements.js)
-// This is an alias to the single canonical implementation above.
-export { _createElement as createElement };
 
 function _toggleElement(selOrEl, show, domAPI) {
   try {
@@ -235,13 +127,6 @@ export const fileIcon = (t = "") =>
   }[t.toLowerCase()] || "📄"
 );
 
-export function toggleElement(...a) {
-  try {
-    return _toggleElement(...a);
-  } catch (err) {
-    // Silently fail, do not reference logger here (not available in this scope)
-  }
-}
 
 export function createGlobalUtils({ logger, apiClient } = {}) {
   if (!logger) throw new Error('[globalUtils] logger required');
@@ -256,29 +141,29 @@ export function createGlobalUtils({ logger, apiClient } = {}) {
     stableStringify,
     safeParseJSON: function (str) {
       try {
-        return _safeParseJSON(str);
+        return safeParseJSON(str);
       } catch (err) {
         logger.error('[globalUtils] safeParseJSON failed', err, { context: MODULE_CONTEXT + ':safeParseJSON' });
         throw err;
       }
     },
-    createElement: function (...a) {
+    createElement: function (...args) {
       try {
-        return _createElement(...a);
+        return createElement(...args);
       } catch (err) {
         logger.error('[globalUtils] createElement failed', err, { context: MODULE_CONTEXT + ':createElement' });
         throw err;
       }
     },
-    toggleElement: function (...a) {
+    toggleElement: function (...args) {
       try {
-        return _toggleElement(...a);
+        return toggleElement(...args);
       } catch (err) {
         logger.error('[globalUtils] toggleElement failed', err, { context: MODULE_CONTEXT + ':toggleElement' });
       }
     },
     formatNumber,
-    formatDate: _formatDate,
+    formatDate,
     formatBytes,
     fileIcon,
     fetchData: (id) => apiClient.get(`/item/${id}`),

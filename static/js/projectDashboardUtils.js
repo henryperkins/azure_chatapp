@@ -12,6 +12,8 @@
  * @param {Object} options.domAPI - Required. DOM manipulation abstraction.
  * @param {Function} [options.formatDate] - Optional date formatter.
  * @param {Function} [options.formatBytes] - Optional byte formatter.
+ * @param {Object} options.globalUtils - Required. Global utility functions.
+ * @param {Object} options.eventService - Required. Unified event service for publish/subscribe.
  * @returns {Object} Public API for the dashboard utilities.
  */
 const MODULE = 'ProjectDashboardUtils';
@@ -144,11 +146,14 @@ export function createProjectDashboardUtils(options = {}) {
   const deps = _resolveDependencies({ DependencySystem, ...options });
   const { eventHandlers, projectManager, modalManager, sanitizer, domAPI, projectModal } = deps;
   const logger = _getDependency(options.logger, 'logger', DependencySystem, false);
-  // Use unified eventService instead of deprecated eventBus
-  const eventService = DependencySystem?.modules?.get?.("eventService");
   const gUtils = options.globalUtils || null;
   if (!gUtils) {
     throw new Error(`[${MODULE}] globalUtils dependency is required`);
+  }
+  // Require the unified eventService via DI
+  const eventService = options.eventService;
+  if (!eventService) {
+    throw new Error(`[${MODULE}] eventService dependency is required`);
   }
 
   return {
@@ -167,15 +172,8 @@ export function createProjectDashboardUtils(options = {}) {
           domAPI.dispatchEvent(doc, new CustomEvent('projectDashboardUtilsInitialized'));
         }
 
-        // Use unified eventService for initialization event
-        if (eventService && typeof eventService.emit === "function") {
-          eventService.emit('projectdashboardutils:initialized', { success: true });
-        } else if (domAPI?.getDocument && domAPI?.dispatchEvent) {
-          const eDoc = domAPI.getDocument();
-          if (eDoc) {
-            domAPI.dispatchEvent(eDoc, new CustomEvent('projectdashboardutils:initialized', { detail: { success: true } }));
-          }
-        }
+        // Emit initialization event via the unified eventService
+        eventService.emit('projectdashboardutils:initialized', { success: true });
       } catch (error) {
         logger && logger.error('Error in ProjectDashboardUtils.init', error, { context: 'ProjectDashboardUtils:init' });
       }
