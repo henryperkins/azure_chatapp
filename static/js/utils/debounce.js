@@ -8,9 +8,6 @@ export function debounce(fn, wait = 250, timerAPI = null) {
 
   function getTimerAPI() {
     if (timerAPI?.setTimeout && timerAPI?.clearTimeout) return timerAPI;
-    const ds = globalThis?.DependencySystem;
-    const bs = ds?.modules?.get?.('browserService');
-    if (bs?.setTimeout && bs?.clearTimeout) return bs;
     throw new Error('[debounce] timerAPI with setTimeout/clearTimeout is required (strict DI)');
   }
 

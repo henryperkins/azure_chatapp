@@ -81,51 +81,6 @@ function _toggleElement(selOrEl, show, domAPI) {
   }
 }
 
-// Formatters
-export const formatNumber = (n) => new Intl.NumberFormat().format(n || 0);
-function _formatDate(d) {
-  if (!d) return "";
-  try {
-    return new Date(d).toLocaleDateString(undefined, {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit'
-    });
-  } catch {
-    return String(d);
-  }
-}
-
-// Provide a named export so callers can `import { formatDate } ...`.
-export { _formatDate as formatDate };
-export function formatBytes(num) {
-  if (num == null) return "";
-  const sizes = ["B", "KB", "MB", "GB", "TB"];
-  if (num === 0) return "0 B";
-  const i = Math.floor(Math.log(num) / Math.log(1024));
-  return `${(num / 1024 ** i).toFixed(2)} ${sizes[i]}`;
-}
-export const fileIcon = (t = "") =>
-(
-  {
-    pdf: "📄",
-    doc: "📝",
-    docx: "📝",
-    txt: "📄",
-    csv: "📊",
-    json: "📋",
-    md: "📄",
-    py: "🐍",
-    js: "📜",
-    html: "🌐",
-    css: "🎨",
-    jpg: "🖼️",
-    jpeg: "🖼️",
-    png: "🖼️",
-    gif: "🖼️",
-    zip: "📦",
-  }[t.toLowerCase()] || "📄"
-);
 
 
 export function createGlobalUtils({ logger, apiClient } = {}) {
