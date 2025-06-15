@@ -65,15 +65,40 @@ export function createAppInitializer(opts = {}) {
     // ------------------------------------------------------------------
     // Ensure optional UI factory dependencies exist (tests may omit them)
     // ------------------------------------------------------------------
-    const noopFactory = () => ({ cleanup() {} });
+    // Enhanced no-op factory with environment awareness and logging
+    const trackedNoopFactory = (name) => {
+        const env = (opts.APP_CONFIG && opts.APP_CONFIG.ENV) || (typeof process !== 'undefined' && process.env && process.env.NODE_ENV) || 'unknown';
+        const logger = (opts.DependencySystem && opts.DependencySystem.modules && opts.DependencySystem.modules.get('logger')) || (typeof console !== 'undefined' ? console : null);
+        if (env !== 'test' && env !== 'development') {
+            if (logger && logger.warn) {
+                logger.warn(`[appInitializer] No-op stub used for critical UI factory "${name}" in non-test mode!`, { context: 'appInitializer:noOpStub', env });
+            } else if (typeof console !== 'undefined') {
+                console.warn(`[appInitializer] No-op stub used for critical UI factory "${name}" in non-test mode!`, { context: 'appInitializer:noOpStub', env });
+            }
+        }
+        // Return a stub object with a tracked cleanup
+        return {
+            cleanup() {
+                if (logger && logger.warn) {
+                    logger.warn(`[NO-OP STUB] cleanup() called on "${name}"`, { context: 'appInitializer:noOpStub', env });
+                } else if (typeof console !== 'undefined') {
+                    console.warn(`[NO-OP STUB] cleanup() called on "${name}"`, { context: 'appInitializer:noOpStub', env });
+                }
+                // In test, throw if called
+                if (env === 'test') {
+                    throw new Error(`[Test] No-op stub cleanup() called for "${name}"!`);
+                }
+            }
+        };
+    };
     if (!opts.createProjectDetailsEnhancements) {
-        opts.createProjectDetailsEnhancements = noopFactory;
+        opts.createProjectDetailsEnhancements = () => trackedNoopFactory('createProjectDetailsEnhancements');
     }
     if (!opts.createTokenStatsManager) {
-        opts.createTokenStatsManager = noopFactory;
+        opts.createTokenStatsManager = () => trackedNoopFactory('createTokenStatsManager');
     }
     if (!opts.createKnowledgeBaseComponent) {
-        opts.createKnowledgeBaseComponent = noopFactory;
+        opts.createKnowledgeBaseComponent = () => trackedNoopFactory('createKnowledgeBaseComponent');
     }
 
     // Phase 2: Create application state
@@ -105,22 +130,51 @@ export function createAppInitializer(opts = {}) {
     try {
         uiInit = createUIInit(opts);
     } catch (err) {
+        const env = (opts.APP_CONFIG && opts.APP_CONFIG.ENV) || (typeof process !== 'undefined' && process.env && process.env.NODE_ENV) || 'unknown';
+        const logger = (opts.DependencySystem && opts.DependencySystem.modules && opts.DependencySystem.modules.get('logger')) || (typeof console !== 'undefined' ? console : null);
         if (err?.message?.includes('uiInit')) {
-            if (typeof console !== 'undefined') {
-                console.warn('[appInitializer] uiInit factory unavailable – using stub (test mode).');
+            if (logger && logger.warn) {
+                logger.warn('[appInitializer] uiInit factory unavailable – using stub (test mode).', { context: 'appInitializer:uiInitStub', env });
+            } else if (typeof console !== 'undefined') {
+                console.warn('[appInitializer] uiInit factory unavailable – using stub (test mode).', { context: 'appInitializer:uiInitStub', env });
             }
             // Align stub API with real implementation
             uiInit = {
                 initializeUIComponents: async () => {
-                    if (typeof console !== 'undefined') {
-                        console.warn('[appInitializer] Using no-op uiInit stub: UI features are disabled or running in test mode.');
+                    if (logger && logger.warn) {
+                        logger.warn('[appInitializer] Using no-op uiInit stub: UI features are disabled or running in test mode.', { context: 'appInitializer:uiInitStub', env });
+                    } else if (typeof console !== 'undefined') {
+                        console.warn('[appInitializer] Using no-op uiInit stub: UI features are disabled or running in test mode.', { context: 'appInitializer:uiInitStub', env });
+                    }
+                    if (env === 'test') {
+                        throw new Error('[Test] No-op uiInit.initializeUIComponents() called!');
                     }
                 },
-                waitForModalReadinessWithTimeout: async () => true,
-                registerNavigationViews: async () => {},
+                waitForModalReadinessWithTimeout: async () => {
+                    if (logger && logger.warn) {
+                        logger.warn('[appInitializer] Using no-op uiInit.waitForModalReadinessWithTimeout stub.', { context: 'appInitializer:uiInitStub', env });
+                    }
+                    if (env === 'test') {
+                        throw new Error('[Test] No-op uiInit.waitForModalReadinessWithTimeout() called!');
+                    }
+                    return true;
+                },
+                registerNavigationViews: async () => {
+                    if (logger && logger.warn) {
+                        logger.warn('[appInitializer] Using no-op uiInit.registerNavigationViews stub.', { context: 'appInitializer:uiInitStub', env });
+                    }
+                    if (env === 'test') {
+                        throw new Error('[Test] No-op uiInit.registerNavigationViews() called!');
+                    }
+                },
                 cleanup: () => {
-                    if (typeof console !== 'undefined') {
-                        console.warn('[appInitializer] uiInit.cleanup() called on no-op stub.');
+                    if (logger && logger.warn) {
+                        logger.warn('[appInitializer] uiInit.cleanup() called on no-op stub.', { context: 'appInitializer:uiInitStub', env });
+                    } else if (typeof console !== 'undefined') {
+                        console.warn('[appInitializer] uiInit.cleanup() called on no-op stub.', { context: 'appInitializer:uiInitStub', env });
+                    }
+                    if (env === 'test') {
+                        throw new Error('[Test] No-op uiInit.cleanup() called!');
                     }
                 }
             };
