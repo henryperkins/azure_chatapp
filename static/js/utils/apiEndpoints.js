@@ -45,7 +45,7 @@ export function createApiEndpoints({ logger, DependencySystem, config } = {}) {
   for (const key of REQUIRED_ENDPOINT_KEYS) {
     if (!(key in endpoints)) {
       missingKeys.push(key);
-    } else if (!endpoints[key] || typeof endpoints[key] !== 'string' || endpoints[key].trim() === '') {
+    } else if (typeof endpoints[key] !== 'function') {
       emptyKeys.push(key);
     }
   }
@@ -55,7 +55,7 @@ export function createApiEndpoints({ logger, DependencySystem, config } = {}) {
     if (missingKeys.length > 0)
       errors.push(`Missing required endpoint keys: ${missingKeys.join(', ')}`);
     if (emptyKeys.length > 0)
-      errors.push(`Empty required endpoint keys: ${emptyKeys.join(', ')}`);
+      errors.push(`Non-function endpoint keys: ${emptyKeys.join(', ')}`);
 
     logger.error('[apiEndpoints] Configuration validation failed', {
       context : 'apiEndpoints:resolveApiEndpoints',
@@ -90,7 +90,22 @@ export function createApiEndpoints({ logger, DependencySystem, config } = {}) {
   }
 
   // Return the canonical endpoints and API as factory output
+  // For convenience, also flatten all endpoint functions to their string values if called with no arguments
+  const flatEndpoints = {};
+  for (const [k, v] of Object.entries(endpoints)) {
+    if (typeof v === 'function') {
+      try {
+        flatEndpoints[k] = v();
+      } catch {
+        flatEndpoints[k] = v;
+      }
+    } else {
+      flatEndpoints[k] = v;
+    }
+  }
+
   return {
+    ...flatEndpoints,
     endpoints,
     resolveApiEndpoints,
     cleanup

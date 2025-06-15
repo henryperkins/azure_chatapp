@@ -82,7 +82,7 @@ export function createProjectAPIService(dependencies = {}) {
          */
         async loadProjectFiles(projectId) {
             try {
-                return await apiClient.get(apiEndpoints.FILES(projectId));
+                return await apiClient.get(apiEndpoints.PROJECT_FILES(projectId));
             } catch (err) {
                 logError('loadProjectFiles failed', err);
                 throw err;
