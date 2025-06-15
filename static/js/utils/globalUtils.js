@@ -4,14 +4,9 @@ const MODULE_CONTEXT = 'globalUtils';
  *  All prior factory methods have moved to their own modules in ./utils/.
  *  This file now ONLY exports formatting helpers, debounce, and legacy shims.
  *  -----
- *  Deprecated: Use these instead:
- *    - createApiClient      => './utils/apiClient.js'
- *    - createStorageService => './utils/storageService.js'
- *    - createDebugTools     => './utils/notifications-helpers.js'
- *    - createBrowserAPI     => './utils/browserService.js'
- *    - All notification logic => './utils/notify.js' and './utils/notifications-helpers.js'
- *    - DOM helpers => './utils/domAPI.js'
- *    - URL helpers => './utils/browserService.js'
+ *  DEPRECATED: All business/domain logic has been moved to services or canonical utils.
+ *  All new code should import directly from the canonical util or service.
+ *  This file remains only as a transitional shim for legacy imports.
  *  -----
  */
 
@@ -19,18 +14,14 @@ import { normaliseUrl, normalizeUrl } from './browserService.js';
 
 /**
  * @deprecated Use createApiClient from './apiClient.js'
+ * @deprecated Use createStorageService from './storageService.js'
+ * @deprecated Use createBrowserService from './browserService.js'
+ *
+ * These re-exports are for backward compatibility only and will be removed.
+ * All new code should import from the canonical util or service directly.
  */
 export { createApiClient } from './apiClient.js';
-
-/**
- * @deprecated Use createStorageService from './storageService.js'
- */
 export { createStorageService } from './storageService.js';
-
-
-/**
- * @deprecated Use createBrowserService from './browserService.js'
- */
 export { createBrowserService } from './browserService.js';
 
 
@@ -83,6 +74,11 @@ function _toggleElement(selOrEl, show, domAPI) {
 
 
 
+/**
+ * @deprecated
+ * This factory is retained only for legacy code that expects a global utility aggregator.
+ * All new code should import helpers directly from their canonical util or service.
+ */
 export function createGlobalUtils({ logger, apiClient } = {}) {
   if (!logger) throw new Error('[globalUtils] logger required');
   if (!apiClient) throw new Error('[globalUtils] apiClient required');
