@@ -62,12 +62,12 @@ export function createServiceInit(deps) {
         safeRegister('domAPI', domAPI);
         safeRegister('browserService', browserService);
         // Aliases for backward compatibility (deprecated, use 'browserService')
-        safeRegister('browserAPI', browserService);
-        safeRegister('viewportAPI', browserService);
+        // safeRegister('browserAPI', browserService); // Deprecated, do not use
+        // safeRegister('viewportAPI', browserService); // Deprecated, do not use
         // Canonical registration: storageService (from bootstrapCore)
-        // safeRegister('storageService', browserService); // Do NOT register, use storageService from bootstrapCore
+        // Do NOT register 'storageService' here; use the canonical 'storageService' from bootstrapCore
         // Deprecated alias for legacy code (will be removed in future)
-        safeRegister('storage', browserService);
+        // safeRegister('storage', browserService); // Deprecated, do not use
         safeRegister('eventHandlers', eventHandlers);
         safeRegister('domReadinessService', domReadinessService);
 
@@ -78,7 +78,7 @@ export function createServiceInit(deps) {
         if (globalUtils) safeRegister('globalUtils', globalUtils);
         safeRegister('sanitizer', sanitizer);
         // Canonical: sanitizer; domPurify is deprecated alias
-        safeRegister('domPurify', sanitizer);
+        // safeRegister('domPurify', sanitizer); // Deprecated, do not use
 
         // UI State Service - needed by sidebar and other UI components
         try {
@@ -96,11 +96,11 @@ export function createServiceInit(deps) {
                 // Canonical registration: MODAL_MAPPINGS
                 if (modalConst?.MODAL_MAPPINGS) {
                     safeRegister('MODAL_MAPPINGS', modalConst.MODAL_MAPPINGS);
-                    // Deprecated alias for backward compatibility
-                    safeRegister('modalConstants', modalConst.MODAL_MAPPINGS);
+                    // Deprecated alias for backward compatibility (do not use in new code)
+                    // safeRegister('modalConstants', modalConst.MODAL_MAPPINGS);
                 } else {
                     safeRegister('MODAL_MAPPINGS', modalConst);
-                    safeRegister('modalConstants', modalConst);
+                    // safeRegister('modalConstants', modalConst);
                 }
             } catch (err) {
                 logger.error('[serviceInit] Failed to create modalConstants', err, { context: 'serviceInit:modalConstants' });
@@ -113,11 +113,11 @@ export function createServiceInit(deps) {
                 // Canonical registration: ELEMENT_SELECTORS
                 if (selConst?.SELECTORS) {
                     safeRegister('ELEMENT_SELECTORS', selConst.ELEMENT_SELECTORS || selConst.SELECTORS);
-                    // Deprecated alias for backward compatibility
-                    safeRegister('selectorConstants', selConst.SELECTORS);
+                    // Deprecated alias for backward compatibility (do not use in new code)
+                    // safeRegister('selectorConstants', selConst.SELECTORS);
                 } else {
                     safeRegister('ELEMENT_SELECTORS', selConst);
-                    safeRegister('selectorConstants', selConst);
+                    // safeRegister('selectorConstants', selConst);
                 }
             } catch (err) {
                 logger.error('[serviceInit] Failed to create selectorConstants', err, { context: 'serviceInit:selectorConstants' });
@@ -632,6 +632,9 @@ export function createServiceInit(deps) {
 
     // Document canonical service names for maintainers
     logger.info('[serviceInit] Canonical DI service names: browserService, storageService, MODAL_MAPPINGS, ELEMENT_SELECTORS, apiEndpoints, sanitizer', {
+        context: 'serviceInit:canonicalNames'
+    });
+    logger.warn('[serviceInit] Deprecated DI aliases (browserAPI, viewportAPI, storage, domPurify, modalConstants, selectorConstants) should not be used. Use canonical names only.', {
         context: 'serviceInit:canonicalNames'
     });
 
