@@ -2,7 +2,7 @@ const MODULE = 'KBAPIService';
 
 export function createKnowledgeBaseAPIService({ apiClient, logger } = {}) {
   if (typeof apiClient !== 'function') throw new Error(`[${MODULE}] Missing apiClient`);
-  if (!logger) logger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
+  if (!logger) throw new Error(`[${MODULE}] Missing logger`);
 
   const _get  = (url, opts = {}) => apiClient(url, { method: 'GET',    ...opts });
   const _post = (url, body, opts = {}) => apiClient(url, { method: 'POST',   body, ...opts });
