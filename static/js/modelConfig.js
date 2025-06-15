@@ -65,11 +65,10 @@ export function createModelConfig({
     if (eventService?.emit) {
       eventService.emit(`modelConfig:${eventName}`, detailObj);
     } else {
-      // Fallback to document-level events
-      const domAPI = dependencySystem?.modules?.get?.('domAPI');
-      if (domAPI?.getDocument) {
-        domAPI.getDocument().dispatchEvent(new CustomEvent(`modelConfig:${eventName}`, { detail: detailObj }));
-      }
+      logger?.warn?.('[ModelConfig] eventService not available for event dispatch', { 
+        eventName, 
+        context: 'ModelConfig:dispatchEventToBus' 
+      });
     }
   }
 

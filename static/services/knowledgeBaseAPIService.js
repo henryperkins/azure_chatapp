@@ -33,5 +33,4 @@ export function createKnowledgeBaseAPIService({ apiClient, logger } = {}) {
   });
 }
 
-export { createKnowledgeBaseAPIService };
 export default createKnowledgeBaseAPIService;

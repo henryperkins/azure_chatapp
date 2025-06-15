@@ -66,8 +66,11 @@ export function createPollingService({
       // Notify local listeners first (fine-grained UI)
       if (eventService?.emit) {
         eventService.emit('polling:jobUpdate', { jobId, status, progress, raw: res });
-      } else if (_domAPI?.getDocument) {
-        _domAPI.getDocument().dispatchEvent(new CustomEvent('polling:jobUpdate', { detail: { jobId, status, progress, raw: res } }));
+      } else {
+        _logger?.warn?.('[pollingService] eventService not available for job update', { 
+          jobId, status, progress,
+          context: 'pollingService:jobUpdate' 
+        });
       }
 
       // Analytics / global consumers
@@ -128,7 +131,9 @@ export function createPollingService({
   (function _setupLifecycleHooks() {
     const doc = _domAPI?.getDocument?.();
     if (doc) {
-      eventHandlers.trackListener(doc, 'navigation:deactivateView', cleanup, {
+      const safeHandler = DependencySystem?.modules?.get?.('safeHandler');
+      const safeCleanup = safeHandler ? safeHandler(cleanup, 'PollingService:cleanup') : cleanup;
+      eventHandlers.trackListener(doc, 'navigation:deactivateView', safeCleanup, {
         context: MODULE, description: 'PollingService_DeactivateView'
       });
     }

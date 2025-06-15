@@ -54,7 +54,7 @@ export function createBootstrapCore(opts) {
                     sanitizer = browserService?.getWindow?.()?.DOMPurify;
                 } catch (err) {
                     // DOMPurify initialization failed - continue without it
-                    logger?.warn?.('[bootstrapCore] DOMPurify initialization failed', err);
+                    logger?.warn?.('[bootstrapCore] DOMPurify initialization failed', err, { context: 'bootstrapCore:DOMPurify' });
                 }
             }
         }
@@ -99,7 +99,9 @@ export function createBootstrapCore(opts) {
         function stubSafeHandler(fn, _description) {
             if (typeof fn !== 'function') return () => {};
             return function (...args) {
-                try { return fn.apply(this, args); } catch { /* intentionally ignored */ }
+                try { return fn.apply(this, args); } catch (err) { 
+                    logger?.warn?.('Optional function call failed', err, { context: 'bootstrapCore:optional' });
+                }
             };
         }
 

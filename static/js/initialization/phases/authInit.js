@@ -136,7 +136,9 @@ export function createAuthInit(deps) {
                     const modalManager = DependencySystem.modules.get?.('modalManager');
                     if (modalManager && typeof modalManager.hide === 'function') {
                         ['login', 'register'].forEach((modalName) => {
-                            try { modalManager.hide(modalName); } catch { /* ignore */ }
+                            try { modalManager.hide(modalName); } catch (err) { 
+                                logger.warn('[authInit] Failed to hide modal after login', err, { context: 'authInit:hideModal', modalName });
+                            }
                         });
                     }
                 } catch (modalErr) {

@@ -11,8 +11,8 @@ export function createProjectContextService(dependencies = {}) {
         logger,
         appModule,
         navigationService,
-        browserService,
-        DependencySystem
+        _browserService,
+        _DependencySystem
     } = dependencies;
 
     // DI validation for required dependencies

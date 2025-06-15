@@ -16,5 +16,4 @@ export function createKnowledgeBaseStateService({ eventService, logger } = {}) {
   });
 }
 
-export { createKnowledgeBaseStateService };
 export default createKnowledgeBaseStateService;

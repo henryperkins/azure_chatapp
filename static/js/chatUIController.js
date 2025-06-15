@@ -366,6 +366,7 @@ export function createChatUIController({
         behavior: 'smooth'
       });
     } catch (err) {
+      logger.error('Smooth scroll failed, using fallback', err, { context: 'ChatUIController:scrollToBottom' });
       // Fallback for older browsers
       state.messageContainer.scrollTop = state.messageContainer.scrollHeight;
     }

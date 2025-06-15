@@ -215,9 +215,15 @@ try {
 } catch (error) {
   console.error('[DEBUG] app.js: Error in initializeApp():', error);
   // Dispatch error event for HTML to catch
-  window.dispatchEvent(new CustomEvent('app:error', {
-    detail: { message: `Initialization failed: ${error.message}` }
-  }));
+  try {
+    const browserService = createBrowserService();
+    const windowEl = browserService.getWindow(); // DOM element - adding 'El' suffix
+    windowEl.dispatchEvent(new CustomEvent('app:error', {
+      detail: { message: `Initialization failed: ${error.message}` }
+    }));
+  } catch (dispatchError) {
+    console.error('[DEBUG] app.js: Failed to dispatch error event:', dispatchError);
+  }
 }
 
 // Optionally re-export the appConfig for test harnessing or diagnostics

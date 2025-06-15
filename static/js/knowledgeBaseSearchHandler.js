@@ -262,23 +262,22 @@ export function createKnowledgeBaseSearchHandler(ctx) {
    * @param {Object} result
    */
   function _useInConversation(result) {
-    const chatInput =
+    const chatInputEl =
       ctx.domAPI.getElementById("chatUIInput") ||
       ctx.domAPI.getElementById("projectChatInput") ||
       ctx.domAPI.getElementById("chatInput") ||
       ctx.domAPI.querySelector('textarea[placeholder*="Send a message"]', undefined);
 
-    if (!chatInput) return;
+    if (!chatInputEl) return;
     const filename = result.metadata?.file_name || "the knowledge base";
     const refText = `Referring to content from "${filename}":\n\n> ${result.text.trim()}\n\nBased on this, `;
-    const current = chatInput.value.trim();
+    const current = chatInputEl.value.trim();
 
     try {
-      chatInput.value = current ? `${current}\n\n${refText}` : refText;
-      chatInput.focus();
+      chatInputEl.value = current ? `${current}\n\n${refText}` : refText;
+      chatInputEl.focus();
       const inputEvt = new Event('input', { bubbles: true });
-      const doc = ctx.domAPI.getDocument();
-      ctx.domAPI.dispatchEvent(doc, inputEvt);
+      ctx.domAPI.dispatchEvent(chatInputEl, inputEvt);
     } catch (err) {
       ctx.logger.error('[KnowledgeBaseSearchHandler] _useInConversation failed',
                        err, { context: MODULE });

@@ -8,7 +8,7 @@
  * keeping identical behaviour.
  */
 
-/* eslint-disable no-console */
+ 
 const DependencySystem = {
   modules: new Map(),
   states: new Map(),
@@ -120,7 +120,9 @@ const DependencySystem = {
 };
 
 // Expose globally so all existing code continues to work.
-// eslint-disable-next-line no-undef
-window.DependencySystem = DependencySystem;
+// Note: This is acceptable in bootstrap code that establishes the DI system
+if (typeof window !== 'undefined') {
+  window.DependencySystem = DependencySystem;
+}
 
 export default DependencySystem;

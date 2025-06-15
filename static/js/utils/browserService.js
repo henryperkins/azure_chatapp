@@ -104,7 +104,7 @@ export function createBrowserService({ windowObject, logger } = {}) {
   // --------- DI wrappers for browser APIs ---------
   function FormDataImpl(form) {
     if (!windowObject.FormData) {
-      logger.error('browserService: windowObject.FormData is not available. This may occur in test/mocked environments.');
+      logger.error('browserService: windowObject.FormData is not available. This may occur in test/mocked environments.', null, { context: 'browserService:FormDataImpl' });
       throw new Error('browserService: windowObject.FormData is not available. This may occur in test/mocked environments.');
     }
     return new windowObject.FormData(form);
@@ -112,7 +112,7 @@ export function createBrowserService({ windowObject, logger } = {}) {
 
   function MutationObserverImpl(callback) {
     if (!windowObject.MutationObserver) {
-      logger.error('browserService: windowObject.MutationObserver is not available. This may occur in test/mocked environments.');
+      logger.error('browserService: windowObject.MutationObserver is not available. This may occur in test/mocked environments.', null, { context: 'browserService:MutationObserverImpl' });
       throw new Error('browserService: windowObject.MutationObserver is not available. This may occur in test/mocked environments.');
     }
     return new windowObject.MutationObserver(callback);
@@ -148,7 +148,7 @@ export function createBrowserService({ windowObject, logger } = {}) {
       windowObject.URL.revokeObjectURL(url);
       a.remove();
     } catch (err) {
-      logger.error('[browserService] triggerDownload failed', err);
+      logger.error('[browserService] triggerDownload failed', err, { context: 'browserService:triggerDownload' });
       throw err;
     }
   }
