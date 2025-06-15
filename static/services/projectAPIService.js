@@ -49,7 +49,11 @@ export function createProjectAPIService(dependencies = {}) {
          * @returns {Promise<Array>} - Array of projects
          */
         async loadProjects(filter = 'all') {
-            const url = new URL(apiEndpoints.PROJECTS(), window.location.origin);
+            // Use injected browserService for origin, not window global
+            const origin = (typeof dependencies.browserService?.getWindow === 'function')
+                ? dependencies.browserService.getWindow()?.location?.origin
+                : '';
+            const url = new URL(apiEndpoints.PROJECTS(), origin);
             url.searchParams.set('filter', filter);
 
             try {
