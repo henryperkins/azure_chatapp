@@ -13,7 +13,7 @@ import { createSafeHandler } from "../../safeHandler.js";
 import { createDomReadinessService } from "../../utils/domReadinessService.js";
 import { createLogger } from "../../logger.js";
 import { createCustomEventPolyfill } from "../../utils/polyfillCustomEvent.js";
-import { createEventService } from "../../services/eventService.js";
+import { createEventService } from "../../../services/eventService.js";
 import { createUIStateService } from "../../uiStateService.js";
 import { setBrowserService as registerSessionBrowserService, getSessionId as coreGetSessionId } from "../../utils/session.js";
 
