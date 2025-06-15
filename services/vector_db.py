@@ -9,6 +9,7 @@ Key Improvements:
 - Reduced code duplication
 - Better error handling
 - Cleaner organization
+- Enhanced logging with context
 """
 
 import logging
@@ -99,6 +100,18 @@ class VectorDB:
         self.storage_path = storage_path
         self.use_faiss = use_faiss and FAISS_AVAILABLE
 
+        logger.info(
+            "Initializing VectorDB (embedding_model=%s, use_faiss=%s, storage_path=%s)",
+            self.embedding_model_name,
+            self.use_faiss,
+            self.storage_path,
+            extra={
+                "embedding_model": self.embedding_model_name,
+                "use_faiss": self.use_faiss,
+                "storage_path": self.storage_path,
+            },
+        )
+
         # Initialize components
         self._initialize_faiss()
         self._initialize_embedding_model()
@@ -121,36 +134,48 @@ class VectorDB:
 
     def _initialize_embedding_model(self) -> None:
         """Initialize the embedding model with proper error handling."""
-        """Lazy-initialise sentence-transformer model without blocking the event-loop."""
         self.embedding_model = None  # type: ignore
 
         if not SENTENCE_TRANSFORMERS_AVAILABLE or not SentenceTransformer:
-            # Will fall back to external embedding API later
             logger.info(
-                "sentence-transformers not available – will use remote embedding API"
+                "sentence-transformers not available – will use remote embedding API (model: %s)",
+                self.embedding_model_name,
+                extra={"embedding_model": self.embedding_model_name},
             )
             return
 
         import asyncio
 
-        def _load_model_sync() -> "SentenceTransformer":  # noqa: ANN001
+        def _load_model_sync() -> "SentenceTransformer":
+            logger.info(
+                "Loading embedding model: %s",
+                self.embedding_model_name,
+                extra={"embedding_model": self.embedding_model_name},
+            )
             return SentenceTransformer(self.embedding_model_name)
 
         try:
             try:
                 loop = asyncio.get_running_loop()
-                # We are inside an asyncio loop → off-load to thread pool and
-                # *store* the Future so first call to generate_embeddings can
-                # await it.
                 self._embedding_model_future = loop.run_in_executor(None, _load_model_sync)
+                logger.info(
+                    "Embedding model loading scheduled in background.",
+                    extra={"embedding_model": self.embedding_model_name},
+                )
             except RuntimeError:
-                # No running loop → safe to load synchronously (startup script)
                 self.embedding_model = _load_model_sync()
                 self._embedding_model_future = None
-
-            logger.info("Embedding model initialisation scheduled (%s)", self.embedding_model_name)
+                logger.info(
+                    "Embedding model loaded synchronously.",
+                    extra={"embedding_model": self.embedding_model_name},
+                )
         except Exception as exc:
-            logger.error("Failed to schedule embedding model load: %s", exc, exc_info=True)
+            logger.error(
+                "Failed to schedule embedding model load: %s",
+                exc,
+                exc_info=True,
+                extra={"embedding_model": self.embedding_model_name},
+            )
             raise VectorDBError("Failed to initialise embedding model") from exc
 
     def _warmup_embedding_model(self) -> None:
@@ -158,8 +183,16 @@ class VectorDB:
         if self.embedding_model and hasattr(self.embedding_model, "encode"):
             try:
                 self.embedding_model.encode([""])
+                logger.debug(
+                    "Embedding model warmup completed.",
+                    extra={"embedding_model": self.embedding_model_name},
+                )
             except Exception as e:
-                logger.warning(f"Model warmup failed: {str(e)}")
+                logger.warning(
+                    "Model warmup failed: %s",
+                    str(e),
+                    extra={"embedding_model": self.embedding_model_name},
+                )
 
     async def test_connection(self) -> dict[str, Any]:
         """Test the vector database connection and basic functionality."""
@@ -171,6 +204,18 @@ class VectorDB:
                 FAISS_AVAILABLE and self.faiss is not None
             )
 
+            logger.debug(
+                "Testing VectorDB connection (model_ready=%s, faiss_ready=%s, index_count=%d)",
+                model_ready,
+                faiss_ready,
+                len(self.vectors),
+                extra={
+                    "model_ready": model_ready,
+                    "faiss_ready": faiss_ready,
+                    "index_count": len(self.vectors),
+                },
+            )
+
             return {
                 "is_healthy": model_ready and faiss_ready,
                 "index_count": len(self.vectors),
@@ -178,7 +223,11 @@ class VectorDB:
                 "faiss_ready": faiss_ready,
             }
         except Exception as e:
-            logger.error(f"Connection test failed: {str(e)}")
+            logger.error(
+                "Connection test failed: %s",
+                str(e),
+                exc_info=True,
+            )
             return {
                 "is_healthy": False,
                 "index_count": 0,
@@ -195,9 +244,18 @@ class VectorDB:
             try:
                 dim = self.embedding_model.get_sentence_embedding_dimension()
                 if dim is not None:
+                    logger.debug(
+                        "Embedding dimension determined from model: %d",
+                        dim,
+                        extra={"embedding_model": self.embedding_model_name},
+                    )
                     return dim
             except Exception as e:
-                logger.warning(f"Failed to get embedding dimension: {str(e)}")
+                logger.warning(
+                    "Failed to get embedding dimension: %s",
+                    str(e),
+                    extra={"embedding_model": self.embedding_model_name},
+                )
 
         # Fallback for API-based models
         model_dimensions = {
@@ -205,42 +263,70 @@ class VectorDB:
             "text-embedding-3-large": 3072,
             "embed-english": 1024,
         }
-        return model_dimensions.get(
-            self.embedding_model_name, 384
-        )  # Default for all-MiniLM-L6-v2
+        dim = model_dimensions.get(self.embedding_model_name, 384)
+        logger.debug(
+            "Using fallback embedding dimension: %d",
+            dim,
+            extra={"embedding_model": self.embedding_model_name},
+        )
+        return dim
 
     async def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
         """Generate embeddings for a list of text chunks."""
         if not texts:
+            logger.warning("No texts provided for embedding generation.")
             return []
 
         try:
             # Ensure local model (if any) is ready
             if self.embedding_model is None and getattr(self, "_embedding_model_future", None):
-                # Await background loading once, then cache result
                 self.embedding_model = await self._embedding_model_future  # type: ignore[attr-defined]
                 self._embedding_model_future = None
 
             if self.embedding_model and hasattr(self.embedding_model, "encode"):
+                logger.debug(
+                    "Generating local embeddings for %d texts.",
+                    len(texts),
+                    extra={"embedding_model": self.embedding_model_name, "text_count": len(texts)},
+                )
                 return await self._generate_local_embeddings(texts)
+            logger.debug(
+                "Generating API embeddings for %d texts.",
+                len(texts),
+                extra={"embedding_model": self.embedding_model_name, "text_count": len(texts)},
+            )
             return await self._generate_api_embeddings(texts)
         except Exception as e:
-            logger.error(f"Error generating embeddings: {str(e)}")
+            logger.error(
+                "Error generating embeddings: %s",
+                str(e),
+                exc_info=True,
+                extra={"embedding_model": self.embedding_model_name},
+            )
             raise VectorDBError(f"Failed to generate embeddings: {str(e)}")
 
     async def _generate_local_embeddings(self, texts: List[str]) -> List[List[float]]:
         """Generate embeddings using local sentence-transformers model."""
         if not self.embedding_model or not hasattr(self.embedding_model, "encode"):
+            logger.error("Embedding model not properly initialized.")
             raise VectorDBError("Embedding model not properly initialized")
 
         try:
             import asyncio
             loop = asyncio.get_running_loop()
-            # Run blocking encode in a thread pool to avoid blocking event loop
             embeddings = await loop.run_in_executor(None, self.embedding_model.encode, texts)
+            logger.debug(
+                "Local embeddings generated.",
+                extra={"embedding_model": self.embedding_model_name, "text_count": len(texts)},
+            )
             return embeddings.tolist()
         except Exception as e:
-            logger.error(f"Error generating local embeddings: {str(e)}")
+            logger.error(
+                "Error generating local embeddings: %s",
+                str(e),
+                exc_info=True,
+                extra={"embedding_model": self.embedding_model_name},
+            )
             raise VectorDBError(f"Failed to generate embeddings: {str(e)}")
 
     async def _generate_api_embeddings(self, texts: List[str]) -> List[List[float]]:
@@ -249,12 +335,20 @@ class VectorDB:
 
         try:
             if settings.EMBEDDING_API == "openai":
+                logger.info("Using OpenAI API for embedding generation.", extra={"embedding_model": self.embedding_model_name})
                 return await self._generate_openai_embeddings(texts)
             if settings.EMBEDDING_API == "cohere":
+                logger.info("Using Cohere API for embedding generation.", extra={"embedding_model": self.embedding_model_name})
                 return await self._generate_cohere_embeddings(texts)
+            logger.error("No valid embedding API configured.")
             raise VectorDBError("No valid embedding API configured")
         except Exception as e:
-            logger.error(f"Error calling external embedding API: {str(e)}")
+            logger.error(
+                "Error calling external embedding API: %s",
+                str(e),
+                exc_info=True,
+                extra={"embedding_model": self.embedding_model_name},
+            )
             raise VectorDBError(f"Failed to generate embeddings via API: {str(e)}")
 
     async def _generate_openai_embeddings(self, texts: List[str]) -> List[List[float]]:
@@ -268,10 +362,12 @@ class VectorDB:
         }
         payload = {"input": texts, "model": "text-embedding-3-small"}
 
+        logger.debug("Requesting OpenAI embeddings for %d texts.", len(texts))
         async with httpx.AsyncClient() as client:
             response = await client.post(url, json=payload, headers=headers, timeout=30)
             response.raise_for_status()
             data = response.json()
+            logger.info("Received OpenAI embeddings.", extra={"text_count": len(texts)})
             return [item["embedding"] for item in data["data"]]
 
     async def _generate_cohere_embeddings(self, texts: List[str]) -> List[List[float]]:
@@ -289,10 +385,12 @@ class VectorDB:
             "input_type": "search_document",
         }
 
+        logger.debug("Requesting Cohere embeddings for %d texts.", len(texts))
         async with httpx.AsyncClient() as client:
             response = await client.post(url, json=payload, headers=headers, timeout=30)
             response.raise_for_status()
             data = response.json()
+            logger.info("Received Cohere embeddings.", extra={"text_count": len(texts)})
             return data["embeddings"]
 
     async def add_documents(
@@ -304,9 +402,16 @@ class VectorDB:
     ) -> List[str]:
         """Add documents in batches to the vector database."""
         if not chunks:
+            logger.warning("No chunks provided to add_documents.", extra={"chunks": 0})
             return []
 
-        # Validate and prepare inputs
+        logger.info(
+            "Adding %d documents (batch size: %d)",
+            len(chunks),
+            batch_size,
+            extra={"chunks": len(chunks), "batch_size": batch_size},
+        )
+
         ids = ids or [str(uuid.uuid4()) for _ in range(len(chunks))]
         metadatas = metadatas or [{} for _ in range(len(chunks))]
         self._validate_metadatas(metadatas)
@@ -318,9 +423,20 @@ class VectorDB:
                 chunks[i:batch_end], metadatas[i:batch_end], ids[i:batch_end]
             )
             successful_ids.extend(batch_results)
+            logger.debug(
+                "Processed batch %d-%d (added %d documents)",
+                i,
+                batch_end,
+                len(batch_results),
+                extra={"batch_start": i, "batch_end": batch_end, "added": len(batch_results)},
+            )
 
         if self.storage_path and successful_ids:
             await self._save_to_disk()
+            logger.info(
+                "Saved vector DB to disk after adding documents.",
+                extra={"storage_path": self.storage_path, "added_ids": successful_ids},
+            )
 
         return successful_ids
 
@@ -333,7 +449,10 @@ class VectorDB:
             ]
             if missing_fields:
                 logger.error(
-                    f"Missing required metadata fields: {missing_fields} for document {i}"
+                    "Missing required metadata fields: %s for document %d",
+                    missing_fields,
+                    i,
+                    extra={"missing_fields": missing_fields, "doc_index": i},
                 )
                 raise VectorDBError(
                     "Documents require project_id, knowledge_base_id, and file_id in metadata"
@@ -345,6 +464,10 @@ class VectorDB:
         """Process a single batch of documents."""
         embeddings = await self.generate_embeddings(chunks)
         if not embeddings:
+            logger.warning(
+                "No embeddings generated for batch.",
+                extra={"batch_size": len(chunks)},
+            )
             return []
 
         successful_ids = []
@@ -354,6 +477,12 @@ class VectorDB:
             self.vectors[doc_id] = embedding
             self.metadata[doc_id] = {**metadata, "text": text}
             successful_ids.append(doc_id)
+
+        logger.debug(
+            "Added %d documents to in-memory store.",
+            len(successful_ids),
+            extra={"added_ids": successful_ids},
+        )
 
         if self.use_faiss and embeddings:
             self._update_faiss_index(embeddings, ids)
@@ -376,16 +505,29 @@ class VectorDB:
             if embeddings_np.size > 0:
                 self.index.add(embeddings_np)  # type: ignore
                 self.id_map.extend(ids)
+                logger.info(
+                    "FAISS index updated with %d new vectors.",
+                    len(ids),
+                    extra={"faiss_index_size": self.index.ntotal, "added_ids": ids},
+                )
         except Exception as e:
-            logger.error(f"Error updating FAISS index: {str(e)}")
+            logger.error(
+                "Error updating FAISS index: %s",
+                str(e),
+                exc_info=True,
+                extra={"faiss_index_size": self.index.ntotal if self.index else 0},
+            )
             raise VectorDBError(f"Failed to update FAISS index: {str(e)}") from e
 
     def _get_search_backend(self) -> Callable:
         """Returns appropriate search function based on available libraries."""
         if self.use_faiss and FAISS_AVAILABLE and self.index and self.id_map:
+            logger.debug("Using FAISS backend for search.")
             return self._search_with_faiss
         if SKLEARN_AVAILABLE:
+            logger.debug("Using scikit-learn backend for search.")
             return self._search_with_sklearn
+        logger.debug("Using manual cosine similarity backend for search.")
         return self._search_manual
 
     async def search(
@@ -396,17 +538,37 @@ class VectorDB:
     ) -> List[dict[str, Any]]:
         """Search for documents similar to the query text."""
         if not query:
+            logger.error("Search query cannot be empty.", extra={"query": query})
             raise VectorDBError("Query cannot be empty")
+
+        logger.info(
+            "Performing search (top_k=%d, filter=%s)",
+            top_k,
+            filter_metadata,
+            extra={"top_k": top_k, "filter_metadata": filter_metadata},
+        )
 
         try:
             query_embedding = await self.generate_embeddings([query])
             if not query_embedding or not query_embedding[0]:
+                logger.error("Failed to generate embedding for query.", extra={"query": query})
                 raise VectorDBError("Failed to generate embedding for query")
 
             search_func = self._get_search_backend()
-            return await search_func(query_embedding[0], top_k, filter_metadata)
+            results = await search_func(query_embedding[0], top_k, filter_metadata)
+            logger.info(
+                "Search completed (results=%d)",
+                len(results),
+                extra={"top_k": top_k, "results_count": len(results)},
+            )
+            return results
         except Exception as e:
-            logger.error(f"Search failed: {str(e)}")
+            logger.error(
+                "Search failed: %s",
+                str(e),
+                exc_info=True,
+                extra={"query": query, "top_k": top_k},
+            )
             raise VectorDBError(f"Search operation failed: {str(e)}") from e
 
     async def _search_with_faiss(
@@ -429,7 +591,6 @@ class VectorDB:
                         if doc_id not in self.metadata:
                             continue
 
-                        # Apply optional metadata filter first
                         if filter_metadata and not self._matches_filter(
                             self.metadata[doc_id], filter_metadata
                         ):
@@ -437,8 +598,17 @@ class VectorDB:
 
                         score = max(0.0, 1.0 - (dist / 100.0))
                         results.append(self._format_result(doc_id, score))
+            logger.debug(
+                "FAISS search returned %d results.",
+                len(results),
+                extra={"results_count": len(results)},
+            )
         except Exception as e:
-            logger.error(f"FAISS search failed: {str(e)}")
+            logger.error(
+                "FAISS search failed: %s",
+                str(e),
+                exc_info=True,
+            )
             raise VectorDBError(f"Search operation failed: {str(e)}") from e
 
         return results
@@ -453,6 +623,7 @@ class VectorDB:
         ids = list(self.vectors.keys())
         vectors = [self.vectors[d_id] for d_id in ids]
         if not vectors:
+            logger.warning("No vectors available for sklearn search.")
             return []
 
         vectors_np = np.array(vectors)
@@ -466,6 +637,12 @@ class VectorDB:
             or self._matches_filter(self.metadata.get(doc_id, {}), filter_metadata)
         ]
         id_score_pairs.sort(key=lambda x: x[1], reverse=True)
+
+        logger.debug(
+            "scikit-learn search returned %d results.",
+            len(id_score_pairs[:top_k]),
+            extra={"results_count": len(id_score_pairs[:top_k])},
+        )
 
         return [
             self._format_result(doc_id, score)
@@ -490,6 +667,11 @@ class VectorDB:
             results.append(self._format_result(doc_id, similarity))
 
         results.sort(key=lambda x: x["score"], reverse=True)
+        logger.debug(
+            "Manual cosine similarity search returned %d results.",
+            len(results[:top_k]),
+            extra={"results_count": len(results[:top_k])},
+        )
         return results[:top_k]
 
     def _calculate_cosine_similarity(
@@ -502,7 +684,11 @@ class VectorDB:
             norm2 = sum(b * b for b in vec2) ** 0.5
             return dot_product / (norm1 * norm2) if norm1 > 0 and norm2 > 0 else 0.0
         except Exception as e:
-            logger.error(f"Error calculating similarity: {str(e)}")
+            logger.error(
+                "Error calculating similarity: %s",
+                str(e),
+                exc_info=True,
+            )
             return 0.0
 
     def _format_result(self, doc_id: str, score: float) -> dict[str, Any]:
@@ -535,7 +721,10 @@ class VectorDB:
     async def delete_by_ids(self, ids: List[str]) -> int:
         """Delete documents by their IDs."""
         if not ids:
+            logger.info("No IDs provided for deletion.", extra={"ids": []})
             return 0
+
+        logger.info("Deleting %d documents: %s", len(ids), ids, extra={"ids": ids})
 
         deleted_count = 0
         for doc_id in ids:
@@ -551,6 +740,11 @@ class VectorDB:
             if self.storage_path:
                 await self._save_to_disk()
 
+        logger.info(
+            "Deleted %d documents.",
+            deleted_count,
+            extra={"deleted_count": deleted_count, "ids": ids},
+        )
         return deleted_count
 
     def _rebuild_faiss_index(self) -> None:
@@ -563,6 +757,7 @@ class VectorDB:
             if not remaining_ids:
                 self.index = None
                 self.id_map = []
+                logger.info("FAISS index cleared after all vectors deleted.")
                 return
 
             remaining_vectors = [self.vectors[d_id] for d_id in remaining_ids]
@@ -575,15 +770,24 @@ class VectorDB:
                 self.index.add(vectors_np)  # type: ignore
             self.id_map = remaining_ids
 
-            logger.info(f"Rebuilt FAISS index with {len(remaining_ids)} vectors")
+            logger.info(
+                "Rebuilt FAISS index with %d vectors",
+                len(remaining_ids),
+                extra={"faiss_index_size": len(remaining_ids)},
+            )
         except Exception as e:
-            logger.error(f"Failed to rebuild FAISS index: {str(e)}")
+            logger.error(
+                "Failed to rebuild FAISS index: %s",
+                str(e),
+                exc_info=True,
+            )
             self.index = None
             self.id_map = []
 
     async def delete_by_filter(self, filter_metadata: dict[str, Any]) -> int:
         """Delete documents matching a given filter."""
         if not filter_metadata:
+            logger.info("No filter provided for delete_by_filter.")
             return 0
 
         ids_to_delete = [
@@ -591,13 +795,20 @@ class VectorDB:
             for doc_id, meta in self.metadata.items()
             if self._matches_filter(meta, filter_metadata)
         ]
+        logger.info(
+            "Deleting by filter: %d documents matched.",
+            len(ids_to_delete),
+            extra={"filter_metadata": filter_metadata, "ids_to_delete": ids_to_delete},
+        )
         return await self.delete_by_ids(ids_to_delete)
 
     async def get_document(self, doc_id: str) -> Optional[dict[str, Any]]:
         """Get a document by its ID."""
         if doc_id not in self.metadata:
+            logger.warning("Requested document not found.", extra={"doc_id": doc_id})
             return None
 
+        logger.debug("Fetched document by ID.", extra={"doc_id": doc_id})
         return {
             "id": doc_id,
             "text": self.metadata[doc_id].get("text", ""),
@@ -615,6 +826,14 @@ class VectorDB:
             - is_healthy: Boolean indicating if connection is healthy
         """
         conn_status = await self.test_connection()
+        logger.info(
+            "VectorDB stats requested.",
+            extra={
+                "index_size": len(self.vectors),
+                "model_name": self.embedding_model_name,
+                "is_healthy": conn_status["is_healthy"],
+            },
+        )
         return {
             "index_size": len(self.vectors),
             "model_name": self.embedding_model_name,
@@ -657,7 +876,21 @@ class VectorDB:
             try:
                 storage_size_mb = os.path.getsize(self.storage_path) / (1024 * 1024)
             except Exception as e:
-                logger.error(f"Error getting storage size: {str(e)}")
+                logger.error(
+                    "Error getting storage size: %s",
+                    str(e),
+                    exc_info=True,
+                )
+
+        logger.info(
+            "Knowledge base status requested.",
+            extra={
+                "project_id": str(project_id),
+                "index_size": len(self.vectors),
+                "storage_exists": storage_exists,
+                "storage_size_mb": storage_size_mb,
+            },
+        )
 
         return {
             "vector_db": {
@@ -694,10 +927,15 @@ class VectorDB:
         }
         with open(self.storage_path, "w") as f:
             json.dump(data, f)
+        logger.info(
+            "VectorDB state saved to disk.",
+            extra={"storage_path": self.storage_path, "vector_count": len(self.vectors)},
+        )
 
     async def load_from_disk(self) -> bool:
         """Load vectors and metadata from disk."""
         if not self.storage_path or not os.path.exists(self.storage_path):
+            logger.info("No storage file found to load VectorDB.", extra={"storage_path": self.storage_path})
             return False
 
         with open(self.storage_path, "r") as f:
@@ -706,12 +944,19 @@ class VectorDB:
             self.metadata = data.get("metadata", {})
             if "model" in data and data["model"] != self.embedding_model_name:
                 logger.warning(
-                    f"Loaded model {data['model']} differs from current model {self.embedding_model_name}"
+                    "Loaded model %s differs from current model %s",
+                    data["model"],
+                    self.embedding_model_name,
+                    extra={"loaded_model": data["model"], "current_model": self.embedding_model_name},
                 )
 
         if self.use_faiss:
             self._rebuild_faiss_index()
 
+        logger.info(
+            "VectorDB state loaded from disk.",
+            extra={"storage_path": self.storage_path, "vector_count": len(self.vectors)},
+        )
         return True
 
 
@@ -725,6 +970,14 @@ async def process_file_for_search(
 ) -> dict[str, Any]:
     """Process a file for similarity search."""
     from services.text_extraction import get_text_extractor
+
+    logger.info(
+        "Processing file: %s (project_id=%s, file_id=%s)",
+        project_file.filename,
+        project_file.project_id,
+        project_file.id,
+        extra={"file_id": str(project_file.id), "project_id": str(project_file.project_id)},
+    )
 
     text_extractor = get_text_extractor()
 
@@ -772,6 +1025,20 @@ async def process_file_for_search(
             ids=[f"{project_file.id}_chunk_{i}" for i in range(len(text_chunks))],
         )
 
+        logger.info(
+            "Successfully processed file: %s (chunks: %d, tokens: %d)",
+            project_file.filename,
+            len(text_chunks),
+            metadata.get("token_count", 0),
+            extra={
+                "file_id": str(project_file.id),
+                "project_id": str(project_file.project_id),
+                "chunk_count": len(text_chunks),
+                "token_count": metadata.get("token_count", 0),
+                "added_ids": added_ids,
+            },
+        )
+
         return {
             "file_id": str(project_file.id),
             "chunk_count": len(text_chunks),
@@ -782,7 +1049,15 @@ async def process_file_for_search(
         }
 
     except Exception as e:
-        logger.error(f"Error processing file {project_file.filename}: {str(e)}")
+        logger.error(
+            "Error processing file %s (project_id=%s, file_id=%s): %s",
+            project_file.filename,
+            project_file.project_id,
+            project_file.id,
+            str(e),
+            exc_info=True,
+            extra={"file_id": str(project_file.id), "project_id": str(project_file.project_id)},
+        )
         return {
             "file_id": str(project_file.id),
             "success": False,
@@ -798,6 +1073,12 @@ async def search_context_for_query(
 ) -> List[dict[str, Any]]:
     """Search for relevant context for a query within a project."""
     filter_metadata = {"project_id": project_id} if project_id else None
+    logger.info(
+        "Searching context for query (project_id=%s, top_k=%d)",
+        project_id,
+        top_k,
+        extra={"project_id": project_id, "top_k": top_k},
+    )
     return await vector_db.search(
         query=query, top_k=top_k, filter_metadata=filter_metadata
     )
@@ -810,6 +1091,11 @@ async def cleanup_project_resources(
     storage_path = os.path.join(storage_root, str(project_id))
 
     try:
+        logger.info(
+            "Cleaning up project resources (project_id=%s)",
+            project_id,
+            extra={"project_id": str(project_id)},
+        )
         vector_db = await initialize_project_vector_db(
             project_id=project_id, storage_root=storage_root
         )
@@ -820,10 +1106,19 @@ async def cleanup_project_resources(
             import shutil
 
             shutil.rmtree(storage_path)
+            logger.info(
+                "Deleted storage directory for project.",
+                extra={"project_id": str(project_id), "storage_path": storage_path},
+            )
 
         return True
     except Exception as e:
-        logger.error(f"Failed to cleanup project vectors: {str(e)}")
+        logger.error(
+            "Failed to cleanup project vectors: %s",
+            str(e),
+            exc_info=True,
+            extra={"project_id": str(project_id)},
+        )
         return False
 
 
@@ -850,8 +1145,13 @@ async def process_files_for_project(
                 chunk_overlap=chunk_overlap,
             )
 
-    # --------- existing body of the function goes here ---------
     from sqlalchemy import select
+
+    logger.info(
+        "Starting batch file processing for project %s",
+        project_id,
+        extra={"project_id": str(project_id)},
+    )
 
     # Initialize vector DB for project
     vector_db = await initialize_project_vector_db(project_id)
@@ -863,10 +1163,10 @@ async def process_files_for_project(
     storage = get_file_storage(config)
 
     results: dict[str, Any] = {
-        "processed": 0,  # int
-        "failed": 0,  # int
-        "errors": [],  # List[str]
-        "details": [],  # List[dict[str, Any]]
+        "processed": 0,
+        "failed": 0,
+        "errors": [],
+        "details": [],
     }
 
     # Get file records to process
@@ -878,8 +1178,11 @@ async def process_files_for_project(
         file_records = await db.execute(query)
         file_records = file_records.scalars().all()
     else:
-        # If no DB session, we should at least have file IDs
         if not file_ids:
+            logger.error(
+                "Database session or file IDs required for batch processing.",
+                extra={"project_id": str(project_id)},
+            )
             return {
                 "processed": 0,
                 "failed": 0,
@@ -888,13 +1191,10 @@ async def process_files_for_project(
             }
         file_records = []
 
-    # Process each file
     for file_record in file_records:
         try:
-            # Get file content from storage
             content = await storage.get_file(file_record.file_path)
 
-            # Process the file
             result = await process_file_for_search(
                 project_file=file_record,
                 vector_db=vector_db,
@@ -903,7 +1203,6 @@ async def process_files_for_project(
                 chunk_overlap=chunk_overlap,
             )
 
-            # Track results
             results["details"].append(result)
             if result["success"]:
                 results["processed"] += 1
@@ -917,7 +1216,25 @@ async def process_files_for_project(
         except Exception as e:
             results["failed"] += 1
             results["errors"].append(f"File {file_record.id}: {str(e)}")
-            logger.error(f"Error processing file {file_record.id}: {str(e)}")
+            logger.error(
+                "Error processing file %s: %s",
+                file_record.id,
+                str(e),
+                exc_info=True,
+                extra={"file_id": str(file_record.id), "project_id": str(project_id)},
+            )
+
+    logger.info(
+        "Completed batch file processing for project %s: %d processed, %d failed",
+        project_id,
+        results["processed"],
+        results["failed"],
+        extra={
+            "project_id": str(project_id),
+            "processed": results["processed"],
+            "failed": results["failed"],
+        },
+    )
 
     return results
 
@@ -933,6 +1250,10 @@ async def get_vector_db(
     )
     if load_existing:
         await vdb.load_from_disk()
+    logger.info(
+        "VectorDB instance created.",
+        extra={"model_name": model_name, "storage_path": storage_path, "load_existing": load_existing},
+    )
     return vdb
 
 
@@ -946,8 +1267,14 @@ async def initialize_project_vector_db(
     Delegates to VectorDBManager.get_for_project for canonical logic.
     """
     from services.knowledgebase_helpers import VectorDBManager   # import locally to avoid circulars
+    logger.info(
+        "Initializing project VectorDB (project_id=%s, embedding_model=%s)",
+        project_id,
+        embedding_model,
+        extra={"project_id": str(project_id), "embedding_model": embedding_model},
+    )
     return await VectorDBManager.get_for_project(
         project_id=project_id,
-        model_name=embedding_model,   # may be None ➜ manager resolves default / KB setting
-        db=None,                      # legacy wrapper keeps same public API
+        model_name=embedding_model,
+        db=None,
     )
