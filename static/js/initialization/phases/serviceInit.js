@@ -57,11 +57,16 @@ export function createServiceInit(deps) {
     function registerBasicServices() {
         logger.info('[serviceInit] Starting registration of basic services...', { context: 'serviceInit:registerBasicServices' });
 
+        // Canonical registration: browserService
         safeRegister('logger', logger);
         safeRegister('domAPI', domAPI);
-        safeRegister('browserAPI', browserService);
         safeRegister('browserService', browserService);
+        // Aliases for backward compatibility (deprecated, use 'browserService')
+        safeRegister('browserAPI', browserService);
         safeRegister('viewportAPI', browserService);
+        // Canonical registration: storageService (from bootstrapCore)
+        // safeRegister('storageService', browserService); // Do NOT register, use storageService from bootstrapCore
+        // Deprecated alias for legacy code (will be removed in future)
         safeRegister('storage', browserService);
         safeRegister('eventHandlers', eventHandlers);
         safeRegister('domReadinessService', domReadinessService);
@@ -72,6 +77,7 @@ export function createServiceInit(deps) {
         if (uiUtils) safeRegister('uiUtils', uiUtils);
         if (globalUtils) safeRegister('globalUtils', globalUtils);
         safeRegister('sanitizer', sanitizer);
+        // Canonical: sanitizer; domPurify is deprecated alias
         safeRegister('domPurify', sanitizer);
 
         // UI State Service - needed by sidebar and other UI components
@@ -87,10 +93,13 @@ export function createServiceInit(deps) {
         if (typeof createModalConstants === 'function') {
             try {
                 const modalConst = createModalConstants();
+                // Canonical registration: MODAL_MAPPINGS
                 if (modalConst?.MODAL_MAPPINGS) {
+                    safeRegister('MODAL_MAPPINGS', modalConst.MODAL_MAPPINGS);
+                    // Deprecated alias for backward compatibility
                     safeRegister('modalConstants', modalConst.MODAL_MAPPINGS);
-                    safeRegister('MODAL_MAPPINGS', modalConst.MODAL_MAPPINGS); // legacy alias / convenience
                 } else {
+                    safeRegister('MODAL_MAPPINGS', modalConst);
                     safeRegister('modalConstants', modalConst);
                 }
             } catch (err) {
@@ -101,10 +110,13 @@ export function createServiceInit(deps) {
         if (typeof createSelectorConstants === 'function') {
             try {
                 const selConst = createSelectorConstants();
+                // Canonical registration: ELEMENT_SELECTORS
                 if (selConst?.SELECTORS) {
-                    safeRegister('selectorConstants', selConst.SELECTORS);
                     safeRegister('ELEMENT_SELECTORS', selConst.ELEMENT_SELECTORS || selConst.SELECTORS);
+                    // Deprecated alias for backward compatibility
+                    safeRegister('selectorConstants', selConst.SELECTORS);
                 } else {
+                    safeRegister('ELEMENT_SELECTORS', selConst);
                     safeRegister('selectorConstants', selConst);
                 }
             } catch (err) {
@@ -125,12 +137,12 @@ export function createServiceInit(deps) {
         if (typeof createApiEndpoints !== 'function') {
             throw new Error('[serviceInit] createApiEndpoints factory missing.');
         }
-        
+
         try {
             const apiEndpointsInstance = createApiEndpoints({ logger, DependencySystem, config: APP_CONFIG });
             const resolvedEndpoints = apiEndpointsInstance.endpoints; // Get the endpoints from the factory result
+            // Canonical: apiEndpoints
             safeRegister('apiEndpoints', resolvedEndpoints);
-            
             logger.debug('[serviceInit] API endpoints created and registered.', {
                 endpointCount: Object.keys(resolvedEndpoints).length,
                 hasAuthEndpoints: !!(resolvedEndpoints.AUTH_LOGIN && resolvedEndpoints.AUTH_CSRF),
@@ -617,6 +629,11 @@ export function createServiceInit(deps) {
         const log = DependencySystem.modules.get('logger');
         log.debug('[serviceInit] Cleanup completed', { context: 'serviceInit:cleanup' });
     }
+
+    // Document canonical service names for maintainers
+    logger.info('[serviceInit] Canonical DI service names: browserService, storageService, MODAL_MAPPINGS, ELEMENT_SELECTORS, apiEndpoints, sanitizer', {
+        context: 'serviceInit:canonicalNames'
+    });
 
     return {
         registerBasicServices,
