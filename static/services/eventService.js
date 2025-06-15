@@ -13,7 +13,14 @@
  * Back-compat helpers:
  *   • getAuthBus() / getAppBus() return the same underlying bus so legacy
  *     modules continue to work during incremental migration.
+ *
+ * Singleton enforcement:
+ *   • Only one EventTarget (event bus) should exist per application instance.
+ *   • If multiple eventService instances are created, a warning is logged.
+ *   • The singleton EventTarget is stored on window.__APP_EVENT_BUS__ if available.
  */
+
+let _singletonEventBus = null;
 
 export function createEventService({
   DependencySystem,
@@ -40,8 +47,30 @@ export function createEventService({
     });
   }
 
-  // Use supplied bus (e.g., AppBus from appInitializer) or create new.
-  const mainBus = existingBus || new EventTarget();
+  // Singleton Event Bus enforcement
+  let mainBus;
+  if (existingBus) {
+    mainBus = existingBus;
+    if (_singletonEventBus && mainBus !== _singletonEventBus) {
+      logger.warn?.('[eventService] Multiple event buses detected! Ensure only one eventService instance is created and injected.', {
+        context: 'eventService:singleton',
+        previousBus: _singletonEventBus,
+        newBus: mainBus
+      });
+    }
+    _singletonEventBus = mainBus;
+  } else if (typeof window !== "undefined") {
+    if (!window.__APP_EVENT_BUS__) {
+      window.__APP_EVENT_BUS__ = new EventTarget();
+      _singletonEventBus = window.__APP_EVENT_BUS__;
+    }
+    mainBus = window.__APP_EVENT_BUS__;
+  } else if (_singletonEventBus) {
+    mainBus = _singletonEventBus;
+  } else {
+    mainBus = new EventTarget();
+    _singletonEventBus = mainBus;
+  }
 
   const MODULE_CONTEXT = 'eventService';
 
@@ -128,6 +157,14 @@ export function createEventService({
     },
     getAppBus() {
       return mainBus;
+    },
+
+    /**
+     * Returns the singleton EventTarget used by all eventService instances.
+     * Use for diagnostics or advanced integration only.
+     */
+    getSingletonBus() {
+      return _singletonEventBus || mainBus;
     },
 
     /**
