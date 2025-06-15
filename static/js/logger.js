@@ -75,15 +75,36 @@ export function createLogger({
 
     const logEntry = formatLogEntry(level, message, data, metadata);
 
-    // Console output
+    // Console output with colorization for readability
     if (consoleEnabled) {
       const method = console[level] || console.log;
       const prefix = `[${logEntry.timestamp}] [${level.toUpperCase()}] [${logEntry.context}]`;
-      const consoleArgs = [`${prefix} ${message}`];
+      let color = '';
+      switch (level) {
+        case 'debug':
+          color = 'color: #888';
+          break;
+        case 'info':
+          color = 'color: #1976d2';
+          break;
+        case 'warn':
+          color = 'color: #e65100';
+          break;
+        case 'error':
+          color = 'color: #b71c1c; font-weight: bold';
+          break;
+        case 'critical':
+          color = 'color: #fff; background: #b71c1c; font-weight: bold';
+          break;
+        default:
+          color = '';
+      }
+      const consoleArgs = [`%c${prefix} ${message}`, color];
       if (data) consoleArgs.push(data);
       method.apply(console, consoleArgs);
     }
 
+    // Emit event for log delivery, with fallback warning if emission fails
     try {
       const CustomEventCtor = browserService.getWindow?.()?.CustomEvent;
       if (domAPI && typeof domAPI.dispatchEvent === 'function' && CustomEventCtor) {
@@ -91,10 +112,20 @@ export function createLogger({
         const target = domAPI.getDocument();
         if (target) {
           domAPI.dispatchEvent(target, event);
+        } else {
+          if (consoleEnabled) {
+            console.warn('[logger] Could not emit app:log event: domAPI.getDocument() returned null');
+          }
+        }
+      } else {
+        if (consoleEnabled) {
+          console.warn('[logger] Could not emit app:log event: domAPI.dispatchEvent or CustomEvent unavailable');
         }
       }
     } catch (e) {
-      // Silent fail - don't create log loops
+      if (consoleEnabled) {
+        console.warn('[logger] Exception during log event emission:', e);
+      }
     }
   }
 
