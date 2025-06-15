@@ -73,16 +73,29 @@ export function createKnowledgeBaseComponent(options = {}) {
 
   // ---------------------------------------------------------------------------
   // Resolve buses and auth module ONCE at factory-time so that no runtime
-  // All required dependencies are resolved at factory-time via getDep – no additional
   // container look-ups occur after instantiation (guard-rails compliant).
-  // the 2025 guard-rail: *zero* runtime DI queries after instantiation.
   // ---------------------------------------------------------------------------
-  const appBus = getDep("AppBus");
+
+  // Primary unified bus.
+  const eventService = getDep("eventService") || null;
+
+  // Legacy AuthBus fallback – _only_ used if eventService is missing (e.g. in
+  // very early unit-test harnesses that still stub the old bus).
   const authModule = getDep("auth");
-  // AuthBus is optional – fall back to null so downstream code branches cleanly.
-  const authBus = getDep("AuthBus") || authModule?.AuthBus || null;
-  // Unified eventService for modern event handling
-  const eventService = getDep("eventService");
+  const authBus = authModule?.AuthBus || null;
+
+  // Expose a raw EventTarget for modules that still rely on direct
+  // addEventListener/removeEventListener calls.  We prefer the real bus from
+  // eventService (via the internal helper) and gracefully fall back to any
+  // legacy AppBus still registered in the container.
+  const appBus =
+    // 1) eventService internal bus (most recent implementation)
+    (typeof eventService?._getBus === 'function' ? eventService._getBus() : null) ||
+    // 2) Deprecated AppBus registered during bootstrapCore
+    getDep("AppBus") ||
+    // 3) As a last resort the authBus (they used to be interchangeable)
+    authBus ||
+    null;
 
   // Resolve KB sub-factories via DI (registered in appInitializer)
   const createKnowledgeBaseManager = getDep("KBManagerFactory");

@@ -251,7 +251,7 @@ export function createCoreInit(deps = {}) {
           APP_CONFIG,
           uiStateService: DependencySystem.modules.get('uiStateService'),
           authenticationService: DependencySystem.modules.get('authenticationService'),
-          authBus: DependencySystem.modules.get('AuthBus'),
+          authBus: DependencySystem.modules.get('eventService'),
           eventService: DependencySystem.modules.get('eventService')
         });
 

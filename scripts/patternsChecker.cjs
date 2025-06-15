@@ -66,7 +66,7 @@ const RULE_NAME = {
 
 const RULE_DESC = {
   1: "Export `createXyz` factory, validate deps, expose cleanup, no top-level code.",
-  2: "No direct globals or service imports (except bootstrap); inject via DI. `DependencySystem.modules.get()` only inside functions, not at module scope.",
+  2: "No direct globals or service imports (except bootstrap); inject via DI. `DependencySystem.modules.get()` and `globalThis.DependencySystem` only inside functions, not at module scope.",
   3: "No side-effects at import time; all logic inside the factory.",
   4: "Use central `eventHandlers.trackListener` + `cleanupListeners` only.",
   5: "Every listener and log must include a `{ context }` tag.",
@@ -785,6 +785,43 @@ function vDI(err, file, isBootstrapFile, config) {
         err.push(E(file, p.node.loc.start.line, 2, `Access to '${baseId.name}.${propName}' is forbidden.`, "Browser storage APIs violate guard-rails."));
       }
     },
+    // Hidden Global Fallbacks: ban globalThis.DependencySystem in utils
+    MemberExpression(p) {
+      if (
+        !isBootstrapFile &&
+        file.includes(path.join('static', 'js', 'utils')) &&
+        p.node.object.type === 'Identifier' && p.node.object.name === 'globalThis' &&
+        p.node.property.type === 'Identifier' && p.node.property.name === depSystemName
+      ) {
+        err.push(E(
+          file,
+          p.node.loc.start.line,
+          2,
+          `Direct globalThis.${depSystemName} usage is forbidden in utils modules.`,
+          `Use injected ${depSystemName} instead of globalThis.${depSystemName}.`
+        ));
+      }
+    },
+    // Top-level typeof window checks are forbidden; use browserService
+    UnaryExpression(p) {
+      if (
+        !isBootstrapFile &&
+        p.node.operator === 'typeof' &&
+        p.node.argument.type === 'Identifier' &&
+        p.node.argument.name === 'window'
+      ) {
+        const funcParent = p.getFunctionParent();
+        if (!funcParent) {
+          err.push(E(
+            file,
+            p.node.loc.start.line,
+            2,
+            `Top-level typeof window check is forbidden; use injected browserService instead of globals.`,
+            `Encapsulate window access via a DI-provided service (e.g., browserService.getWindow()).`
+          ));
+        }
+      }
+    },
     CallExpression(p) {
       const cNode = p.node.callee;
       if ( cNode.type === "MemberExpression" && cNode.object.type === "Identifier" && cNode.object.name === "console" && !p.scope.hasBinding("console") && !isLoggerJs && !isNodeScript && !isBootstrapFile ) {
@@ -1085,12 +1122,69 @@ function vState(err, file, isBootstrapFile, config) {
 function vBus(err, file, config) {
   // Skip checks inside the canonical eventService implementation itself
   if (/[/\\]services[/\\]eventService\.(js|ts)$/i.test(file)) return {};
+  // Skip bootstrap files that create legacy proxy buses
+  if (/[/\\]bootstrap[/\\]bootstrapCore\.(js|ts)$/i.test(file)) return {};
+  // Skip migration and verification scripts
+  if (/[/\\]scripts[/\\](?:migrate-eventbus|verify-eventbus-migration|no-legacy-eventbus)\.(js|ts|cjs)$/i.test(file)) return {};
 
   const ehName = config.serviceNames.eventHandlers;
+  const depSystemName = config.objectNames.dependencySystem || "DependencySystem";
 
   return {
     CallExpression(p) {
       const callee = p.node.callee;
+      
+      // Check for legacy bus dependency injection calls
+      if (callee.type === "MemberExpression" && 
+          callee.object?.type === "MemberExpression" &&
+          callee.object.object?.name === depSystemName &&
+          callee.object.property?.name === "modules" &&
+          callee.property?.name === "get" &&
+          p.node.arguments.length > 0) {
+        
+        const arg = p.node.arguments[0];
+        if (arg.type === "StringLiteral" && (arg.value === "AppBus" || arg.value === "AuthBus")) {
+          err.push(E(
+            file,
+            p.node.loc.start.line,
+            9,
+            `Legacy bus '${arg.value}' dependency injection is forbidden.`,
+            `Replace DependencySystem.modules.get('${arg.value}') with DependencySystem.modules.get('eventService').`
+          ));
+        }
+      }
+
+      // Check for getDep calls with legacy buses
+      if (callee.type === "Identifier" && callee.name === "getDep" && 
+          p.node.arguments.length > 0) {
+        
+        const arg = p.node.arguments[0];
+        if (arg.type === "StringLiteral" && (arg.value === "AppBus" || arg.value === "AuthBus")) {
+          err.push(E(
+            file,
+            p.node.loc.start.line,
+            9,
+            `Legacy bus '${arg.value}' getDep call is forbidden.`,
+            `Replace getDep('${arg.value}') with getDep('eventService').`
+          ));
+        }
+      }
+
+      // Check for legacy method calls (getAppBus, getAuthBus)
+      if (callee.type === "Identifier" && 
+          (callee.name === "getAppBus" || callee.name === "getAuthBus") &&
+          p.node.arguments.length === 0) {
+        
+        err.push(E(
+          file,
+          p.node.loc.start.line,
+          9,
+          `Legacy method '${callee.name}()' is forbidden.`,
+          `Replace ${callee.name}() with eventService (injected via DI).`
+        ));
+      }
+
+      // Check for dispatchEvent calls
       if (callee.type === "MemberExpression" && callee.property.name === "dispatchEvent") {
         const busObjectPath = p.get("callee.object");
         const busSourceNode = getExpressionSourceNode(busObjectPath);
@@ -1110,6 +1204,20 @@ function vBus(err, file, config) {
           return; // treat as native element dispatch, allow
         }
 
+        // Check for legacy bus variables
+        if (busSourceNode?.type === 'Identifier' && 
+            (busSourceNode.name === 'appBus' || busSourceNode.name === 'authBus' || 
+             busSourceNode.name === 'AppBus' || busSourceNode.name === 'AuthBus')) {
+          err.push(E(
+            file,
+            p.node.loc.start.line,
+            9,
+            `Legacy bus '${busSourceNode.name}.dispatchEvent()' is forbidden.`,
+            `Replace ${busSourceNode.name}.dispatchEvent() with eventService.emit().`
+          ));
+          return;
+        }
+
         err.push(E(
           file,
           p.node.loc.start.line,
@@ -1117,6 +1225,128 @@ function vBus(err, file, config) {
           "Direct 'dispatchEvent()' usage is forbidden – use DI-provided 'eventService.emit()'.",
           "Inject 'eventService' and call eventService.emit('evtName', detail). Legacy AppBus/AuthBus patterns are deprecated. If this is a DOM element, name it with an 'El' suffix to suppress this warning."
         ));
+      }
+
+      // Check for legacy addEventListener calls
+      if (callee.type === "MemberExpression" && callee.property.name === "addEventListener") {
+        const busObjectPath = p.get("callee.object");
+        const busSourceNode = getExpressionSourceNode(busObjectPath);
+
+        // Check for legacy bus variables
+        if (busSourceNode?.type === 'Identifier' && 
+            (busSourceNode.name === 'appBus' || busSourceNode.name === 'authBus' || 
+             busSourceNode.name === 'AppBus' || busSourceNode.name === 'AuthBus')) {
+          err.push(E(
+            file,
+            p.node.loc.start.line,
+            9,
+            `Legacy bus '${busSourceNode.name}.addEventListener()' is forbidden.`,
+            `Replace ${busSourceNode.name}.addEventListener() with eventService.on().`
+          ));
+        }
+      }
+
+      // Check for legacy removeEventListener calls
+      if (callee.type === "MemberExpression" && callee.property.name === "removeEventListener") {
+        const busObjectPath = p.get("callee.object");
+        const busSourceNode = getExpressionSourceNode(busObjectPath);
+
+        // Check for legacy bus variables
+        if (busSourceNode?.type === 'Identifier' && 
+            (busSourceNode.name === 'appBus' || busSourceNode.name === 'authBus' || 
+             busSourceNode.name === 'AppBus' || busSourceNode.name === 'AuthBus')) {
+          err.push(E(
+            file,
+            p.node.loc.start.line,
+            9,
+            `Legacy bus '${busSourceNode.name}.removeEventListener()' is forbidden.`,
+            `Replace ${busSourceNode.name}.removeEventListener() with eventService.off().`
+          ));
+        }
+      }
+    },
+
+    MemberExpression(p) {
+      // Check for auth.AuthBus and authModule.AuthBus patterns
+      if (p.node.property?.name === "AuthBus" && 
+          p.node.object?.type === "Identifier" &&
+          (p.node.object.name === "auth" || p.node.object.name === "authModule")) {
+        
+        err.push(E(
+          file,
+          p.node.loc.start.line,
+          9,
+          `Legacy bus property '${p.node.object.name}.AuthBus' is forbidden.`,
+          `Replace ${p.node.object.name}.AuthBus with eventService (injected via DI).`
+        ));
+      }
+    },
+
+    VariableDeclarator(p) {
+      // Check for variable declarations that assign legacy buses
+      if (p.node.init?.type === "CallExpression") {
+        const callee = p.node.init.callee;
+        
+        // Check getDep patterns
+        if (callee.type === "Identifier" && callee.name === "getDep" &&
+            p.node.init.arguments.length > 0 &&
+            p.node.init.arguments[0].type === "StringLiteral") {
+          
+          const depName = p.node.init.arguments[0].value;
+          if (depName === "AppBus" || depName === "AuthBus") {
+            err.push(E(
+              file,
+              p.node.loc.start.line,
+              9,
+              `Variable declaration with legacy bus '${depName}' is forbidden.`,
+              `Replace const ${p.node.id.name} = getDep('${depName}') with const eventService = getDep('eventService').`
+            ));
+          }
+        }
+
+        // Check DependencySystem.modules.get patterns
+        if (callee.type === "MemberExpression" &&
+            callee.object?.type === "MemberExpression" &&
+            callee.object.object?.name === depSystemName &&
+            callee.object.property?.name === "modules" &&
+            callee.property?.name === "get" &&
+            p.node.init.arguments.length > 0 &&
+            p.node.init.arguments[0].type === "StringLiteral") {
+          
+          const depName = p.node.init.arguments[0].value;
+          if (depName === "AppBus" || depName === "AuthBus") {
+            err.push(E(
+              file,
+              p.node.loc.start.line,
+              9,
+              `Variable declaration with legacy bus '${depName}' is forbidden.`,
+              `Replace const ${p.node.id.name} = DependencySystem.modules.get('${depName}') with const eventService = DependencySystem.modules.get('eventService').`
+            ));
+          }
+        }
+      }
+
+      // Check for LogicalExpression fallback patterns
+      if (p.node.init?.type === "LogicalExpression" && p.node.init.operator === "||") {
+        let current = p.node.init;
+        while (current.type === "LogicalExpression" && current.operator === "||") {
+          // Check for getDep('AuthBus') || authModule?.AuthBus patterns
+          if (current.left.type === "CallExpression" &&
+              current.left.callee.type === "Identifier" &&
+              current.left.callee.name === "getDep" &&
+              current.left.arguments[0]?.type === "StringLiteral" &&
+              (current.left.arguments[0].value === "AppBus" || current.left.arguments[0].value === "AuthBus")) {
+            
+            err.push(E(
+              file,
+              p.node.loc.start.line,
+              9,
+              `Legacy bus fallback pattern with '${current.left.arguments[0].value}' is forbidden.`,
+              `Replace fallback pattern with single eventService dependency: const eventService = getDep('eventService').`
+            ));
+          }
+          current = current.right;
+        }
       }
     }
   };

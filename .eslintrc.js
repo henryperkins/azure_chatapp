@@ -10,10 +10,12 @@ module.exports = {
         sourceType: 'module', // Enable ES module syntax
     },
     globals: {
-        Sentry: 'readonly'
+        Sentry: 'readonly',
+        process: 'readonly'
     },
     plugins: [
         'import',            // For import/no-unresolved and other import rules
+        './eslint-rules',    // Custom project rules
     ],
     ignorePatterns: ['static/js/vendor/'],
     extends: [
@@ -61,6 +63,9 @@ module.exports = {
             },
         ],
 
+        // Legacy EventBus Prevention
+        './eslint-rules/no-legacy-eventbus': 'error',
+
         // Ban specific `window` properties explicitly for clarity
         'no-restricted-properties': [
             'error',
@@ -72,6 +77,13 @@ module.exports = {
             { object: 'window', property: 'modalManager', message: 'Use dependency injection instead of window.modalManager' },
             { object: 'window', property: 'location', message: 'Use navigationService instead of window.location' },
             { object: 'window', property: 'fetch', message: 'Use apiClient instead of window.fetch' },
+            // Legacy EventBus properties
+            { object: 'window', property: 'AppBus', message: 'Use eventService instead of window.AppBus' },
+            { object: 'window', property: 'AuthBus', message: 'Use eventService instead of window.AuthBus' },
+            { object: 'globalThis', property: 'AppBus', message: 'Use eventService instead of globalThis.AppBus' },
+            { object: 'globalThis', property: 'AuthBus', message: 'Use eventService instead of globalThis.AuthBus' },
+            { object: 'auth', property: 'AuthBus', message: 'Use eventService instead of auth.AuthBus' },
+            { object: 'authModule', property: 'AuthBus', message: 'Use eventService instead of authModule.AuthBus' },
         ],
 
         // --- Standard Code Quality Rules ---
@@ -93,9 +105,19 @@ module.exports = {
 
         // Import plugin rule to catch missing or misspelled imports
         'import/no-unresolved': ['error', { commonjs: true, amd: true }],
+        'import/no-duplicates': 'error',
+        'no-upward-import': 'error',
+        'no-global-ds-in-utils': 'error',
+        'require-cleanup-export': 'error',
     },
 
     overrides: [
+        // Allow CommonJS globals for config files such as .eslintrc.js
+        {
+            files: ['.eslintrc.js'],
+            env: { node: true },
+            globals: { module: 'readonly', require: 'readonly' }
+        },
         {
             files: ['**/test/**/*.js', '**/*.test.js'],
             env: {

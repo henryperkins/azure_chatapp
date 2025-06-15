@@ -1,0 +1,50 @@
+{
+  "filesScanned": 88,
+  "filesModified": 3,
+  "totalReplacements": 6,
+  "fileChanges": [
+    {
+      "file": "/home/azureuser/azure_chatapp/static/js/FileUploadComponent.js",
+      "replacements": [
+        {
+          "rule": "Optional chaining AppBus lookup (ds)",
+          "count": 1
+        },
+        {
+          "rule": "eventHandlers.trackListener with appBus",
+          "count": 1
+        },
+        {
+          "rule": "eventHandlers.trackListener with auth.AuthBus",
+          "count": 1
+        }
+      ],
+      "count": 3
+    },
+    {
+      "file": "/home/azureuser/azure_chatapp/static/js/initialization/phases/coreInit.js",
+      "replacements": [
+        {
+          "rule": "DependencySystem AuthBus lookup",
+          "count": 1
+        }
+      ],
+      "count": 1
+    },
+    {
+      "file": "/home/azureuser/azure_chatapp/static/js/knowledgeBaseComponent.js",
+      "replacements": [
+        {
+          "rule": "getDep AppBus variable declaration",
+          "count": 1
+        },
+        {
+          "rule": "getDep AuthBus variable declaration",
+          "count": 1
+        }
+      ],
+      "count": 2
+    }
+  ],
+  "errors": []
+}

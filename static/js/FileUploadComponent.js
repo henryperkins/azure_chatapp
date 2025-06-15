@@ -105,17 +105,13 @@ export function createFileUploadComponent({
   }
 
   const DS = explicitDS || eventHandlers?.DependencySystem || null;
-  const _eventService = eventService || DS?.modules?.get?.('eventService') || null;
+  const _eventService = eventService || DependencySystem?.modules?.get?.("eventService") || null;
 
   function _setupAuthListeners () {
     const ds = DS;
     const auth = ds?.modules?.get('auth');
     if (auth?.AuthBus && typeof eventHandlers.trackListener === 'function') {
-      eventHandlers.trackListener(
-        auth.AuthBus,
-        'authStateChanged',
-        (e) => _updateAuthState(e?.detail?.authenticated),
-        { context: MODULE_CONTEXT, description: 'FileUpload_AuthStateChanged' }
+      eventService.on('authStateChanged', (e) => _updateAuthState(e?.detail?.authenticated), { context: MODULE_CONTEXT, description: 'FileUpload_AuthStateChanged' }
       );
       // Initialise state based on current auth flag if available
       const currentAuth = ds?.modules?.get('appModule')?.state?.isAuthenticated;
@@ -127,13 +123,9 @@ export function createFileUploadComponent({
     }
 
     // View lifecycle hooks – destroy on deactivateView / project change
-    const appBus = ds?.modules?.get('AppBus');
+    const appBus = ds?.modules?.get('eventService');
     if (appBus) {
-      eventHandlers.trackListener(
-        appBus,
-        'currentProjectChanged',
-        () => destroy(),
-        { context: MODULE_CONTEXT, description: 'FileUpload_AppBus_ProjectChanged' }
+      eventService.on('currentProjectChanged', () => destroy(), { context: MODULE_CONTEXT, description: 'FileUpload_AppBus_ProjectChanged' }
       );
     }
 
