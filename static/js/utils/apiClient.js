@@ -361,6 +361,10 @@ export function createApiClient({
     mainApiRequest(url, { ...opts, method: 'POST', body }, skip);
   mainApiRequest.get = (url, params = {}, opts = {}, skip = false) =>
     mainApiRequest(url, { ...opts, method: 'GET',  params }, skip);
+  mainApiRequest.put = (url, body = {}, opts = {}, skip = true) =>
+    mainApiRequest(url, { ...opts, method: 'PUT', body }, skip);
+  mainApiRequest.delete = (url, opts = {}, skip = true) =>
+    mainApiRequest(url, { ...opts, method: 'DELETE' }, skip);
 
   mainApiRequest.fetch = mainApiRequest; // Expose the main function as .fetch
 
@@ -374,6 +378,8 @@ export function createApiClient({
     fetch: mainApiRequest,
     get: mainApiRequest.get,
     post: mainApiRequest.post,
+    put: mainApiRequest.put,
+    delete: mainApiRequest.delete,
     cleanup
   };
 }
