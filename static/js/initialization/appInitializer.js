@@ -109,9 +109,20 @@ export function createAppInitializer(opts = {}) {
             if (typeof console !== 'undefined') {
                 console.warn('[appInitializer] uiInit factory unavailable – using stub (test mode).');
             }
+            // Align stub API with real implementation
             uiInit = {
-                initializeUI: async () => {},
-                cleanup: () => {}
+                initializeUIComponents: async () => {
+                    if (typeof console !== 'undefined') {
+                        console.warn('[appInitializer] Using no-op uiInit stub: UI features are disabled or running in test mode.');
+                    }
+                },
+                waitForModalReadinessWithTimeout: async () => true,
+                registerNavigationViews: async () => {},
+                cleanup: () => {
+                    if (typeof console !== 'undefined') {
+                        console.warn('[appInitializer] uiInit.cleanup() called on no-op stub.');
+                    }
+                }
             };
         } else {
             throw err;
