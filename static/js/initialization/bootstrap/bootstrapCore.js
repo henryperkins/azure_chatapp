@@ -145,6 +145,19 @@ export function createBootstrapCore(opts) {
             logger.critical('[bootstrapCore] DOMPurify missing – using *UNSAFE* no-op sanitizer. XSS protection is DISABLED!', {
                 context: 'bootstrapCore:sanitizerFallback'
             });
+            // Surface warning in UI for security awareness in non-test environments
+            try {
+                const doc = browserService.getDocument?.();
+                if (doc && !doc.getElementById('sanitizer-warning')) {
+                    const warning = doc.createElement('div');
+                    warning.id = 'sanitizer-warning';
+                    warning.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#b71c1c;color:#fff;padding:12px 24px;font-size:16px;text-align:center;font-weight:bold;';
+                    warning.textContent = '⚠️ SECURITY WARNING: DOMPurify sanitizer is missing. XSS protection is DISABLED!';
+                    doc.body?.appendChild(warning);
+                }
+            } catch (uiWarnErr) {
+                logger.warn('[bootstrapCore] Failed to display sanitizer warning in UI', uiWarnErr, { context: 'bootstrapCore:sanitizerFallback' });
+            }
         }
 
         // Create custom event polyfill
@@ -189,7 +202,7 @@ export function createBootstrapCore(opts) {
         DependencySystem.register('browserService', browserService);
         DependencySystem.register('logger', logger);
         DependencySystem.register('sanitizer', sanitizer);
-        DependencySystem.register('domPurify', sanitizer); // legacy alias
+        // DependencySystem.register('domPurify', sanitizer); // legacy alias - deprecated, do not use. Remove after migration.
         DependencySystem.register('safeHandler', safeHandlerInstance.safeHandler);
         DependencySystem.register('createChatManager', opts.createChatManager);
         DependencySystem.register('domAPI', domAPI);
