@@ -2,7 +2,7 @@ const MODULE = 'KBStateService';
 
 export function createKnowledgeBaseStateService({ eventService, logger } = {}) {
   if (!eventService) throw new Error(`[${MODULE}] Missing eventService`);
-  if (!logger) logger = { debug: () => {}, info: () => {} };
+  if (!logger) throw new Error(`[${MODULE}] Missing logger`);
 
   let _kb = null;
   const emit = () => eventService.emit('knowledgeBaseChanged', { kb: _kb });
