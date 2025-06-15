@@ -86,6 +86,16 @@ import { createPullToRefresh } from './utils/pullToRefresh.js';
  */
 console.log('[DEBUG] app.js: Starting application bootstrap');
 
+// Ensure window.DependencySystem exists and is valid before calling createBrowserService
+if (typeof window !== 'undefined' && (!window.DependencySystem || typeof window.DependencySystem.register !== 'function')) {
+  window.DependencySystem = {
+    modules: new Map(),
+    register(key, value) { this.modules.set(key, value); },
+    waitForDependencies: () => Promise.resolve(),
+    waitFor: () => Promise.resolve()
+  };
+}
+
 const browserService = createBrowserService({
   windowObject: (typeof window !== 'undefined') ? window : undefined
 });
