@@ -51,17 +51,17 @@ class Conversation(Base):
     model_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     created_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=False), server_default=text("CURRENT_TIMESTAMP"), index=True
+        TIMESTAMP(timezone=True), server_default=text("CURRENT_TIMESTAMP"), index=True
     )
     updated_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=False),
+        TIMESTAMP(timezone=True),
         server_default=text("CURRENT_TIMESTAMP"),
         onupdate=text("CURRENT_TIMESTAMP"),
     )
 
     # NEW ── timestamp used by ConversationService soft-delete / restore
     deleted_at: Mapped[datetime | None] = mapped_column(
-        TIMESTAMP(timezone=False), nullable=True, index=True
+        TIMESTAMP(timezone=True), nullable=True, index=True
     )
     # New per-conversation model config (canonical snapshot)
     model_config: Mapped[dict] = mapped_column(

@@ -1,24 +1,49 @@
 /**
  * Creates an HTML template loader with injected dependencies for DOM manipulation, HTTP requests, and event handling.
  *
- * Returns an object with two methods:
+ * Returns an object with three methods:
  * - `loadTemplate`: Loads an external HTML template into a specified DOM container, optionally sanitizes it, and emits a custom event upon completion. If the template URL contains `'modals.html'`, also emits a `'modalsLoaded'` event with the result.
  * - `loadAppTemplates`: Sequentially loads multiple HTML templates based on an array of configuration objects, returning an array of results for each load attempt.
+ * - `cleanup`: Cleans up any resources or listeners (currently a no-op for API uniformity).
  *
- * @returns {{ loadTemplate: Function, loadAppTemplates: Function }} An object with methods to load single or multiple HTML templates.
+ * @returns {{ loadTemplate: Function, loadAppTemplates: Function, cleanup: Function }} An object with methods to load single or multiple HTML templates and cleanup resources.
  *
  * @throws {Error} If required dependencies are missing or invalid.
  */
 export function createHtmlTemplateLoader({
-  DependencySystem,
+  DependencySystem, // Injected DependencySystem
   domAPI,
   sanitizer = null,
   eventHandlers,
   apiClient,
   timerAPI,
-  domReadinessService,  // NEW: For replay-able events
-  logger = DependencySystem?.modules?.get?.('logger') || { warn () {} }
-} = {}) {
+  domReadinessService,
+  logger: providedLogger // Renamed to clarify it's the one passed in
+} = {
+    sanitizer: null,
+    apiClient: null,
+    domAPI: null,
+    eventHandlers: null,
+    timerAPI: null,
+    domReadinessService: null,
+    DependencySystem: null,
+    logger: null
+  }) {
+  // Resolve the logger:
+  // 1. Use providedLogger if available.
+  // 2. Else, try to get from the injected DependencySystem.
+  // 3. Else, use a basic console fallback to prevent crashes if logger is totally unavailable.
+  const logger = providedLogger ||
+    (DependencySystem && DependencySystem.modules && typeof DependencySystem.modules.get === 'function'
+      ? DependencySystem.modules.get('logger')
+      : null) ||
+  {
+    error: (...args) => console.error('[HtmlTemplateLoader] Fallback:', ...args),
+    warn: (...args) => console.warn('[HtmlTemplateLoader] Fallback:', ...args),
+    info: (...args) => console.log('[HtmlTemplateLoader] Fallback:', ...args),
+    debug: (...args) => console.log('[HtmlTemplateLoader] Fallback:', ...args)
+  };
+
   // Guardrail checks:
   if (!DependencySystem) throw new Error('DependencySystem required by HtmlTemplateLoader');
   if (!domAPI) throw new Error('domAPI required by HtmlTemplateLoader');
@@ -75,7 +100,15 @@ export function createHtmlTemplateLoader({
     containerSelector,
     eventName = 'htmlTemplateLoaded',
     timeout = 10_000 // default to 10s
-  } = {}) {
+  }) {
+    // Add validation for required parameters
+    if (!url) {
+      throw new Error('[HtmlTemplateLoader] url parameter is required');
+    }
+    if (!containerSelector) {
+      throw new Error('[HtmlTemplateLoader] containerSelector parameter is required');
+    }
+
     const isModalsHtml = url && url.includes('modals.html');
     logger.info?.(`[HtmlTemplateLoader] Attempting to load template: ${url} into ${containerSelector}`, { url, containerSelector, eventName, isModalsHtml });
 

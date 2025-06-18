@@ -22,7 +22,7 @@ export function createModalManager({
   modalMapping,
   domPurify,
   domReadinessService,
-  logger,
+  logger, // Ensure this is always provided by DependencySystem; remove any default value that accesses globalThis.DependencySystem
   errorReporter,
   eventService,
   sanitizer

@@ -11,7 +11,25 @@ export function createStorageService({ browserService, APP_CONFIG, logger, Depen
   if (!browserService) throw new Error('[storageService] browserService required');
   if (!logger) throw new Error('[storageService] logger required');
 
-  const raw = browserService.getWindow().localStorage;
+  // In headless environments like Jest `window.localStorage` may be
+  // undefined because no real DOM is available.  To keep unit tests
+  // independent from the real browser implementation we transparently
+  // fall back to a lightweight in-memory storage shim that implements
+  // the *same* synchronous API surface used below.
+
+  const memoryStore = (() => {
+    const store = new Map();
+    return {
+      getItem: (k) => (store.has(k) ? store.get(k) : null),
+      setItem: (k, v) => { store.set(k, String(v)); },
+      removeItem: (k) => { store.delete(k); },
+      clear: () => { store.clear(); },
+      key: (n) => Array.from(store.keys())[n] ?? null,
+      get length() { return store.size; }
+    };
+  })();
+
+  const raw = browserService.getWindow().localStorage || memoryStore;
 
   function safeAccess(fn, ctx) {
     try {

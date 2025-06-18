@@ -57,10 +57,10 @@ class Message(Base):
         JSONB(none_as_null=True), comment="KB context actually used in this message"
     )
     created_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=False), server_default=text("CURRENT_TIMESTAMP"), nullable=False
+        TIMESTAMP(timezone=True), server_default=text("CURRENT_TIMESTAMP"), nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=False),
+        TIMESTAMP(timezone=True),
         server_default=text("CURRENT_TIMESTAMP"),
         onupdate=text("CURRENT_TIMESTAMP"),
         nullable=False,

@@ -41,7 +41,7 @@ class KnowledgeBase(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
     last_used: Mapped[datetime | None] = mapped_column(
-        TIMESTAMP(timezone=False), nullable=True, comment="Last time this knowledge base was accessed"
+        TIMESTAMP(timezone=True), nullable=True, comment="Last time this knowledge base was accessed"
     )
     project_id: Mapped[UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -51,10 +51,10 @@ class KnowledgeBase(Base):
         index=True,
     )
     created_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=False), server_default=text("CURRENT_TIMESTAMP"), nullable=False
+        TIMESTAMP(timezone=True), server_default=text("CURRENT_TIMESTAMP"), nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=False),
+        TIMESTAMP(timezone=True),
         server_default=text("CURRENT_TIMESTAMP"),
         onupdate=text("CURRENT_TIMESTAMP"),
     )
