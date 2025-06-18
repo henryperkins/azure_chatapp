@@ -22,8 +22,10 @@ export const APP_CONFIG = {
     PROJECT_LIST_VIEW: SELECTORS.projectListView
   },
   TIMEOUTS: {
-    DEPENDENCY_WAIT: 5000,      // generic waitFor timeout (hardened, was 15000)
-    STARTUP_ABORT: 12000,       // whole-app bootstrap max
+    // Allow slower devices / large bundles to resolve required selectors,
+    // especially before authInit kicks in.
+    DEPENDENCY_WAIT: 12000,     // generic waitFor timeout (was 5000 – too aggressive)
+    STARTUP_ABORT: 30000,       // whole-app bootstrap max (was 12000)
     // DOM readiness often takes longer in low-spec devices or when the network
     // is slow to fetch templates. Increase to 20 s to avoid premature
     // bootstrap failures (authInit waiting for `app:ready`).
