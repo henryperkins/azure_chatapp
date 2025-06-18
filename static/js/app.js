@@ -1,7 +1,7 @@
 /* app.js
  * Root application entrypoint (NO side effects or singleton registration here!)
  * All startup logic—including DependencySystem registration, event handlers, browser/session wiring, sanitizer checks—
- * must now be invoked within static/js/init/appInitializer.js as clearly named functions or within the initialization sequence.
+ * must now be invoked within static/js/initialization/appInitializer.js as clearly named functions or within the initialization sequence.
  */
 
  // CustomEvent polyfill (DI-safe factory)
@@ -16,20 +16,19 @@ import { createDOMPurifyGlobal } from './vendor/dompurify-global.js';
 import { createAppInitializer } from './initialization/appInitializer.js';
 
 // Factories and utilities to be passed to appInitializer
+import { isAbsoluteUrl, shouldSkipDedup } from './utils/urlUtils.js';
+import { stableStringify } from './utils/jsonUtils.js';
 import {
-  shouldSkipDedup,
-  stableStringify,
-  isAbsoluteUrl,
   formatBytes as globalFormatBytes,
   formatDate as globalFormatDate,
-  fileIcon as globalFileIcon
-} from './utils/globalUtils.js';
+  fileIcon as globalFileIcon,
+} from './utils/formatUtils.js';
 
-import { isValidProjectId } from './projectManager.js';
+import { isValidProjectId, createProjectManager } from './projectManager.js';
 import { createApiEndpoints } from './utils/apiEndpoints.js';
 import { createApiClient } from './utils/apiClient.js';
 import { createHtmlTemplateLoader } from './utils/htmlTemplateLoader.js';
-import { MODAL_MAPPINGS } from './modalConstants.js';
+import { MODAL_MAPPINGS, createModalConstants } from './modalConstants.js';
 import { createFileUploadComponent } from './FileUploadComponent.js';
 import { createAccessibilityEnhancements } from './accessibility-utils.js';
 import { createNavigationService } from './navigationService.js';
@@ -37,19 +36,16 @@ import { createUiRenderer } from './uiRenderer.js';
 import { createKnowledgeBaseComponent } from './knowledgeBaseComponent.js';
 import { createProjectDetailsEnhancements } from './project-details-enhancements.js';
 import { createTokenStatsManager } from './tokenStatsManager.js';
-import { createModalConstants } from './modalConstants.js';
 import { createSelectorConstants } from './utils/selectorConstants.js';
 import { createLogDeliveryService } from './logDeliveryService.js';
-import { createModalManager } from './modalManager.js';
+import { createModalManager, createProjectModal } from './modalManager.js';
 import { createAuth } from './auth.js';
-import { createProjectManager } from './projectManager.js';
 import { createModelConfig } from './modelConfig.js';
 import { createProjectDashboard } from './projectDashboard.js';
 import { createChatManager } from './chat.js';
 import { createChatExtensions } from './chatExtensions.js';
 import { createProjectDetailsComponent } from './projectDetailsComponent.js';
 import { createProjectListComponent } from './projectListComponent.js';
-import { createProjectModal } from './modalManager.js';
 import { createSidebar } from './sidebar.js';
 import { createChatUIController } from './chatUIController.js';
 import { createConversationManager } from './conversationManager.js';
@@ -88,12 +84,16 @@ console.log('[DEBUG] app.js: Starting application bootstrap');
 
 // Ensure window.DependencySystem exists and is valid before calling createBrowserService
 if (typeof window !== 'undefined' && (!window.DependencySystem || typeof window.DependencySystem.register !== 'function')) {
+  console.log('[DEBUG] app.js: Creating fallback DependencySystem');
   window.DependencySystem = {
     modules: new Map(),
     register(key, value) { this.modules.set(key, value); },
     waitForDependencies: () => Promise.resolve(),
     waitFor: () => Promise.resolve()
   };
+  console.log('[DEBUG] app.js: Fallback DependencySystem created');
+} else {
+  console.log('[DEBUG] app.js: Existing DependencySystem detected, skipping fallback creation');
 }
 
 const browserService = createBrowserService({
@@ -165,15 +165,6 @@ const factories = {
   createPullToRefresh
 };
 
-// Create globalUtils object for services that need it
-const globalUtils = {
-  shouldSkipDedup,
-  stableStringify,
-  isAbsoluteUrl,
-  formatBytes: globalFormatBytes,
-  formatDate: globalFormatDate,
-  fileIcon: globalFileIcon
-};
 
 console.log('[DEBUG] app.js: Creating appInitializer with dependencies');
 
@@ -188,7 +179,6 @@ const appInit = createAppInitializer({
   globalFormatDate,
   globalFileIcon,
   isValidProjectId,
-  globalUtils,
   MODAL_MAPPINGS,
   // Top-level factories required by createAppInitializer
   createApiEndpoints,
@@ -220,16 +210,19 @@ console.log('[DEBUG] app.js: appInitializer created successfully');
 // The ONLY orchestration in app.js: start up through the unified initializer
 console.log('[DEBUG] app.js: Calling initializeApp()');
 try {
+  console.log('[DEBUG] app.js: About to invoke initializeApp()');
   appInit.initializeApp();
   console.log('[DEBUG] app.js: initializeApp() called successfully');
 } catch (error) {
   console.error('[DEBUG] app.js: Error in initializeApp():', error);
   // Dispatch error event for HTML to catch
   try {
+    console.log('[DEBUG] app.js: Attempting to dispatch app:error event');
     const browserService = createBrowserService();
     const windowEl = browserService.getWindow(); // DOM element - adding 'El' suffix
     const eventService = DependencySystem.modules.get('eventService'); // Obtain DI eventService
-eventService.emit('app:error', { message: `Initialization failed: ${error.message}` });
+    eventService.emit('app:error', { message: `Initialization failed: ${error.message}` });
+    console.log('[DEBUG] app.js: app:error event dispatched');
   } catch (dispatchError) {
     console.error('[DEBUG] app.js: Failed to dispatch error event:', dispatchError);
   }

@@ -12,7 +12,7 @@
  * regressions where the proxy registration might be removed or renamed.
  */
 
-import { createAppInitializer } from '../init/appInitializer.js';
+import { createAppInitializer } from '../initialization/appInitializer.js';
 
 function createMockDependencySystem() {
   const DS = {

@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Test</title>
+</head>
+<body>
+    <h1>Debug Test Page</h1>
+    <div id="output">Loading...</div>
+    
+    <!-- Test 1: Basic inline script -->
+    <script>
+        console.log('[TEST] Basic inline script executing');
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('[TEST] DOM ready');
+            document.getElementById('output').innerHTML = '<p>Basic JavaScript working</p>';
+        });
+    </script>
+    
+    <!-- Test 2: DependencySystem stub -->
+    <script type="module" src="/static/js/initialization/dependencySystemStub.js" defer></script>
+    
+    <!-- Test 3: Simple module script -->
+    <script type="module" defer>
+        console.log('[TEST] Module script executing');
+        setTimeout(() => {
+            console.log('[TEST] Checking DependencySystem:', window.DependencySystem);
+            document.getElementById('output').innerHTML += '<br><p>DependencySystem: ' + (window.DependencySystem ? 'loaded' : 'missing') + '</p>';
+            
+            // Test app.js import
+            console.log('[TEST] Attempting app.js import...');
+            import('/static/js/app.js')
+                .then(() => {
+                    console.log('[TEST] app.js import successful');
+                    document.getElementById('output').innerHTML += '<br><p>app.js: loaded successfully</p>';
+                })
+                .catch(err => {
+                    console.error('[TEST] app.js import failed:', err);
+                    document.getElementById('output').innerHTML += '<br><p>app.js: FAILED - ' + err.message + '</p>';
+                });
+        }, 1000);
+    </script>
+</body>
+</html>

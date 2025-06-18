@@ -52,22 +52,40 @@ export function createUIInit(deps) {
                 context: 'uiInit:loadTemplates'
             });
 
+            logger.debug('[UIInit] Loading project_list.html', {
+                context: 'uiInit:loadTemplates:projectList'
+            });
             await htmlLoader.loadTemplate({
                 url: '/static/html/project_list.html',
                 containerSelector: '#projectListView',
                 eventName: 'projectListHtmlLoaded'
             });
+            logger.debug('[UIInit] project_list.html loaded', {
+                context: 'uiInit:loadTemplates:projectList'
+            });
 
+            logger.debug('[UIInit] Loading project_details.html', {
+                context: 'uiInit:loadTemplates:projectDetails'
+            });
             await htmlLoader.loadTemplate({
                 url: '/static/html/project_details.html',
                 containerSelector: '#projectDetailsView',
                 eventName: 'projectDetailsHtmlLoaded'
             });
+            logger.debug('[UIInit] project_details.html loaded', {
+                context: 'uiInit:loadTemplates:projectDetails'
+            });
 
+            logger.debug('[UIInit] Loading modals.html', {
+                context: 'uiInit:loadTemplates:modals'
+            });
             await htmlLoader.loadTemplate({
                 url: '/static/html/modals.html',
                 containerSelector: '#modalsContainer',
                 eventName: 'modalsHtmlLoaded'
+            });
+            logger.debug('[UIInit] modals.html loaded', {
+                context: 'uiInit:loadTemplates:modals'
             });
 
             // Unhide the modals container after templates are loaded
@@ -99,18 +117,30 @@ export function createUIInit(deps) {
         const timeoutMS = 8000;
         let timedOut = false;
 
-        await Promise.race([
-            modalMgr.isReadyPromise(),
-            new Promise((_, reject) =>
-                browserService.getWindow().setTimeout(() => {
-                    timedOut = true;
-                    reject(new Error(`[uiInit] Modal readiness timeout after ${timeoutMS}ms.`));
-                }, timeoutMS)
-            )
-        ]);
-
-        if (timedOut) {
-            throw new Error('[uiInit] ModalManager not ready within timeout.');
+        logger.debug('[UIInit] Waiting for modal readiness', {
+            context: 'uiInit:modalReadiness'
+        });
+        try {
+            await Promise.race([
+                modalMgr.isReadyPromise(),
+                new Promise((_, reject) =>
+                    browserService.getWindow().setTimeout(() => {
+                        timedOut = true;
+                        reject(new Error(`[uiInit] Modal readiness timeout after ${timeoutMS}ms.`));
+                    }, timeoutMS)
+                )
+            ]);
+            logger.debug('[UIInit] Modal readiness achieved', {
+                context: 'uiInit:modalReadiness'
+            });
+        } catch (error) {
+            logger.error('[UIInit] Modal readiness failed or timed out', error, {
+                context: 'uiInit:modalReadiness'
+            });
+            if (timedOut) {
+                throw new Error('[uiInit] ModalManager not ready within timeout.');
+            }
+            throw error;
         }
     }
 
@@ -466,26 +496,21 @@ export function createUIInit(deps) {
                 logger.log('[uiInit] eventHandlers init complete', { context: 'uiInit' });
             }
 
-            // Emit early readiness events
+            // Skip early emission of app:ready to prevent duplicate triggers
             try {
-                logger.info('[uiInit] About to emit early app:ready event', {
-                    context: 'uiInit:earlyAppReady',
-                    timestamp: Date.now()
-                });
-                domReadinessService.emitReplayable('app:ready');
-                logger.info('[uiInit] Early app:ready event emitted successfully', {
+                logger.info('[uiInit] Skipping early app:ready event emission to avoid duplicates', {
                     context: 'uiInit:earlyAppReady',
                     timestamp: Date.now()
                 });
 
                 const appModule = DependencySystem.modules.get('appModule');
                 appModule.setAppLifecycleState({ isReady: true, currentPhase: 'ui_ready_partial' });
-                logger.info('[uiInit] App state set to ready', {
+                logger.info('[uiInit] App state set to ready without early emission', {
                     context: 'uiInit:earlyAppReady',
                     isReady: true
                 });
-            } catch (earlyEmitErr) {
-                logger.error('[uiInit] Early app:ready emit failed', earlyEmitErr, {
+            } catch (stateSetErr) {
+                logger.error('[uiInit] Setting app state failed', stateSetErr, {
                     context: 'uiInit:earlyAppReady'
                 });
             }

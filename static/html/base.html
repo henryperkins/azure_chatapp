@@ -129,7 +129,7 @@
   <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
 
   <!-- DependencySystem stub (moved to external ES module to avoid inline CSP exception) -->
-  <script type="module" src="/static/js/init/dependencySystemStub.js" defer></script>
+  <script type="module" src="/static/js/initialization/dependencySystemStub.js" defer></script>
 
   <!-- Sentry SDK for Frontend -->
   <script src="https://browser.sentry-cdn.com/7.100.0/bundle.tracing.replay.min.js"
@@ -658,8 +658,11 @@
   </div>
 
   <!-- Scripts -->
-  <script type="module" src="/static/js/vendor/dompurify-global.js"></script>
-  <script type="module" src="/static/js/app.js"></script>
+  <script>
+    console.log('[DEBUG] base.html: Inline script executing before module imports');
+  </script>
+  <script type="module" src="/static/js/vendor/dompurify-global.js" defer></script>
+  <script type="module" src="/static/js/app.js" defer></script>
 
   <!-- Enhanced initialization script -->
   <script>

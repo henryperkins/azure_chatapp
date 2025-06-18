@@ -13,13 +13,13 @@
 // etc.) happens inside bootstrapCore.initializeCoreServices().
 
 // Import extracted initialization modules
-import { createAppState } from "../initialization/state/appState.js";
-import { createErrorInit } from "../initialization/phases/errorInit.js";
-import { createServiceInit } from "../initialization/phases/serviceInit.js";
-import { createAuthInit } from "../initialization/phases/authInit.js";
-import { createCoreInit } from "../initialization/phases/coreInit.js";
-import { createUIInit } from "../initialization/phases/uiInit.js";
-import { createBootstrapCore } from "../initialization/bootstrap/bootstrapCore.js";
+import { createAppState } from "./state/appState.js";
+import { createErrorInit } from "./phases/errorInit.js";
+import { createServiceInit } from "./phases/serviceInit.js";
+import { createAuthInit } from "./phases/authInit.js";
+import { createCoreInit } from "./phases/coreInit.js";
+import { createUIInit } from "./phases/uiInit.js";
+import { createBootstrapCore } from "./bootstrap/bootstrapCore.js";
 
 export function createAppInitializer(opts = {}) {
     console.log('[DEBUG] appInitializer: Starting createAppInitializer');

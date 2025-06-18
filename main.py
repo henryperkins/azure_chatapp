@@ -526,3 +526,13 @@ if __name__ == "__main__":
         port=int(os.getenv("PORT", "8000")),
         log_level="debug",
     )
+
+# Test route for debugging
+@app.get("/test", include_in_schema=False)
+async def test_debug():
+    """Serve debug test page."""
+    test_path = os.path.join(os.path.dirname(__file__), "test_debug.html")
+    if os.path.isfile(test_path):
+        return FileResponse(test_path)
+    return {"error": "test file not found"}
+
