@@ -25,8 +25,8 @@ issues that can be detected statically.
 |------|--------------------------|-----------|
 | **`static/js`** | Feature modules (chat, KB, projects…), UI components.  Strict DI guard-rails are largely in place. | Healthy, but *huge* – >70 factories with mixed maturity levels. |
 | **`static/js/utils`** | Low-level, side-effect-free helpers (`apiClient`, `browserService`, `domAPI`, etc.).  Provide building blocks consumed by services & feature modules. | Good overall quality, but ownership overlaps with `static/services`, and some files still use small global checks (`typeof window`). |
-| **`static/services`** | Very small, modern façade layer (`authenticationService`, `eventService`, `projectAPIService`, …).  Pure functions, no side-effects at module scope. | Healthy but **incomplete** and **overlapping** with older utils. |
-| **`static/js/initialization`** | Refactored 5-phase bootstrap (`bootstrapCore`, `serviceInit`, `coreInit`, `authInit`, `uiInit`, etc.).  Splits monolith into <200 line files. | Generally solid, but **registration coverage is uneven** and **legacy shims still leak in**. |
+| **`static/services`** | Very small, modern façade layer (`authenticationService`, `eventService`, `projectAPIService`, …).  Pure functions, no side-effects at module scope. | Healthy and stable; dependency hierarchy enforcement pending. |
+| **`static/js/initialization`** | Refactored 5-phase bootstrap (`bootstrapCore`, `serviceInit`, `coreInit`, `authInit`, `uiInit`, etc.).  Splits monolith into <200 line files. | Solid multi-phase bootstrap with uniform registration; legacy shims removed. |
 
 ---
 
@@ -42,222 +42,87 @@ These give the code base a strong foundation to iterate on.
 
 ---
 
-## 3. Gaps & Inconsistencies (Highest → Lowest Impact)
+## 3. Progress Update
 
-### 3.1 Incomplete Migration to the Unified Event Bus *(High)*
+- **EventBus migration complete** – Legacy `AppBus`/`AuthBus` references removed (see docs/eventbus-migrationguide.md).
+- **Legacy initializer stub removed** – `static/js/init/appInitializer.js` relocated or deleted.
+- **Type-checking enabled** – `tsconfig.json` added with `allowJs`/`checkJs` for JSDoc validation.
+- **ESLint guardrails enforced** – Rules added: `import/no-duplicates`, `no-upward-import`, `no-global-ds-in-utils`, `require-cleanup-export`.
+- **Cleanup contract enforced** – Missing `cleanup()` exports now flagged by lint; `pullToRefresh.js` and other modules implement cleanup.
+- **Polyfills code-split** – Legacy polyfills loaded on-demand via dynamic imports.
 
-* Several feature modules still reference legacy globals `AppBus`, `AuthBus` or
-  fallback to `document` listeners (e.g. `knowledgeBaseComponent.js`,
-  `chatExtensions.js`).
-* Risk: duplicated listeners, inconsistent event ordering, memory leaks.
+---
+
+## 4. Remaining Gaps & Inconsistencies (Highest → Lowest Impact)
+
+### 4.1 Directory Overlap Between *services* and *utils* *(High)*
+
+* Domain-level overlap persists between `static/services/projectAPIService.js` and business logic still residing in `static/js/projectManager.js` & `projectDataCoordinator.js`.
+* Infrastructure-level duplication remains in storage wrappers (`storageService.js` vs. `browserService.js`).
 
 **Action**  
-Provide thin shims during bootstrap (already easy via `eventService.getAuthBus()`)
-and schedule removal of all direct `AuthBus` / `AppBus` look-ups.
+Finalize consolidation of storage and API utilities into the `services` layer, enforce import boundaries (`no-upward-import`), and deprecate redundant helpers.
 
 ---
 
-### 3.2 Directory Overlap Between *services* and *utils* *(High)*
+### 4.2 Service Registration Coverage Gaps *(Medium)*
 
-* There is conceptual duplication **at two layers**:
-  * **Domain-level** – `static/services/projectAPIService.js` overlaps with
-    logic still living in `static/js/projectManager.js` &
-    `projectDataCoordinator.js`.
-  * **Infrastructure-level** – generic helpers like
-    `static/js/utils/apiClient.js` and the specialised
-    `static/services/*APIService.js` files both wrap `fetch`, error handling,
-    and CSRF token logic.
-
-This blurs ownership and causes developers to ask “Which path should I
-import?”
+* Some façade services (e.g. `knowledgeBaseReadinessService`, `tokenStatsManagerProxy`) are still bypassed by feature modules that perform manual readiness or event wiring.
+* Legacy code paths in early phases of `uiInit.js` queue operations until the real manager is registered.
 
 **Action**  
-Document and enforce a **dependency hierarchy**:
-
-```
-utils  →  services  →  feature modules
-```
-
-* **utils** – pure, stateless helpers with zero business knowledge.
-* **services** – compose utils; expose domain-aware operations.
-* **feature modules** – UI & complex behaviour that depend on services.
-
-Add an ESLint rule (`no-upward-import`) so lower tiers cannot import from upper
-tiers.
+Audit bootstrap phases to guarantee that all consumers use façade services, add runtime warnings for direct state access, and expand phase-specific registration tests.
 
 ---
 
-### 3.3 Multiple *App Initializers* in the Repo *(Medium)*
+### 4.3 Test Coverage *(Medium)*
 
-* `static/js/init/appInitializer.js` is a **legacy test stub** while
-  `static/js/initialization/appInitializer.js` is the real orchestrator.
-* Both export `createAppInitializer`, causing ambiguous imports.
+* Only two Jest tests exist under `static/js/__tests__`; no coverage for core services, utilities, or bootstrap phases.
+* Critical modules (`apiClient`, `domAPI`, `browserService`, initialization phases) lack unit tests.
 
 **Action**  
-Add an ESLint import-path rule or move the stub under
-`static/js/__test_stubs__/` to avoid accidental production usage.
+Introduce unit tests for utilities (`static/js/utils`), services (`static/services`), and phases (`static/js/initialization`), targeting ≥80% coverage on core areas.
 
 ---
 
-### 3.4 Service Registration Coverage Gaps *(Medium)*
+### 4.4 Side-effect Free Guarantee Occasionally Broken *(Low)*
 
-* `tokenStatsManagerProxy` is registered at bootstrap, but the **real**
-  `tokenStatsManager` is only wired in `uiInit`.  Until that phase completes
-  any advanced methods (other than `setInputTokenCount`) silently queue.
-* `knowledgeBaseReadinessService` is created in `serviceInit`, yet several KB
-  modules perform their own readiness checks, bypassing the service.
-* `projectContextService` is created, but older UI panels still read project
-  state directly from `appModule.state`.
+* A handful of modules still reference `globalThis.prompt()` (`chatExtensions.js`) or perform environment checks (`typeof window` / `globalThis.DependencySystem`) at top-level.
+* Ad-hoc fallbacks outside DI guardrails occasionally slip through.
 
 **Action**  
-Audit each feature initialiser to ensure the façade services are *actually* the
-single consumption point.  Add runtime warnings when direct state access is
-detected.
+Refactor remaining globals into injected dependencies or dynamic imports; enforce `no-restricted-globals` / `no-restricted-properties` for hard prohibitions.
 
 ---
 
-### 3.5 Test Coverage *(Medium)*
+## 5. Quick Wins Achieved
 
-* Only two Jest tests exist in `static/js/__tests__/` – covering auth storage and token-stats DI.
-* No tests for the new service layer or bootstrap phases.
-
-**Action**  
-Introduce phase-specific unit tests (e.g. `serviceInit.registerBasicServices`)
-and integration test the whole `initializeApp()` sequence with mocked
-factories.
-
----
-
-### 3.6 Side-effect Free Guarantee Occasionally Broken *(Low)*
-
-* `static/js/modalManager.js` still executes a global logger lookup at module
-  load (`globalThis.DependencySystem?.modules?.get('logger')`).
-* A few modules check `typeof window !== 'undefined'` at top scope.
-
-These are *soft* violations but contradict the “no globals” rule.
-
-**Action**  
-Move such look-ups inside the factory or behind an injected `browserService`.
+1. **TypeScript in JS** – `tsconfig.json` added with `checkJs` for JSDoc validation.
+2. **Linting guardrails** – `no-upward-import`, `no-global-ds-in-utils`, `require-cleanup-export`, and legacy EventBus rules enabled.
+3. **Cleanup implementations** – `pullToRefresh.js` and other modules now export `cleanup()`, verified by lint.
+4. **Dynamic polyfills** – Legacy polyfills loaded via dynamic imports.
+5. **EventBus migration** – Verified no legacy `AppBus`/`AuthBus` references.
+6. **Initializer stub removal** – Single bootstrap path enforced; legacy stub deleted.
 
 ---
 
-### 3.7 Cleanup Contract Not Uniform *(Low)*
+## 6. Next Steps (90-Day Roadmap)
 
-* Some factories expose `cleanup()` that is a no-op; others omit it entirely
-  (e.g. a handful of utils in `static/js/utils`).
-* During bootstrap rollback (see `appInitializer`), phases assume every module
-  supports `cleanup()`.
-
-**Action**  
-Add a tiny ESLint rule (`require-cleanup-export`) to enforce presence of the
-method even if empty.
-
----
-
-## 4. Quick Wins
-
-1. Add a TSCONFIG & enable **JSDoc @typedef** checks – many factories already
-   include rich JSDoc; we can catch missing deps early.
-2. Configure **ESLint import/no-duplicates** to flag the two `appInitializer`
-   paths.
-3. Write a **cypress smoke test** that boots the app, opens the console and
-   asserts that no “✖ Phase failed” log is emitted.
+| Week  | Focus                           | Deliverable                                              |
+|-------|---------------------------------|----------------------------------------------------------|
+| 1-2   | Services vs. Utils consolidation | Redundant helpers deprecated; import hierarchy enforced   |
+| 3-4   | Bootstrap phase audit           | Runtime warnings + registration coverage tests           |
+| 5-6   | Test suite expansion            | ≥80% coverage for utils, services, initialization         |
+| 7-8   | Global scope cleanup            | Remove remaining top-level `prompt`/window checks         |
+| 9-10  | DomReadinessService evaluation  | Decompose or remove once bootstrap guarantees complete    |
+| 11-12 | Documentation & ADR             | Finalize DI boundaries ADR; publish and educate teams      |
 
 ---
 
-## 5. Roadmap Proposal (90 day)
+## 7. Conclusion
 
-| Week | Focus | Outcome |
-|------|-------|---------|
-| 1-2 | Finalise EventBus migration | All `AuthBus` / `AppBus` references removed. |
-| 3-4 | Service vs. util audit | Clear ownership doc, dead code deleted. |
-| 5-6 | Expand Jest suite | ≥ 60% statement coverage for `static/services` & bootstrap. |
-| 7-8 | Cleanup uniformity | Lint rule merged; CI fails on missing `cleanup()`. |
-| 9-10 | Legacy stub relocation | `init/appInitializer.js` moved under test fixtures folder; import rule in place. |
-| 11-12 | Documentation & scorecard | Publish ADR on front-end DI strategy. |
+The multi-phase bootstrap and DI guardrails provide a solid foundation.  Remaining work centers on consistency — consolidating overlaps, enforcing test coverage, and eliminating global fallbacks — to ensure long-term maintainability and simplify future TypeScript migration.
 
 ---
 
-## 6. Conclusion
-
-The modernisation effort is **well on its way** – the multi-phase bootstrap and
-service façade concepts are sound.  The remaining work is mostly *consistency*
-and *cleanup*: unify the event bus, finalise the service layer migration, and
-strengthen automated tests so regressions are caught early.
-
----
-
-_Generated automatically by the Codex CLI analysis assistant._
-
-<!-- ------------------------------------------------------------------ -->
-<!--                       Revision 2 – Deep Dive                       -->
-<!-- ------------------------------------------------------------------ -->
-
-## 4. Deep-Dive: `static/js/utils`
-
-After an additional code-wide scan the utility layer emerged as the **largest
-remaining risk surface**.  Key points:
-
-1. **Hidden Global Fallbacks** – Several utils (`apiClient.js`,
-   `globalUtils.js`, `authApiService.js`) read from
-   `globalThis.DependencySystem`, bypassing DI and making tests pass by
-   accident.  Breaks SSR and erodes modularity.
-2. **Duplicate Local-Storage Wrappers** – `storageService.js` and
-   `browserService.js` both encapsulate `localStorage` with slightly different
-   semantics (error swallowing vs. re-throw).
-3. **Missing `cleanup()` in `pullToRefresh.js`** – Touch listeners remain after
-   module teardown, conflicting with SPA navigation & jest tests.
-4. **Over-engineered `domReadinessService.js` (600 LOC)** – Reimplements native
-   `DOMContentLoaded`/`load` behaviour; now redundant given staged bootstrap.
-5. **Business Rules Creep** – `globalUtils.js` mixes low-level helpers with
-   project-specific URL heuristics; violates single-responsibility.
-6. **Zero Jest Coverage** – No automated tests for foundational utils.
-
-### Immediate Fixes
-
-* Add ESLint rule `no-global-ds-in-utils`.
-* Extract a single `storageService`; let `browserService` delegate.
-* Export `cleanup()` from `pullToRefresh.js` (detach listeners).
-* Decompose `domReadinessService.js` or delete once phased bootstrap proves
-  stable.
-* Unit tests for `apiClient`, `domAPI`, `browserService`.
-
----
-
-## 5. Updated Quick Wins
-
-1. `tsconfig.json` + JSDoc type-checking.
-2. ESLint rules: `import/no-duplicates`, `no-global-ds-in-utils`,
-   `require-cleanup-export`.
-3. Detachable pull-to-refresh listeners.
-4. Storage wrapper consolidation.
-5. Jest suites for core utils.
-6. Code-split legacy polyfills via dynamic `import()`.
-
----
-
-## 6. Revised 90-Day Roadmap
-
-| Week | Focus | Deliverable |
-|------|-------|-------------|
-| 1 | EventBus finalisation | Legacy buses removed, lint green |
-| 2 | Global-DS lint | CI fails on globals in utils |
-| 3-4 | Storage unification | Single `storageService` |
-| 5-6 | Utils test suite | ≥ 80 % coverage on apiClient/domAPI/browserService |
-| 7 | Pull-to-refresh + polyfill | Cleanup & code-split merged |
-| 8-9 | Service ↔ utils ADR | Dependency hierarchy documented & linted |
-| 10-12 | Cleanup uniformity | `cleanup()` rule enforced; docs updated |
-
----
-
-## 7. Conclusion (v2)
-
-The foundation is solid, but the **utility layer hides shortcuts** (globals,
-duplicate storage, absent cleanup) that threaten DI guarantees.  Fixing these
-alongside previously identified gaps will lock in the architecture’s
-robustness and ease future TypeScript adoption.
-
----
-
-_Generated automatically by the Codex CLI analysis assistant – **revision 2**_
 
